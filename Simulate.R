@@ -2,18 +2,20 @@
 # It reads in parameters from the command line and uses the functions from `Functions.R`.
 # Generate by: Lena Krockenberger, Feiyang Huang, Vivian Yee
 # Date [2024-03-14]
-# sample command: Rscript simulate.R 1000 1000 10 0.01 0.3 0.2 10 snp_mafs.txt
+# sample command: Rscript simulate.R 1000 1000 10 0.01 0.3 0.2 snp_mafs.txt
 # (make sure the snp_mafs.txt file is in the same directory as the simulate.R file)
 
 library(MASS)
+library(data.table)
+library(fs)
 source("functions.R")
 set.seed(12)
-
+#setwd("~/Documents/BalliuLab/C-STEM/simulation")
 # Read parameters from command line arguments
 args <- commandArgs(trailingOnly = TRUE)
 
 # Check if arguments are provided
-if (length(args) < 16) {
+if (length(args) < 7) {
     stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho num_sim")
 }
 
@@ -27,18 +29,18 @@ numContexts <- as.integer(args[3])
 p <- as.numeric(args[4])
 lam <- as.numeric(args[5])
 rho <- as.numeric(args[6])
-num_sim <- as.integer(args[7])
-maf_file <- args[8]
+maf_file <- args[7]
 
 # t: number of target gene
-t < as.numeric(args[9])
-context_cis_herit_file = args[10]
-context_herit_file = args[11]
-effects_output = args[12]
-cis_expression_dir = args[13]
-trans_exp_dir = args[14]
-cov_output_dir = args[15]
-ntransT = as.numeric(args[16])
+
+#t < as.numeric(args[8])
+#context_cis_herit_file = args[9]
+#context_herit_file = args[10]
+#effects_output = args[11]
+#cis_expression_dir = args[12]
+#trans_exp_dir = args[13]
+#cov_output_dir = args[14]
+#ntransT = as.numeric(args[15])
 
 # Set working directory and input given parameters
 #setwd("~/BalliuLab/CSTEM")
@@ -60,18 +62,17 @@ simulate_and_save <- function(iteration) {
     # Genotype matrix
     Geno <- as.matrix(data[[4]])
     
-    # Format data
-    
-    
-    # Write data to files
+
+    # Format data and save
+    #format_exp(iteration, n, numContexts, data_exp, "~/expression")
+    format_geno(n, m, "~/geno", Geno, iteration)
   
 }
 
 # Run simulations and save data
 time_start <- Sys.time()
-for (i in 1:num_sim) {
+for (i in 1:m) {
     simulate_and_save(i)
-    
 }
 time_end <- Sys.time()
 print(paste("Time taken:", time_end - time_start))

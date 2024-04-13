@@ -143,7 +143,51 @@ simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilitie
 
 
 # Formatting the file
-format_exp <- function()
+format_exp <- function(iteration, num_individuals, numContexts, cis_exp, scratch_dir){
+    dir_base <- file.path(scratch_dir, iteration)
+    if (!dir.exists(dir_base)) {
+        dir.create(dir_base, recursive = TRUE)
+    }
+    
+    dir_create(scratch_dir)
+    cis_exp = t(cis_exp)
+    individuals = c()
+    
+    for(i in 0:(num_individuals-1)){
+        individuals = c(individuals, paste0("N", i))
+    }
+   
+    for(context in 0:(numContexts-1)){
+        
+        to_write = data.frame(cis_exp[,(context+1)])
+        rownames(to_write) = individuals
+        file_name = paste0(dir_base, "/", context, "_cis.txt")
+        fwrite(to_write, file_name, row.names = TRUE, col.names = FALSE, 
+               quote = FALSE, sep = "\t")
+    }
+    
+    
+}
+
+format_geno <- function(num_individuals, numGeno, geno_dir, genotypes, iteration){
+    dir_base <- file.path(geno_dir, iteration)
+    if (!dir.exists(dir_base)) {
+        dir.create(dir_base, recursive = TRUE)
+    }
+    individuals = c()
+    ## create directories for each gene
+    for(i in 0:(num_individuals-1)){
+        individuals = c(individuals, paste0("N", i))
+    }
+    for(index in 0:(numGeno-1)){
+        to_write = data.frame(genotypes[,(index+1)])
+        rownames(to_write) = individuals
+        file_name = file.path(dir_base, "genotypes.txt")  
+        fwrite(to_write, file_name, row.names = TRUE, col.names = FALSE, 
+               quote = FALSE, sep = "\t")
+        
+    }
+}
 
 ### trans_simulation functions ###
 
@@ -213,9 +257,10 @@ is_trans_effect <- function(ntransT, numContexts) {
 }
 
 
-
-simulateTransExpression <- function(cis_exp_genes, cis_expression_dir, numSamples, covariance,
+# numSamples is the same as number of individuals
+simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
                                     context_cis_herit_file, is_trans_effect_vec, effects_output, trans_exp_dir) {
+    cis_exp_genes = list.files(cis_expression_dir)
     contexts_cis_herit = fread(context_cis_herit_file, sep = "\t", data.table = F)
     for (gene in cis_exp_genes) {
         reg_gene_name <- gene
