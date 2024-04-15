@@ -9,7 +9,8 @@ library(MASS)
 library(data.table)
 library(fs)
 source("functions.R")
-set.seed(12)
+
+
 #setwd("~/Documents/BalliuLab/C-STEM/simulation")
 # Read parameters from command line arguments
 args <- commandArgs(trailingOnly = TRUE)

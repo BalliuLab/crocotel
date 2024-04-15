@@ -4,7 +4,7 @@
 
 library(data.table)
 library(MASS)
-set.seed(12)
+
 
 # contexts_variance: the variance of each context, 1-h^2-h_c^2
 # h^2: the context shared heritability 
@@ -120,7 +120,11 @@ get_cis_expression <- function(genotypes, shared_effects, specific_effects, cova
 }
 
 # Simulates one cis gene in all contexts
-simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilities, cis_covariance) {
+simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilities, cis_covariance, seed = NULL) {
+    if (!is.null(seed)) {
+        set.seed(seed)
+    }
+    
     genotype_matrix <- makeGenoMatrix(n, m, mafs)
     causal_snps <- get_causal_snps(m, p)
     shared_effects <- get_shared_effects(cis_heritabilities[1], causal_snps)
@@ -133,13 +137,13 @@ simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilitie
     specific_effects <- matrix(0, nrow = numContexts, ncol = m)
     cis_expression <- matrix(0, nrow = numContexts, ncol = n)
     for (context in 1:numContexts) {
-        specific_effects[context,] <- get_specific_effects(lam, cis_heritabilities[context, 2], causal_snps)
-        #cis_expression <- get_cis_expression(genotype_matrix, shared_effects, specific_effects, cis_covariance, context)
-        cis_expression[context,] <- genotype_matrix %*% shared_effects + genotype_matrix %*% specific_effects[context,] + residuals[context,]
-        
+        specific_effects[context, ] <- get_specific_effects(lam, cis_heritabilities[context, 2], causal_snps)
+        # cis_expression <- get_cis_expression(genotype_matrix, shared_effects, specific_effects, cis_covariance, context)
+        cis_expression[context, ] <- genotype_matrix %*% shared_effects + genotype_matrix %*% specific_effects[context, ] + residuals[context, ]
     }
     return(list(shared_effects, specific_effects, cis_expression, genotype_matrix, residuals))
 }
+
 
 
 # Formatting the file
@@ -250,8 +254,6 @@ get_trans_expression = function(predicted_exp, t, covariance, context, trans_her
 # Set the trans effects
 is_trans_effect <- function(ntransT, numContexts) {
     is_trans_effect_vec <- rep(0, numContexts)
-    # Set seed
-    set.seed(12)
     is_trans_effect_vec <- rbinom(numContexts, 1, ntransT/numContext)
     return(is_trans_effect_vec)
 }
