@@ -16,7 +16,7 @@ source("functions.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 # Check if arguments are provided
-if (length(args) < 7) {
+if (length(args) < 8) {
     stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho num_sim")
 }
 
@@ -32,6 +32,7 @@ lam <- as.numeric(args[5])
 rho <- as.numeric(args[6])
 maf_file <- args[7]
 num_iterations <- as.integer(args[8])
+seed <- ifelse(length(args) > 9, as.integer(args[9]), NULL)
 
 # t: number of target gene
 
@@ -55,7 +56,7 @@ cis_hearitabilities <- read.table("cis_heritability.txt", header = FALSE)
 time_start <- Sys.time()
 for (i in 1:num_iterations) {
     cis_covariance <- get_cis_covariance(numContexts, cis_hearitabilities, rho)
-    data <- simulate_one_gene(numContexts, n, m, p, lam, mafs, cis_hearitabilities, cis_covariance)
+    data <- simulate_one_gene(numContexts, n, m, p, lam, mafs, cis_hearitabilities, cis_covariance, seed)
     # Share effect and specific effect
     data_share_eff <- as.matrix(data[[1]])
     data_specific_eff <- as.matrix(data[[2]])
@@ -70,6 +71,9 @@ for (i in 1:num_iterations) {
     # Format data and save
     #format_exp(iteration, n, numContexts, data_exp, "~/expression")
     format_geno(n, m, "~/geno", Geno, iteration)
+    if (!is.null(seed)) {
+        seed <- seed + 1
+    }
 }
 time_end <- Sys.time()
 print(paste("Time taken:", time_end - time_start))
