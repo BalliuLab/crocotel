@@ -2,13 +2,13 @@
 # It reads in parameters from the command line and uses the functions from `Functions.R`.
 # Generate by: Lena Krockenberger, Feiyang Huang, Vivian Yee
 # Date [2024-03-14]
-# sample command: Rscript simulate.R 1000 1000 10 0.01 0.3 0.2 snp_mafs.txt
+# sample command: Rscript simulate_data.R 1000 1000 10 0.01 0.3 0.2 snp_mafs.txt 10 10
 # (make sure the snp_mafs.txt file is in the same directory as the simulate.R file)
 
 library(MASS)
 library(data.table)
 library(fs)
-source("functions.R")
+source("simulation_functions.R")
 
 
 #setwd("~/Documents/BalliuLab/C-STEM/simulation")
@@ -17,7 +17,7 @@ args <- commandArgs(trailingOnly = TRUE)
 
 # Check if arguments are provided
 if (length(args) < 8) {
-    stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho num_sim")
+    stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho num_iterations")
 }
 
 # Assign parameters
@@ -32,7 +32,7 @@ lam <- as.numeric(args[5])
 rho <- as.numeric(args[6])
 maf_file <- args[7]
 num_iterations <- as.integer(args[8])
-seed <- ifelse(length(args) > 9, as.integer(args[9]), NULL)
+seed <- as.numeric(args[9])
 
 # t: number of target gene
 
@@ -69,8 +69,8 @@ for (i in 1:num_iterations) {
     
     
     # Format data and save
-    #format_exp(iteration, n, numContexts, data_exp, "~/expression")
-    format_geno(n, m, "~/geno", Geno, iteration)
+    format_exp(i, n, numContexts, data_exp, "~/expression")
+    format_geno(n, m, "~/geno", Geno, i)
     if (!is.null(seed)) {
         seed <- seed + 1
     }

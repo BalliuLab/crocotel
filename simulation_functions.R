@@ -184,7 +184,7 @@ format_geno <- function(num_individuals, numGeno, geno_dir, genotypes, iteration
         individuals = c(individuals, paste0("N", i))
     }
     for(index in 0:(numGeno-1)){
-        to_write = data.frame(genotypes[,(index+1)])
+        to_write = data.frame(genotypes)
         rownames(to_write) = individuals
         file_name = file.path(dir_base, "genotypes.txt")  
         fwrite(to_write, file_name, row.names = TRUE, col.names = FALSE, 
