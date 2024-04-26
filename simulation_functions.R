@@ -6,6 +6,12 @@ library(data.table)
 library(MASS)
 
 
+generate_mafs <- function(x) {
+    mafs <- runif(x, 0.05, 0.5)
+    mafs <-as.matrix(mafs)
+    return(mafs)
+}
+
 # contexts_variance: the variance of each context, 1-h^2-h_c^2
 # h^2: the context shared heritability 
 # h_c^2: the context specific heritability
@@ -47,6 +53,7 @@ makeGenoMatrix <- function(n, m, mafs) {
     
     # center and scale genotypes
     genotypes1 <- scale(genotypes, center = TRUE, scale = TRUE)
+
     
     return(genotypes1)
 }
@@ -120,12 +127,11 @@ get_cis_expression <- function(genotypes, shared_effects, specific_effects, cova
 }
 
 # Simulates one cis gene in all contexts
-simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilities, cis_covariance, seed = NULL) {
+simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilities, cis_covariance, genotype_matrix,seed = NULL) {
     if (!is.null(seed)) {
         set.seed(seed)
     }
     
-    genotype_matrix <- makeGenoMatrix(n, m, mafs)
     causal_snps <- get_causal_snps(m, p)
     shared_effects <- get_shared_effects(cis_heritabilities[1], causal_snps)
     
@@ -139,7 +145,8 @@ simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilitie
     for (context in 1:numContexts) {
         specific_effects[context, ] <- get_specific_effects(lam, cis_heritabilities[context, 2], causal_snps)
         # cis_expression <- get_cis_expression(genotype_matrix, shared_effects, specific_effects, cis_covariance, context)
-        cis_expression[context, ] <- genotype_matrix %*% shared_effects + genotype_matrix %*% specific_effects[context, ] + residuals[context, ]
+        cis_expression[context, ] <- genotype_matrix %*% shared_effects + 
+            genotype_matrix %*% specific_effects[context, ] + residuals[context, ]
     }
     return(list(shared_effects, specific_effects, cis_expression, genotype_matrix, residuals))
 }
@@ -168,6 +175,7 @@ format_exp <- function(iteration, num_individuals, numContexts, cis_exp, scratch
         file_name = paste0(dir_base, "/", context, "_cis.txt")
         fwrite(to_write, file_name, row.names = TRUE, col.names = FALSE, 
                quote = FALSE, sep = "\t")
+       
     }
     
     
@@ -197,9 +205,10 @@ format_geno <- function(num_individuals, numGeno, geno_dir, genotypes, iteration
 
 # input params - number of contexts, context heritabilities, rho_mat: correlation matrix
 # output: context covariance
-get_trans_covariance <- function(numContexts, contexts_herit, rho_mat){
+get_trans_covariance <- function(numContexts, contexts_herit, rho){
+    rho_mat = matrix(rho, nrow = numContexts, ncol = numContexts)
+    diag(rho_mat) = 1
     contexts_variance = rep(0, numContexts)
-
     for(item in 1:nrow(contexts_herit)){
         herit = contexts_herit[item,1]
         contexts_variance[item] = 1-herit
@@ -233,17 +242,17 @@ get_causal_genes = function(t, p){
 get_trans_expression = function(predicted_exp, t, covariance, context, trans_herit, alt, residuals){
     target_trans_expression = matrix(0, nrow = length(predicted_exp), ncol = t)
     for(gene in 1:t){
-        residuals = residuals[,context]
-        var_residual = var(residuals)
+        residuals_vec = residuals[,context]
+        var_residual = var(residuals_vec)
         var_cisExp = var(predicted_exp, na.rm = T)
         if(alt){
             trans_effect = sqrt((var_residual*trans_herit)/(var_cisExp-(var_cisExp*trans_herit)))
         }
         else{
             trans_effect = 0
-            residuals = scale(residuals)
+            residuals_vec = scale(residuals_vec)
         }
-        expression = predicted_exp*trans_effect + residuals
+        expression = predicted_exp*trans_effect + residuals_vec
         target_trans_expression[,gene] = expression
     }
     
@@ -252,18 +261,18 @@ get_trans_expression = function(predicted_exp, t, covariance, context, trans_her
 
 
 # Set the trans effects
-is_trans_effect <- function(ntransT, numContexts) {
+is_trans_effect <- function(ntransT, numContexts, seed) {
+    set.seed(seed)
     is_trans_effect_vec <- rep(0, numContexts)
-    is_trans_effect_vec <- rbinom(numContexts, 1, ntransT/numContext)
+    is_trans_effect_vec <- rbinom(numContexts, 1, ntransT/numContexts)
     return(is_trans_effect_vec)
 }
 
 
 # numSamples is the same as number of individuals
 simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
-                                    context_cis_herit_file, is_trans_effect_vec, effects_output, trans_exp_dir) {
+                                    contexts_cis_herit, is_trans_effect_vec, effects_output, trans_exp_dir) {
     cis_exp_genes = list.files(cis_expression_dir)
-    contexts_cis_herit = fread(context_cis_herit_file, sep = "\t", data.table = F)
     for (gene in cis_exp_genes) {
         reg_gene_name <- gene
         contexts <- list.files(paste0(cis_expression_dir, gene, "/"))
@@ -278,12 +287,17 @@ simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
             
             cis_herit <- contexts_cis_herit[context, 3] # Column 3 is the total heritability
             is_trans_effect <- is_trans_effect_vec[context]
-            trans_expression <- get_trans_expression(cis_exp$V2, length(cis_exp_genes), covariance, context, contexts_cis_herit[context, 1], is_trans_effect, residuals)
+            trans_expression <- get_trans_expression(cis_exp$V2, length(cis_exp_genes), covariance, context, 
+                                                     contexts_cis_herit[context, 1], is_trans_effect, residuals)
             
             trans_exp_df[, context] <- trans_expression[[1]] # target_trans_expression
-            
-            effects_output_file <- paste0(effects_output, reg_gene_name, "_", context - 1, "_trans_effects.txt")
-            residuals_output_file <- paste0(effects_output, reg_gene_name, "_", context - 1, "_trans_residuals.txt")
+            residuals_output <- trans_expression[[2]]
+            effects_size <- trans_expression[[3]] 
+  
+            effects_output_file = paste0(effects_output, reg_gene_name, "_", context_num-1, "_trans_effects.txt")
+            residuals_output_file = paste0(effects_output, reg_gene_name, "_", context_num-1, "_trans_residuals.txt")
+            #fwrite(data.frame(trans_expression[[3]]), effects_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
+            #fwrite(data.frame(trans_expression[[2]]), residuals_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
             
     
         }

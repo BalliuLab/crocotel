@@ -2,7 +2,7 @@
 # It reads in parameters from the command line and uses the functions from `Functions.R`.
 # Generate by: Lena Krockenberger, Feiyang Huang, Vivian Yee
 # Date [2024-03-14]
-# sample command: Rscript simulate_data.R 1000 1000 10 0.01 0.3 0.2 snp_mafs.txt 10 10
+# sample command: Rscript simulate_data.R 1000 1000 10 0.01 0.3 0.2 10 10 3 cis_heritability.txt context_heritability.txt "effect_sizes/" "expression/" "trans_expression/" "cov_output/" 3
 # (make sure the snp_mafs.txt file is in the same directory as the simulate.R file)
 
 library(MASS)
@@ -16,8 +16,9 @@ source("simulation_functions.R")
 args <- commandArgs(trailingOnly = TRUE)
 
 # Check if arguments are provided
-if (length(args) < 8) {
-    stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho num_iterations")
+if (length(args) < 16) {
+    stop("Insufficient number of arguments! Usage: Rscript simulate.R n m numContexts p lam rho maf_file num_iterations seed t 
+         context_cis_herit_file context_herit_file effects_output cis_expression")
 }
 
 # Assign parameters
@@ -30,33 +31,42 @@ numContexts <- as.integer(args[3])
 p <- as.numeric(args[4])
 lam <- as.numeric(args[5])
 rho <- as.numeric(args[6])
-maf_file <- args[7]
-num_iterations <- as.integer(args[8])
-seed <- as.numeric(args[9])
+num_iterations <- as.integer(args[7])
+seed <- as.numeric(args[8])
 
 # t: number of target gene
-
-#t < as.numeric(args[8])
-#context_cis_herit_file = args[9]
-#context_herit_file = args[10]
-#effects_output = args[11]
-#cis_expression_dir = args[12]
-#trans_exp_dir = args[13]
-#cov_output_dir = args[14]
-#ntransT = as.numeric(args[15])
+# ntransT: number of Tissues that have trans effect
+t <- as.numeric(args[9])
+context_cis_herit_file <- args[10]
+context_herit_file = args[11]
+effects_output = args[12]
+cis_expression_dir = args[13]
+trans_exp_dir = args[14]
+cov_output_dir = args[15]
+ntransT = as.numeric(args[16])
 
 # Set working directory and input given parameters
 #setwd("~/BalliuLab/CSTEM")
-mafs <- read.table(maf_file, header = FALSE)
-mafs <- as.matrix(mafs)
-cis_hearitabilities <- read.table("cis_heritability.txt", header = FALSE)
+
+set.seed(seed)
+
+mafs <- generate_mafs(m)
+generate_mafs_file <- fwrite(as.data.frame(mafs), "snp_mafs.txt", sep = "\t", col.names = FALSE)
+cis_hearitabilities <- read.table(context_cis_herit_file, header = FALSE)
+contexts_cis_herit = fread(context_cis_herit_file, sep = "\t", data.table = F)
+contexts_herit = fread(context_herit_file, sep = "\t", data.table = F)
+covariance = get_trans_covariance(numContexts, contexts_herit, rho)
+is_trans_effect_vec <- is_trans_effect(ntransT, numContexts, seed)
+genotype_matrix <- makeGenoMatrix(n, m, mafs)
+genotype_matrix_file <- fwrite(as.data.frame(genotype_matrix), "genotype_matrix.txt", sep = "\t", col.names = FALSE)
 
 
 # Run simulations and save data
 time_start <- Sys.time()
 for (i in 1:num_iterations) {
+    set.seed(seed)
     cis_covariance <- get_cis_covariance(numContexts, cis_hearitabilities, rho)
-    data <- simulate_one_gene(numContexts, n, m, p, lam, mafs, cis_hearitabilities, cis_covariance, seed)
+    data <- simulate_one_gene(numContexts, n, m, p, lam, mafs, cis_hearitabilities, cis_covariance, genotype_matrix, seed)
     # Share effect and specific effect
     data_share_eff <- as.matrix(data[[1]])
     data_specific_eff <- as.matrix(data[[2]])
@@ -75,6 +85,9 @@ for (i in 1:num_iterations) {
         seed <- seed + 1
     }
 }
+
+simulateTransExpression(cis_expression_dir, n, covariance,contexts_cis_herit, is_trans_effect_vec, effects_output, trans_exp_dir)
+
 time_end <- Sys.time()
 print(paste("Time taken:", time_end - time_start))
 
