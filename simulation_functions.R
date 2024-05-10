@@ -52,6 +52,7 @@ get_cis_covariance <- function(numContexts, contexts_herit, rho) {
         total_herit <- contexts_herit[item, 3]
         contexts_variance[item] <- 1 - total_herit
     }
+    
     sigma <- sqrt(contexts_variance)
     covariance <- rho_mat * (sigma %*% t(sigma))
     return(covariance)
@@ -321,8 +322,8 @@ simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
             residuals_output <- trans_expression[[2]]
             effects_size <- trans_expression[[3]] 
   
-            effects_output_file = paste0(effects_output, reg_gene_name, "_", c-1, "_trans_effects.txt")
-            residuals_output_file = paste0(effects_output, reg_gene_name, "_", c-1, "_trans_residuals.txt")
+            effects_output_file = paste0(effects_output, reg_gene_name, "_", context-1, "_trans_effects.txt")
+            residuals_output_file = paste0(effects_output, reg_gene_name, "_", context-1, "_trans_residuals.txt")
             #fwrite(data.frame(trans_expression[[3]]), effects_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
             #fwrite(data.frame(trans_expression[[2]]), residuals_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
             
