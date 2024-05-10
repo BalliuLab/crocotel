@@ -12,6 +12,33 @@ generate_mafs <- function(x) {
     return(mafs)
 }
 
+
+
+get_cis_context_heritabilities <- function(numContexts, shared, total_cis_herit) {
+    contexts_herit <- matrix(0, nrow=numContexts, ncol=3)
+    for (i in 1:nrow(contexts_herit)) {
+        specific <- runif(1, 0.05, (total_cis_herit - shared))
+        contexts_herit[i,] <- c(shared, specific, shared + specific)
+    }
+    return(contexts_herit)
+}
+
+
+get_trans_context_heritabilities <- function(numContexts, trans_herit) {
+    contexts_herit <- matrix(trans_herit, nrow = numContexts, ncol = 1)
+    return(contexts_herit)
+}
+
+get_null_cis_context_heritabilities <- function(numContexts) {
+    return(matrix(0, nrow=numContexts, ncol=3))
+}
+
+
+get_null_trans_context_heritabilities <- function(numContexts) {
+    return(matrix(0, nrow=numContexts, ncol=1))
+}
+
+
 # contexts_variance: the variance of each context, 1-h^2-h_c^2
 # h^2: the context shared heritability 
 # h_c^2: the context specific heritability
@@ -78,7 +105,7 @@ get_shared_effects <- function(heritability, snp_list) {
     causal <- sum(snp_list == 1)
     for (item in 1:length(snp_list)) {
         if (snp_list[item] == 1) {
-            effect_size <- rnorm(1, mean = 0, sd = (sqrt(heritability/causal))[1,1])
+            effect_size <- rnorm(1, mean = 0, sd = (sqrt(heritability/causal)))
             snp_list[item] <- effect_size
         }
     }
@@ -133,7 +160,7 @@ simulate_one_gene <- function(numContexts, n, m, p, lam, mafs, cis_heritabilitie
     }
     
     causal_snps <- get_causal_snps(m, p)
-    shared_effects <- get_shared_effects(cis_heritabilities[1], causal_snps)
+    shared_effects <- get_shared_effects(cis_heritabilities[,1], causal_snps)
     
     context_cis_expression <- vector("list", numContexts)
     context_specific_effects <- vector("list", numContexts)
@@ -271,7 +298,7 @@ is_trans_effect <- function(ntransT, numContexts, seed) {
 
 # numSamples is the same as number of individuals
 simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
-                                    contexts_cis_herit, is_trans_effect_vec, effects_output, trans_exp_dir) {
+                                    contexts_cis_herit, trans_herit, is_trans_effect_vec, effects_output, trans_exp_dir) {
     cis_exp_genes = list.files(cis_expression_dir)
     for (gene in cis_exp_genes) {
         reg_gene_name <- gene
@@ -288,14 +315,14 @@ simulateTransExpression <- function(cis_expression_dir, numSamples, covariance,
             cis_herit <- contexts_cis_herit[context, 3] # Column 3 is the total heritability
             is_trans_effect <- is_trans_effect_vec[context]
             trans_expression <- get_trans_expression(cis_exp$V2, length(cis_exp_genes), covariance, context, 
-                                                     contexts_cis_herit[context, 1], is_trans_effect, residuals)
+                                                     trans_herit, is_trans_effect, residuals)
             
             trans_exp_df[, context] <- trans_expression[[1]] # target_trans_expression
             residuals_output <- trans_expression[[2]]
             effects_size <- trans_expression[[3]] 
   
-            effects_output_file = paste0(effects_output, reg_gene_name, "_", context_num-1, "_trans_effects.txt")
-            residuals_output_file = paste0(effects_output, reg_gene_name, "_", context_num-1, "_trans_residuals.txt")
+            effects_output_file = paste0(effects_output, reg_gene_name, "_", c-1, "_trans_effects.txt")
+            residuals_output_file = paste0(effects_output, reg_gene_name, "_", c-1, "_trans_residuals.txt")
             #fwrite(data.frame(trans_expression[[3]]), effects_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
             #fwrite(data.frame(trans_expression[[2]]), residuals_output_file, sep = "\t", quote = F, row.names = F, col.names = F)
             
