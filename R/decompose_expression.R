@@ -73,12 +73,12 @@ decompose_expression = function(exp_files, gene, contexts, outfile_suffix, conte
 
 
 #### test functions:
-exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-contexts = exp_files
-exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
-outfile_suffix = "decomposed_expression.txt"
-data_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
-context_thresh = 3
-gene = "gene1"
+#exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
+#contexts = exp_files
+#exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
+#outfile_suffix = "decomposed_expression.txt"
+#data_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
+#context_thresh = 3
+#gene = "gene1"
 
-decompose_expression(exp_files, gene, contexts, outfile_suffix, context_thresh)
+#decompose_expression(exp_files, gene, contexts, outfile_suffix, context_thresh)
