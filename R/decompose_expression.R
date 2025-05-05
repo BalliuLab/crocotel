@@ -1,6 +1,6 @@
 
-
-decompose_expression = function(exp_files, gene, contexts, outfile_suffix, context_thresh){
+## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
+decompose_expression = function(exp_files, gene, contexts, context_thresh, data_dir){
   # Read expression matrix for Context t and merge with other Contexts 
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
   names(exp_all) = c("id", gene)
@@ -23,8 +23,12 @@ decompose_expression = function(exp_files, gene, contexts, outfile_suffix, conte
   
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
-  shared_exp_file_name= paste0(data_dir, gene, ".AverageContext.", outfile_suffix)
-  spec_exp_file_name= paste0(data_dir, gene, ".", contexts,".", outfile_suffix)
+  if(context_thresh < 2){
+    print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
+    context_thresh = 2
+  }
+  shared_exp_file_name= paste0(data_dir, gene, ".AverageContext.decomposed_expression.txt")
+  spec_exp_file_name= paste0(data_dir, gene, ".", contexts,".decomposed_expression.txt")
   
   ### keep only samples that have repeats across number of contexts specified by threshold
   ids_to_keep = names(which(table(exp_all$id) >= context_thresh))
@@ -76,9 +80,8 @@ decompose_expression = function(exp_files, gene, contexts, outfile_suffix, conte
 #exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
 #contexts = exp_files
 #exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
-#outfile_suffix = "decomposed_expression.txt"
 #data_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
 #context_thresh = 3
 #gene = "gene1"
 
-#decompose_expression(exp_files, gene, contexts, outfile_suffix, context_thresh)
+#decompose_expression(exp_files, gene, contexts, context_thresh, data_dir)
