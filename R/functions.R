@@ -99,13 +99,118 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
       Yhats_tiss[[j]][rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]],]<-X[rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], ] %*% tiss_betas[[j]] + tiss_ints[[j]]
     }
     
-    
 
     if(cur_fold < num_folds){
       message("Finished fold: ", cur_fold, " of ", num_folds)
     }
   }
   
+  names(Yhats_tiss)<-names(Ys)
+  message("removing temporary files")
+  system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
   return(Yhats_tiss)
   
 }
+
+evaluation_helper = function(Yhats_tiss, contexts_vec, run_CxC, Yhats_full, out_dir, gene_name){
+  message("Calculating r2 performance metrics")
+  ## Score each method
+  het_cv_pvals<-vector("list", q); het_cv_r2s<-vector("list", q)
+  hom_cv_pvals<-vector("list", q); hom_cv_r2s<-vector("list", q)
+  het_cv_pvals.herit<-vector("list", q); het_cv_r2s.herit<-vector("list", q)
+  full_cv_pvals<-vector("list", q); full_cv_r2s<-vector("list", q)
+  tiss_cv_pvals<-vector("list", q); tiss_cv_r2s<-vector("list", q)
+  full_weights<-vector("list", q); het_scales=vector("list", q)
+  
+  for(context in contexts_vec){
+    if(context != "AverageContext"){
+      if(!run_CxC){
+        index_exp = which(contexts_vec == context)
+        index_avg_exp = which(contexts_vec == "AverageContext")
+        hom.tmp=Yhats_tiss[[index_exp]]
+        # baseline model
+        m1<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp])~1) ### tests how much an intercept explains total expresison
+        # homogeneous model
+        m2<-lm((hom_expr_mat[,index_exp]+hom_expr_mat[,index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]]) ### tests how much predicted shared expression of this context explains total expression
+        # heterogeneous model
+        ## if we learned one for this tissue/context
+        ## is the het term heritable:
+        hetresponse=hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]
+        hetbaseline<-lm(hetresponse ~ 1)
+        hetfit=lm(hetresponse ~ Yhats_tiss[[index_exp]]) 
+        
+        het_test_stat.herit<--2*(logLik(hetbaseline))+2*logLik(hetfit)
+        het_cv_pvals.herit[[index_exp]]<-pchisq(het_test_stat.herit,1,lower.tail=F) ## pvalue of the observed specific component of expression to the predicted specific expression
+        het_cv_r2s.herit[[index_exp]]<-summary(hetfit)$adj.r.squared
+        
+        
+        m3<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
+        #het_scales[[index_exp]]=coef(m3)[2]
+        # full model
+        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp] + 
+                Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
+        full_values <- predict(m4)
+        full_values = data.frame(full_values)
+        names(full_values) = "pred"
+        Yhats_full[[index_exp]][rownames(full_values), ]<- full_values$pred
+        
+        # test for signif of full model
+        full_test_stat<--2*(logLik(m1))+2*logLik(m4)
+        full_cv_pvals[[index_exp]]<-pchisq(full_test_stat,2,lower.tail=F) ## pvalue of the total expression for this context with shared and specific expression
+        full_cv_r2s[[index_exp]]<-summary(m4)$adj.r.squared
+        full_weights[[index_exp]]<-coef(m4)[2:3]
+        # test for signif of het | hom
+        het_test_stat<--2*(logLik(m2))+2*logLik(m4) ## pvalue of total against just shared with total against full
+        het_cv_pvals[[index_exp]]<-pchisq(het_test_stat,1,lower.tail=F)
+        het_cv_r2s[[index_exp]]<-summary(m3)$adj.r.squared
+        # test for signif of hom | het
+        hom_test_stat<--2*(logLik(m3))+2*logLik(m4) ## pvalue of total against specific and total against shared and specific
+        hom_cv_pvals[[index_exp]]=pchisq(hom_test_stat,1,lower.tail=F)
+        hom_cv_r2s[[index_exp]]=summary(m2)$adj.r.squared
+      }
+      # tissue by tissue approach
+      if(run_CxC){
+        t1<-lm(hom_expr_mat[rownames(Ys[[index_exp]]),index_exp] ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
+        tiss_test_stat<--2*(logLik(m1))+2*logLik(t1)
+        tiss_cv_pvals[[index_exp]]<-pchisq(tiss_test_stat,1,lower.tail=F)
+        tiss_cv_r2s[[index_exp]]<-summary(t1)$adj.r.squared
+      }
+    }else{
+      ## first is the hom term heritable:
+      index_exp = which(contexts_vec == context)
+      hom.tmp=Yhats_tiss[[context]]
+      baseline=lm(hom_expr_mat[,index_avg_exp] ~ 1)
+      homfit=lm(hom_expr_mat[,index_avg_exp] ~ hom.tmp)
+      hom_test_stat.herit<--2*(logLik(baseline))+2*logLik(homfit)
+      het_cv_pvals.herit[[index_exp]]=pchisq(hom_test_stat.herit,1,lower.tail=F)
+      het_cv_r2s.herit[[index_exp]]=summary(homfit)$adj.r.squared
+    }
+  }
+  if(run_CxC){
+    pvaldf=cbind(tiss_cv_pvals)
+    rownames(pvaldf)=names(Ys)
+    r2df=cbind(tiss_cv_r2s)
+    rownames(r2df)=names(Ys)
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_CxC_crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, "_CxC_crossval_r2.txt"), sep = "\t")
+  }else{
+    pvaldf=cbind(het_cv_pvals, het_cv_pvals.herit, hom_cv_pvals, full_cv_pvals)
+    rownames(pvaldf)=names(Ys)
+    r2df=cbind(het_cv_r2s, het_cv_r2s.herit, hom_cv_r2s, full_cv_r2s)
+    rownames(r2df)=names(Ys)
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_cstem_crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, "_cstem_crossval_r2.txt"), sep = "\t")
+    fwrite(Yhats_full, file = paste0(out_dir,gene_name,"_cstem_full_predictors.txt", sep = "\t"))
+  }
+  
+  message("Done computing evaluation metrics.")
+  
+}
+  
+  
+  
+  
+  
+  
+  
+  
