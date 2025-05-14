@@ -1,9 +1,9 @@
 library(data.table)
 library(dplyr)
 library(tidyr)
-library(lmerTest)
-library(emmeans)
-library(broom)
+
+
+
 
 # Script that implements CSTEM-lmm
 # lmm based association testing between simulated trans and CONTENT predictions
@@ -33,27 +33,6 @@ simulated_trans_exp <- "trans"
 out_dir <- "/u/scratch/n/nmohamm/cstem_new_sims/test_cstem_outputs"
 target_cis_pred <- TRUE
 #############
-
-load_rdata <- function(filepath) {
-        # load in CONTENT R objects into independent envs so more
-        # than one gene can be parsed at once
-        env <- new.env()  # Create an isolated environment
-        loaded_names <- load(filepath, envir = env)  # Load into the new environment
-        obj_list <- mget(loaded_names, envir = env)  # Extract objects as a list
-        return(obj_list)
-}
-
-get_content_preds <- function(gene1, gene2, scenario, work_dir, content_dir) {
-	# gene1 will always be regulator preds
-        gene1_content_path <- file.path(work_dir, scenario, content_dir, "regulator",  paste0(gene1, "_crossval_predictors"))
-	# gene2 will always be target preds
-        gene2_content_path <- file.path(work_dir, scenario, content_dir, "target", paste0(gene2, "_crossval_predictors"))
-
-        gene1_content_preds <- load_rdata(gene1_content_path)
-        gene2_content_preds <- load_rdata(gene2_content_path)
-
-        return(list(gene1 = gene1_content_preds, gene2 = gene2_content_preds))
-}
 
 format_lmm_data <- function(simulated_trans_data_df, content_reg_preds, content_target_preds, num_contexts) {
 	# take in the simulated trans data and content predictions and
@@ -159,3 +138,116 @@ if (target_cis_pred) {
         fwrite(target_pvalues_df, file.path(out_dir, paste0(method, "_lmm_target_scenario_", scenario, ".txt")), sep = "\t", row.names = T, col.names = T, quote = F)
 }
 fwrite(regulator_pvalues_df, file.path(out_dir, paste0(method, "_lmm_regulator_scenario_", scenario,".txt")), sep = "\t", row.names = T, col.names = T, quote = F)
+
+########################################
+
+library(data.table)
+library(dplyr)
+library(foreach)
+library(tidyr)
+library(lme4)
+library(emmeans)
+library(broom)
+
+regulator_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_full_predictors.txt"
+regulator_cxc_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_CxC_predictors.txt"
+target_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_predictors.txt"
+target_cxc_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_CxC_predictors.txt"
+target_exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
+run_CxC = T
+contexts_vec = target_exp_files
+target_exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", target_exp_files)
+regulator_gene_name = "gene1"
+target_gene_name = "gene2"
+target_cis_pred = TRUE
+outdir = "/Users/lkrockenberger/C-STEM/example_data/trans_output/"
+
+
+get_target_exp = function(target_exp_files, contexts_vec){
+  targ_exp = foreach(context = 1:length(contexts_vec), .combine = 'rbind') %dopar% {
+    cur_context = contexts_vec[context]
+    cur_file = target_exp_files[grepl(cur_context, target_exp_files)]
+    df = fread(cur_file, sep = "\t", data.table = F)
+    names(df) = c("id", "target_exp")
+    df = df %>% mutate(context = cur_context) %>% select(id, context, target_exp)
+    return(df)
+  }
+  return(targ_exp)
+}
+
+####################
+### have to run this separately for CxC and C-STEM but with different parameter settings
+cstem_cxc_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_CxC, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+  ## get target expression across all contexts
+  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F)
+  regulator_exp_mat = regulator_exp_mat %>% pivot_longer(cols = -id,
+                                                         names_to = "context",
+                                                         values_to = "regulator_pred" )
+  
+  # get target cis predicted expression across all contexts
+  target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F)
+  target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
+                                                             names_to = "context",
+                                                             values_to = "target_cis_pred")
+  
+  target_exp_mat = get_target_exp(target_exp_files, contexts_vec)
+  trans_model_df = target_exp_mat %>%
+    full_join(regulator_exp_mat, by = c("id", "context")) %>%
+    full_join(target_cis_pred_mat, by = c("id", "context"))
+  trans_model_df$id = factor(trans_model_df$id)
+  trans_model_df$context = factor(trans_model_df$context)
+  
+  # setup pvalue matricies for target and regulator cis-predicted expression
+  # pvalue matrix for cis-genetic predicted target associations with simulated trans expression
+  target_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+1))
+  names(target_assoc_pvalues) = c("target_gene", contexts_vec)
+  # pvalue matrix for cis-genetic predicted regulator associations with simulated trans expression
+  regulator_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+2))
+  names(regulator_assoc_pvalues) = c("target_gene", "regulator_gene", contexts_vec)
+  
+  if(target_cis_pred){
+    ref_context = contexts_vec[1]
+    trans_model <- lmer(target_exp ~ regulator_pred + target_cis_pred + relevel(context, ref = ref_context) + 
+                          regulator_pred:relevel(context, ref = ref_context) + 
+                          target_cis_pred:relevel(context, ref = ref_context) + (1 | id), data = trans_model_df)
+    # extract marginal trends for each predicted exp
+    reg_marginal_trends <- emtrends(trans_model, ~ context, var = "regulator_pred") %>% tidy()
+    target_marginal_trends <- emtrends(trans_model, ~ context, var = "target_cis_pred") %>% tidy()
+    # add p values to respective matrix
+    regulator_assoc_pvalues[gene1, gene2, ] <- reg_marginal_trends %>% pull(p.value)
+    target_assoc_pvalues[gene1, gene2, ] <- target_marginal_trends %>% pull(p.value)
+  } else {
+    trans_model <- lmer(target_exp ~ regulator_pred + relevel(context, ref = ref_context) + 
+      regulator_pred:relevel(context, ref = ref_context) + (1 | id), data = trans_model_df)
+    # calculate main effect of predictor
+    marginal_trends <- emtrends(trans_model, ~ context, var = "regulator_pred") %>% tidy()
+    # add p values from each context into matrix
+    regulator_assoc_pvalues[gene1, gene2, ] <- marginal_trends %>% pull(p.value)
+  }
+  if(target_cis_pred){
+    file_prefix = "_cis_cstemlite.txt"
+    if(run_CxC){
+      file_prefix = "_cis_cxc.txt"
+    }
+  }else{
+    file_prefix = "_cstemlite.txt"
+    if(run_CxC){
+      file_prefix = "_cxc.txt"
+    }
+  }
+  fwrite(this_gene, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
+}
+
+cstem_cxc_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, FALSE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
+cstem_cxc_lite(regulator_cxc_pred_exp_file, target_cxc_pred_exp_file, target_exp_files, contexts_vec, TRUE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
+
+
+
+
+
+
+
+
+
+
+

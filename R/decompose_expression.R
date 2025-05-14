@@ -36,7 +36,12 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   expression = exp_all %>% filter(id %in% ids_to_keep)
   design = factor(expression$id)
   contexts=as.character(unique(expression$context))
-  X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
+  #X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
+  X = as.matrix(expression %>%
+    group_by(context) %>%
+    mutate(
+      gene1_scaled = scale(gene1)
+    ) %>% ungroup() %>% select(gene1_scaled))
   
   indiv.names = expression$id
   rownames(X) = expression$id

@@ -108,23 +108,23 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
   names(Yhats_tiss)<-names(Ys)
   message("removing temporary files")
   system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
-  return(Yhats_tiss)
+  return(list(Yhats_tiss = Yhats_tiss, hom_expr_mat = hom_expr_mat))
   
 }
 
-evaluation_helper = function(Yhats_tiss, contexts_vec, run_CxC, Yhats_full, out_dir, gene_name){
+evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC, Yhats_full, out_dir, gene_name){
   message("Calculating r2 performance metrics")
   ## Score each method
-  het_cv_pvals<-vector("list", q); het_cv_r2s<-vector("list", q)
-  hom_cv_pvals<-vector("list", q); hom_cv_r2s<-vector("list", q)
-  het_cv_pvals.herit<-vector("list", q); het_cv_r2s.herit<-vector("list", q)
-  full_cv_pvals<-vector("list", q); full_cv_r2s<-vector("list", q)
-  tiss_cv_pvals<-vector("list", q); tiss_cv_r2s<-vector("list", q)
-  full_weights<-vector("list", q); het_scales=vector("list", q)
+  het_cv_pvals<-vector("list", length(contexts_vec)); het_cv_r2s<-vector("list", length(contexts_vec))
+  hom_cv_pvals<-vector("list", length(contexts_vec)); hom_cv_r2s<-vector("list", length(contexts_vec))
+  het_cv_pvals.herit<-vector("list", length(contexts_vec)); het_cv_r2s.herit<-vector("list", length(contexts_vec))
+  full_cv_pvals<-vector("list", length(contexts_vec)); full_cv_r2s<-vector("list", length(contexts_vec))
+  tiss_cv_pvals<-vector("list", length(contexts_vec)); tiss_cv_r2s<-vector("list", length(contexts_vec))
+  full_weights<-vector("list", length(contexts_vec)); het_scales=vector("list", length(contexts_vec))
   
   for(context in contexts_vec){
     if(context != "AverageContext"){
-      if(!run_CxC){
+      if(!is_CxC){
         index_exp = which(contexts_vec == context)
         index_avg_exp = which(contexts_vec == "AverageContext")
         hom.tmp=Yhats_tiss[[index_exp]]
@@ -169,28 +169,34 @@ evaluation_helper = function(Yhats_tiss, contexts_vec, run_CxC, Yhats_full, out_
         hom_cv_r2s[[index_exp]]=summary(m2)$adj.r.squared
       }
       # tissue by tissue approach
-      if(run_CxC){
+      if(is_CxC){
+        index_exp = which(contexts_vec == context)
         t1<-lm(hom_expr_mat[rownames(Ys[[index_exp]]),index_exp] ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
+        m1<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp])~1) ### tests how much an intercept explains total expresison
         tiss_test_stat<--2*(logLik(m1))+2*logLik(t1)
         tiss_cv_pvals[[index_exp]]<-pchisq(tiss_test_stat,1,lower.tail=F)
         tiss_cv_r2s[[index_exp]]<-summary(t1)$adj.r.squared
       }
     }else{
-      ## first is the hom term heritable:
-      index_exp = which(contexts_vec == context)
-      hom.tmp=Yhats_tiss[[context]]
-      baseline=lm(hom_expr_mat[,index_avg_exp] ~ 1)
-      homfit=lm(hom_expr_mat[,index_avg_exp] ~ hom.tmp)
-      hom_test_stat.herit<--2*(logLik(baseline))+2*logLik(homfit)
-      het_cv_pvals.herit[[index_exp]]=pchisq(hom_test_stat.herit,1,lower.tail=F)
-      het_cv_r2s.herit[[index_exp]]=summary(homfit)$adj.r.squared
+      if(!is_CxC){
+        ## first is the hom term heritable:
+        index_exp = which(contexts_vec == context)
+        hom.tmp=Yhats_tiss[[context]]
+        baseline=lm(hom_expr_mat[,index_avg_exp] ~ 1)
+        homfit=lm(hom_expr_mat[,index_avg_exp] ~ hom.tmp)
+        hom_test_stat.herit<--2*(logLik(baseline))+2*logLik(homfit)
+        het_cv_pvals.herit[[index_exp]]=pchisq(hom_test_stat.herit,1,lower.tail=F)
+        het_cv_r2s.herit[[index_exp]]=summary(homfit)$adj.r.squared
+      }
     }
   }
-  if(run_CxC){
+  if(is_CxC){
     pvaldf=cbind(tiss_cv_pvals)
     rownames(pvaldf)=names(Ys)
+    pvaldf = data.frame(context = rownames(pvaldf), pvaldf)
     r2df=cbind(tiss_cv_r2s)
     rownames(r2df)=names(Ys)
+    r2df = data.frame(context = rownames(r2df), r2df)
     fwrite(pvaldf, file = paste0(out_dir, gene_name, "_CxC_crossval_pvalues.txt"), sep = "\t")
     fwrite(r2df, file = paste0(out_dir, gene_name, "_CxC_crossval_r2.txt"), sep = "\t")
   }else{
@@ -198,9 +204,24 @@ evaluation_helper = function(Yhats_tiss, contexts_vec, run_CxC, Yhats_full, out_
     rownames(pvaldf)=names(Ys)
     r2df=cbind(het_cv_r2s, het_cv_r2s.herit, hom_cv_r2s, full_cv_r2s)
     rownames(r2df)=names(Ys)
+    pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
+    r2df = data.frame(cbind(context = rownames(r2df), r2df)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
+    
     fwrite(pvaldf, file = paste0(out_dir, gene_name, "_cstem_crossval_pvalues.txt"), sep = "\t")
     fwrite(r2df, file = paste0(out_dir, gene_name, "_cstem_crossval_r2.txt"), sep = "\t")
-    fwrite(Yhats_full, file = paste0(out_dir,gene_name,"_cstem_full_predictors.txt", sep = "\t"))
+    
+    Yhat_full_mat<-matrix(NA, nrow = nrow(hom_expr_mat), ncol=length(contexts_vec))
+    rownames(Yhat_full_mat)<-rownames(hom_expr_mat)
+    colnames(Yhat_full_mat)<-contexts_vec
+    for(i in 1:length(contexts_vec)){
+      context = contexts_vec[i]
+      Yhat_full_mat[rownames(Yhats_full[[i]]),i]<-Yhats_full[[i]]
+    }
+    all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
+    remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
+    Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat))
+    Yhat_full_mat = Yhat_full_mat[-remove_inds,]
+    fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,"_cstem_full_predictors.txt"), sep = "\t")
   }
   
   message("Done computing evaluation metrics.")

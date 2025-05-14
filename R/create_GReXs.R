@@ -1,4 +1,3 @@
-## THIS IS NOT A FUNCTION YET - it is the code directly used from C-STEM simulation pipeline
 
 ### Test parameters
 X_file = "/Users/lkrockenberger/C-STEM/example_data/genos"
@@ -78,9 +77,23 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, snps, gene_name, d
   }
   
   
-  Yhats_tiss = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha)
-  fwrite(Yhats_tiss, file = paste0(out_dir,gene_name,"_cstem_predictors.txt", sep = "\t"))
-  evaluation_helper(Yhats_tiss, contexts_vec, run_CxC, Yhats_full, out_dir, gene_name)
+  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha)
+  Yhats_tiss = crossval_output[["Yhats_tiss"]]
+  hom_expr_mat = crossval_output[["hom_expr_mat"]]
+  
+  ## combine Yhats_tiss into large dataframe with individuals as rows and contexts as columns:
+  Yhat_tiss_mat<-matrix(NA, nrow = nrow(X), ncol=length(contexts_vec))
+  rownames(Yhat_tiss_mat)<-rownames(X)
+  colnames(Yhat_tiss_mat)<-contexts_vec
+  for(context in contexts_vec){
+    Yhat_tiss_mat[rownames(Yhats_tiss[[context]]),context]<-Yhats_tiss[[context]]
+  }
+  all_missing<-names(rowMeans(Yhat_tiss_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_tiss_mat, na.rm = T)))])
+  remove_inds<-which(rownames(Yhat_tiss_mat) %in% all_missing)
+  Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,])
+  Yhat_tiss_mat = cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat)
+  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,"_cstem_predictors.txt"), sep = "\t")
+  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
   ### read in expression for CxC
   if(run_CxC){
@@ -99,10 +112,27 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, snps, gene_name, d
         Ys_cxc[[i]]=Ys_cxc[[i]][-remove,,drop=F]
       }
     }
-    Yhats_cxc = crossval_helper(Ys_cxc, X, lengths_y_cxc, rownames_y_cxc, out_dir, gene_name, num_folds, alpha)
-    fwrite(Yhats_cxc, file = paste0(out_dir,gene_name,"_CxC_predictors.txt", sep = "\t"))
-    evaluation_helper(Yhats_cxc, contexts_vec, run_CxC, NULL, out_dir, gene_name)
+    cxc_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
+    output_cxc = crossval_helper(Ys_cxc, X, lengths_y_cxc, rownames_y_cxc, cxc_contexts_vec, out_dir, gene_name, num_folds, alpha)
+    Yhats_cxc = output_cxc[["Yhats_tiss"]]
+    hom_expr_mat_cxc = output_cxc[["hom_expr_mat"]]
+    
+    Yhat_cxc_mat<-matrix(NA, nrow = nrow(X), ncol=length(cxc_contexts_vec))
+    rownames(Yhat_cxc_mat)<-rownames(X)
+    colnames(Yhat_cxc_mat)<-cxc_contexts_vec
+    for(context in cxc_contexts_vec){
+      Yhat_cxc_mat[rownames(Yhats_cxc[[context]]),context]<-Yhats_cxc[[context]]
+    }
+    all_missing<-names(rowMeans(Yhat_cxc_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_cxc_mat, na.rm = T)))])
+    remove_inds<-which(rownames(Yhat_cxc_mat) %in% all_missing)
+    Yhat_cxc_mat = data.frame(Yhat_cxc_mat[-remove_inds,])
+    Yhat_cxc_mat = cbind(id = rownames(Yhat_cxc_mat), Yhat_cxc_mat)
+    fwrite(Yhat_cxc_mat, file = paste0(out_dir,gene_name,"_CxC_predictors.txt"), sep = "\t")
+    
+    evaluation_helper(Ys_cxc, hom_expr_mat_cxc, Yhats_cxc, cxc_contexts_vec, TRUE, NULL, out_dir, gene_name)
   }
+  message("Finished computing GReXs and evalutation metrics")
   
 }
 
+create_GReXs(X_file, exp_files, contexts, out_dir, snps, gene_name, decomposition_dir, context_thresh, alpha, num_folds, run_CxC)
