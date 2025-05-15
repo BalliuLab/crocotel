@@ -1,5 +1,6 @@
 
 ## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
+#' @export
 decompose_expression = function(exp_files, gene, contexts, context_thresh, data_dir){
   # Read expression matrix for Context t and merge with other Contexts 
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
@@ -23,10 +24,10 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
-  if(context_thresh < 2){
-    print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
-    context_thresh = 2
-  }
+  #if(context_thresh < 2){
+  #  print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
+  #  context_thresh = 2
+  #}
   shared_exp_file_name= paste0(data_dir, gene, ".AverageContext.decomposed_expression.txt")
   spec_exp_file_name= paste0(data_dir, gene, ".", contexts,".decomposed_expression.txt")
   

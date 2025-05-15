@@ -1,23 +1,24 @@
-library(data.table)
-library(dplyr)
-library(foreach)
+#library(data.table)
+#library(dplyr)
+#library(foreach)
 
-regulator_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_full_predictors.txt"
-regulator_cxc_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_CxC_predictors.txt"
-target_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_predictors.txt"
-target_cxc_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_CxC_predictors.txt"
-target_exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-run_CxC = T
-contexts_vec = target_exp_files
-target_exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", target_exp_files)
-regulator_gene_name = "gene1"
-target_gene_name = "gene2"
-target_cis_pred = TRUE
-outdir = "/Users/lkrockenberger/C-STEM/example_data/trans_output/"
+#regulator_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_full_predictors.txt"
+#regulator_gbat_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_gbat_predictors.txt"
+#target_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_predictors.txt"
+#target_gbat_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_gbat_predictors.txt"
+#target_exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
+#run_GBAT = T
+#contexts_vec = target_exp_files
+#target_exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", target_exp_files)
+#regulator_gene_name = "gene1"
+#target_gene_name = "gene2"
+#target_cis_pred = TRUE
+#outdir = "/Users/lkrockenberger/C-STEM/example_data/trans_output/"
 
 ####################
-### have to run this separately for CxC and C-STEM but with different parameter settings
-cstem_cxc_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_CxC, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+### have to run this separately for gbat and C-STEM but with different parameter settings
+#' @export
+cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
   ## get target expression across all contexts
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F)
   
@@ -58,20 +59,20 @@ cstem_cxc_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_
   }
   if(target_cis_pred){
     file_prefix = "_cis_cstemlite.txt"
-    if(run_CxC){
-      file_prefix = "_cis_cxc.txt"
+    if(run_GBAT){
+      file_prefix = "_cis_gbat.txt"
     }
   }else{
     file_prefix = "_cstemlite.txt"
-    if(run_CxC){
-      file_prefix = "_cxc.txt"
+    if(run_GBAT){
+      file_prefix = "_gbat.txt"
     }
   }
   fwrite(this_gene, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
 }
 
-cstem_cxc_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, FALSE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
-cstem_cxc_lite(regulator_cxc_pred_exp_file, target_cxc_pred_exp_file, target_exp_files, contexts_vec, TRUE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
+#cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, FALSE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
+#cstem_gbat_lite(regulator_gbat_pred_exp_file, target_gbat_pred_exp_file, target_exp_files, contexts_vec, TRUE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 
 
 

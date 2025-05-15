@@ -1,47 +1,42 @@
 
 ### Test parameters
-X_file = "/Users/lkrockenberger/C-STEM/example_data/genos"
-exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-contexts = exp_files
-exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
-out_dir = "/Users/lkrockenberger/C-STEM/example_data/GReXs/"
-snps = "/Users/lkrockenberger/C-STEM/example_data/snps.txt"
-decomposition_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
-gene_name = "gene1"
-context_thresh = 3
-alpha = 0.5
-num_folds = 10
-run_CxC = TRUE
+#X_file = "/Users/lkrockenberger/C-STEM/example_data/genos"
+#exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
+#contexts = exp_files
+#exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
+#out_dir = "/Users/lkrockenberger/C-STEM/example_data/GReXs/"
+#snps = "/Users/lkrockenberger/C-STEM/example_data/snps.txt"
+#decomposition_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
+#gene_name = "gene1"
+#context_thresh = 3
+#alpha = 0.5
+#num_folds = 10
+#run_GBAT = TRUE
 
-library(data.table)
-library(bigstatsr)
-library(dplyr)
-library(caret)
+#library(data.table)
+#library(bigstatsr)
+#library(dplyr)
+#library(caret)
 
-source("R/decompose_expression.R")
-source("R/functions.R")
+#source("R/decompose_expression.R")
+#source("R/functions.R")
 
-## parameters:
-# X_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
-# exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (X_file). Contains an unnamed
-# contexts - vector of strings which have context names in them.
-# column with the expression (or if cov_file_dir is NULL, the residual expression for a given context.")
-# out_dir - genotype (X_file). Contains an unnamed column with the expression (or if cov_file_dir is NULL, the residual expression for a given context.")
-# snps - A tab-delimited txt file containing information from your .bed or other genotype file. Contains 6 columns and the number of rows corresponds to the number of snps. 
-#No column names or row names. Col2 must be rsIDs for TWAS to work. 
-#Col1 chromosome
-#Col2 rsID
-#Col3 location CM (this doesn't really matter for TWAS)
-#               Col4 location/locus on chromosome
-#               Col5 allele1
-#               Col6 allele2
-# gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
-# decomposition_dir - directory to store decomposed expression files
-# context_thresh - minimum number of contexts to run C-STEM on. (must be >=2 )
-# alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
-# num_folds - Number of folds for cross-validation
-# run_CxC - Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the CxC method too.
-create_GReXs = function(X_file, exp_files, contexts, out_dir, snps, gene_name, decomposition_dir = NULL, context_thresh = 3, alpha = 0.5, num_folds = 10, run_CxC = FALSE){
+
+#' Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
+#'
+#' @param X_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
+#' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (X_file). Contains an unnamed
+#' @param contexts - vector of strings which have context names in them.
+#' @param out_dir - output directory for GReXs
+#' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
+#' @param decomposition_dir - directory to store decomposed expression files
+#' @param context_thresh - minimum number of contexts to run C-STEM on. 
+#' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
+#' @param num_folds - Number of folds for cross-validation
+#' @param run_GBAT - Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the GBAT* method too.
+#' @return writes out a file of predicted expression across individuals and contexts 
+#' @export
+create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, decomposition_dir, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
   seed = 9000
   set.seed(seed)
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
@@ -95,41 +90,41 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, snps, gene_name, d
   fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,"_cstem_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
-  ### read in expression for CxC
-  if(run_CxC){
-    Ys_cxc<-vector("list", length = length(exp_files))
-    names(Ys_cxc)<-sapply(strsplit(exp_files, "/"), tail, 1)
-    lengths_y_cxc = c()
-    rownames_y_cxc = list()
-    for(i in 1:length(Ys_cxc)){
-      suppressWarnings(expr={ Ys_cxc[[i]]<-fread(file = 
+  ### read in expression for gbat
+  if(run_GBAT){
+    Ys_gbat<-vector("list", length = length(exp_files))
+    names(Ys_gbat)<-sapply(strsplit(exp_files, "/"), tail, 1)
+    lengths_y_gbat = c()
+    rownames_y_gbat = list()
+    for(i in 1:length(Ys_gbat)){
+      suppressWarnings(expr={ Ys_gbat[[i]]<-fread(file = 
                                                    exp_files[i], sep='\t', data.table=F)})
-      Ys_cxc[[i]]<-as.matrix(data.frame(Ys_cxc[[i]], row.names=1, check.names = F))
-      lengths_y_cxc = c(lengths_y_cxc, nrow(Ys_cxc[[i]]))
-      rownames_y_cxc[[i]] = rownames(Ys_cxc[[i]])
-      if(any(is.na(Ys_cxc[[i]])) | any(is.nan(Ys_cxc[[i]]))){
-        remove=unique(c( which(is.na(Ys_cxc[[i]])), which(is.nan(Ys_cxc[[i]])) ))
-        Ys_cxc[[i]]=Ys_cxc[[i]][-remove,,drop=F]
+      Ys_gbat[[i]]<-as.matrix(data.frame(Ys_gbat[[i]], row.names=1, check.names = F))
+      lengths_y_gbat = c(lengths_y_gbat, nrow(Ys_gbat[[i]]))
+      rownames_y_gbat[[i]] = rownames(Ys_gbat[[i]])
+      if(any(is.na(Ys_gbat[[i]])) | any(is.nan(Ys_gbat[[i]]))){
+        remove=unique(c( which(is.na(Ys_gbat[[i]])), which(is.nan(Ys_gbat[[i]])) ))
+        Ys_gbat[[i]]=Ys_gbat[[i]][-remove,,drop=F]
       }
     }
-    cxc_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
-    output_cxc = crossval_helper(Ys_cxc, X, lengths_y_cxc, rownames_y_cxc, cxc_contexts_vec, out_dir, gene_name, num_folds, alpha)
-    Yhats_cxc = output_cxc[["Yhats_tiss"]]
-    hom_expr_mat_cxc = output_cxc[["hom_expr_mat"]]
+    gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
+    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, out_dir, gene_name, num_folds, alpha)
+    Yhats_gbat = output_gbat[["Yhats_tiss"]]
+    hom_expr_mat_gbat = output_gbat[["hom_expr_mat"]]
     
-    Yhat_cxc_mat<-matrix(NA, nrow = nrow(X), ncol=length(cxc_contexts_vec))
-    rownames(Yhat_cxc_mat)<-rownames(X)
-    colnames(Yhat_cxc_mat)<-cxc_contexts_vec
-    for(context in cxc_contexts_vec){
-      Yhat_cxc_mat[rownames(Yhats_cxc[[context]]),context]<-Yhats_cxc[[context]]
+    Yhat_gbat_mat<-matrix(NA, nrow = nrow(X), ncol=length(gbat_contexts_vec))
+    rownames(Yhat_gbat_mat)<-rownames(X)
+    colnames(Yhat_gbat_mat)<-gbat_contexts_vec
+    for(context in gbat_contexts_vec){
+      Yhat_gbat_mat[rownames(Yhats_gbat[[context]]),context]<-Yhats_gbat[[context]]
     }
-    all_missing<-names(rowMeans(Yhat_cxc_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_cxc_mat, na.rm = T)))])
-    remove_inds<-which(rownames(Yhat_cxc_mat) %in% all_missing)
-    Yhat_cxc_mat = data.frame(Yhat_cxc_mat[-remove_inds,])
-    Yhat_cxc_mat = cbind(id = rownames(Yhat_cxc_mat), Yhat_cxc_mat)
-    fwrite(Yhat_cxc_mat, file = paste0(out_dir,gene_name,"_CxC_predictors.txt"), sep = "\t")
+    all_missing<-names(rowMeans(Yhat_gbat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_gbat_mat, na.rm = T)))])
+    remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
+    Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,])
+    Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
+    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,"_gbat_predictors.txt"), sep = "\t")
     
-    evaluation_helper(Ys_cxc, hom_expr_mat_cxc, Yhats_cxc, cxc_contexts_vec, TRUE, NULL, out_dir, gene_name)
+    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, out_dir, gene_name)
   }
   message("Finished computing GReXs and evalutation metrics")
   

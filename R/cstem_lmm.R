@@ -1,24 +1,22 @@
 
-library(data.table)
-library(dplyr)
-library(foreach)
-library(tidyr)
-library(lme4)
-library(emmeans)
-library(broom)
+#library(data.table)
+#library(dplyr)
+#library(foreach)
+#library(tidyr)
+#library(lme4)
+#library(emmeans)
+#library(broom)
 
-setwd("project-bballiu/C-STEM/r_package")
-regulator_pred_exp_file = "example_data/GReXs/gene1_cstem_full_predictors.txt"
-regulator_cxc_pred_exp_file = "example_data/GReXs/gene1_CxC_predictors.txt"
-target_pred_exp_file = "example_data/GReXs/gene1_cstem_predictors.txt"
-target_cxc_pred_exp_file = "example_data/GReXs/gene1_CxC_predictors.txt"
-target_exp_files = list.files("example_data/expression/")
-contexts_vec = target_exp_files
-target_exp_files = paste0("example_data/expression/", target_exp_files)
-regulator_gene_name = "gene1"
-target_gene_name = "gene2"
-target_cis_pred = TRUE
-outdir = "example_data/trans_output/"
+#setwd("project-bballiu/C-STEM/r_package")
+#regulator_pred_exp_file = "example_data/GReXs/gene1_cstem_full_predictors.txt"
+#target_pred_exp_file = "example_data/GReXs/gene1_cstem_predictors.txt"
+#target_exp_files = list.files("example_data/expression/")
+#contexts_vec = target_exp_files
+#target_exp_files = paste0("example_data/expression/", target_exp_files)
+#regulator_gene_name = "gene1"
+#target_gene_name = "gene2"
+#target_cis_pred = TRUE
+#outdir = "example_data/trans_output/"
 
 
 get_target_exp = function(target_exp_files, contexts_vec){
@@ -33,9 +31,8 @@ get_target_exp = function(target_exp_files, contexts_vec){
   return(targ_exp)
 }
 
-####################
-### have to run this separately for CxC and C-STEM but with different parameter settings
-cstem_cxc_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+
+cstem_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
   ## get target expression across all contexts
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F)
   regulator_exp_mat = regulator_exp_mat %>% pivot_longer(cols = -id,
