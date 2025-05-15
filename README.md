@@ -22,7 +22,7 @@ library(broom)
 
 ### Install C-STEM via github:
 ```
-devtools::install("BalliuLab/FastGxC"")
+devtools::install("BalliuLab/C-STEM")
 ```
 
 ### Step 1: Build GReXs
