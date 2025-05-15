@@ -3,16 +3,16 @@
 
 ### Necessary packages:
 ```
-library(data.table) \
-library(dplyr) \
-library(reshape2) \
-library(data.table) \
-library(reshape2) \
-library(magrittr) \
-library(bigstatsr) \
-library(caret) \
-library(devtools) \
-library(purrr) \
+library(data.table) 
+library(dplyr) 
+library(reshape2) 
+library(data.table) 
+library(reshape2) 
+library(magrittr) 
+library(bigstatsr)
+library(caret) 
+library(devtools) 
+library(purrr) 
 library(foreach)
 library(tidyr)
 library(lme4)
