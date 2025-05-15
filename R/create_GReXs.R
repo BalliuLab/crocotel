@@ -30,18 +30,22 @@
 #' @param contexts - vector of strings which have context names in them.
 #' @param out_dir - output directory for GReXs
 #' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
-#' @param decomposition_dir - directory to store decomposed expression files
 #' @param context_thresh - minimum number of contexts to run C-STEM on. 
 #' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
 #' @param num_folds - Number of folds for cross-validation
 #' @param run_GBAT - Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the GBAT* method too.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, decomposition_dir, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
+create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
   seed = 9000
   set.seed(seed)
+  decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
+  dir.create(decomposition_dir, showWarnings = F)
+  message("Saving decomposed xpression in ",  decomposition_dir)
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
-
+  
+  
+  
   message("Reading in files...") 
   suppressWarnings(expr = {X<-fread(file = X_file, sep='\t', data.table=F)})
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))

@@ -22,7 +22,7 @@ library(broom)
 
 ### Install C-STEM via github:
 ```
-devtools::install("BalliuLab/C-STEM")
+devtools::install_github("BalliuLab/C-STEM")
 ```
 
 ### Step 1: Build GReXs
