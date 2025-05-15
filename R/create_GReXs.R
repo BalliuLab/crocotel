@@ -134,5 +134,3 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, snps, gene_name, d
   message("Finished computing GReXs and evalutation metrics")
   
 }
-
-create_GReXs(X_file, exp_files, contexts, out_dir, snps, gene_name, decomposition_dir, context_thresh, alpha, num_folds, run_CxC)
