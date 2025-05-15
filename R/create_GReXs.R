@@ -17,6 +17,7 @@
 #library(bigstatsr)
 #library(dplyr)
 #library(caret)
+#library(purrr)
 
 #source("R/decompose_expression.R")
 #source("R/functions.R")
