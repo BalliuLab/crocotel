@@ -10,7 +10,6 @@ create_GReXs(
   contexts,
   out_dir,
   gene_name,
-  decomposition_dir,
   context_thresh = 3,
   alpha = 0.5,
   num_folds = 10,
@@ -36,10 +35,6 @@ create_GReXs(
 
 \item{gene_name}{\itemize{
 \item identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
-}}
-
-\item{decomposition_dir}{\itemize{
-\item directory to store decomposed expression files
 }}
 
 \item{context_thresh}{\itemize{
