@@ -78,7 +78,7 @@ target_gene_name = "gene2"
 target_cis_pred = TRUE
 outdir = "example_data/trans_output/"
 
-cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T)
+cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 ```
 
 ### Step 3: Run C-STEM lmm
@@ -93,7 +93,7 @@ target_gene_name = "gene2"
 target_cis_pred = TRUE
 outdir = "example_data/trans_output/"
 
-cstem_lmm(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+cstem_lmm(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred){
 ```
 
 

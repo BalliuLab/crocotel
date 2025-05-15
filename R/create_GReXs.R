@@ -49,7 +49,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, decompo
   ###### read in expression and decompose - files are written out to decomposed exp directory
   decompose_expression(exp_files, gene_name, contexts, context_thresh, decomposition_dir)
   ## this assumes that the file name of decomposition dir is saved as "gene.context.etc" and shared is called "Average Context" (output of decompose function)
-  contexts_vec = sapply(strsplit(list.files(decomposition_dir), "\\."), "[[", 2)
+  contexts_vec = contexts
   
   ### read in expression
   Ys<-vector("list", length = length(list.files(decomposition_dir)))

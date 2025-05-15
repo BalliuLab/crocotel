@@ -112,7 +112,7 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
   
 }
 
-evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC, Yhats_full, out_dir, gene_name){
+evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT, Yhats_full, out_dir, gene_name){
   message("Calculating r2 performance metrics")
   ## Score each method
   het_cv_pvals<-vector("list", length(contexts_vec)); het_cv_r2s<-vector("list", length(contexts_vec))
@@ -124,7 +124,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC,
   
   for(context in contexts_vec){
     if(context != "AverageContext"){
-      if(!is_CxC){
+      if(!is_GBAT){
         index_exp = which(contexts_vec == context)
         index_avg_exp = which(contexts_vec == "AverageContext")
         hom.tmp=Yhats_tiss[[index_exp]]
@@ -169,7 +169,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC,
         hom_cv_r2s[[index_exp]]=summary(m2)$adj.r.squared
       }
       # tissue by tissue approach
-      if(is_CxC){
+      if(is_GBAT){
         index_exp = which(contexts_vec == context)
         t1<-lm(hom_expr_mat[rownames(Ys[[index_exp]]),index_exp] ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         m1<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp])~1) ### tests how much an intercept explains total expresison
@@ -178,7 +178,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC,
         tiss_cv_r2s[[index_exp]]<-summary(t1)$adj.r.squared
       }
     }else{
-      if(!is_CxC){
+      if(!is_GBAT){
         ## first is the hom term heritable:
         index_exp = which(contexts_vec == context)
         hom.tmp=Yhats_tiss[[context]]
@@ -190,15 +190,15 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_CxC,
       }
     }
   }
-  if(is_CxC){
+  if(is_GBAT){
     pvaldf=cbind(tiss_cv_pvals)
     rownames(pvaldf)=names(Ys)
     pvaldf = data.frame(context = rownames(pvaldf), pvaldf)
     r2df=cbind(tiss_cv_r2s)
     rownames(r2df)=names(Ys)
     r2df = data.frame(context = rownames(r2df), r2df)
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_CxC_crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, "_CxC_crossval_r2.txt"), sep = "\t")
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_GBAT_crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, "_GBAT_crossval_r2.txt"), sep = "\t")
   }else{
     pvaldf=cbind(het_cv_pvals, het_cv_pvals.herit, hom_cv_pvals, full_cv_pvals)
     rownames(pvaldf)=names(Ys)
