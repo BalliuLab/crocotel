@@ -39,12 +39,11 @@
 create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
   seed = 9000
   set.seed(seed)
+  dir.create(out_dir, showWarnings = F)
   decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
   message("Saving decomposed xpression in ",  decomposition_dir)
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
-  
-  
   
   message("Reading in files...") 
   suppressWarnings(expr = {X<-fread(file = X_file, sep='\t', data.table=F)})
@@ -53,7 +52,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   ###### read in expression and decompose - files are written out to decomposed exp directory
   decompose_expression(exp_files, gene_name, contexts, context_thresh, decomposition_dir)
   ## this assumes that the file name of decomposition dir is saved as "gene.context.etc" and shared is called "Average Context" (output of decompose function)
-  contexts_vec = contexts
+  contexts_vec = sapply(strsplit(list.files(decomposition_dir), "\\."), "[[", 2)
   
   ### read in expression
   Ys<-vector("list", length = length(list.files(decomposition_dir)))
@@ -92,7 +91,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   remove_inds<-which(rownames(Yhat_tiss_mat) %in% all_missing)
   Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,])
   Yhat_tiss_mat = cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat)
-  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,"_cstem_predictors.txt"), sep = "\t")
+  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".cstem_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
   ### read in expression for gbat
@@ -127,7 +126,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
     Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,])
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
-    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,"_gbat_predictors.txt"), sep = "\t")
+    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,".gbat_predictors.txt"), sep = "\t")
     
     evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, out_dir, gene_name)
   }

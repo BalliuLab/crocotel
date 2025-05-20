@@ -197,8 +197,8 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     r2df=cbind(tiss_cv_r2s)
     rownames(r2df)=names(Ys)
     r2df = data.frame(context = rownames(r2df), r2df)
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_GBAT_crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, "_GBAT_crossval_r2.txt"), sep = "\t")
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".GBAT.crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, ".GBAT.crossval_r2.txt"), sep = "\t")
   }else{
     pvaldf=cbind(het_cv_pvals, het_cv_pvals.herit, hom_cv_pvals, full_cv_pvals)
     rownames(pvaldf)=names(Ys)
@@ -207,8 +207,8 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
     r2df = data.frame(cbind(context = rownames(r2df), r2df)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
     
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, "_cstem_crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, "_cstem_crossval_r2.txt"), sep = "\t")
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".cstem.crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, ".cstem.crossval_r2.txt"), sep = "\t")
     
     Yhat_full_mat<-matrix(NA, nrow = nrow(hom_expr_mat), ncol=length(contexts_vec))
     rownames(Yhat_full_mat)<-rownames(hom_expr_mat)
@@ -221,13 +221,98 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
     Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat))
     Yhat_full_mat = Yhat_full_mat[-remove_inds,]
-    fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,"_cstem_full_predictors.txt"), sep = "\t")
+    fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,".cstem.full_predictors.txt"), sep = "\t")
   }
   
   message("Done computing evaluation metrics.")
   
 }
+
+# Modified treeQTL function to get eGenes in a multi-context experiment
+get_eGenes_multi_tissue_mod = function (m_eqtl_out_dir, treeQTL_dir, tissue_names, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix) {
+  pattern=paste0(exp_suffix,".all_pairs.txt")
   
+  print(paste("Step 0.1: Computing summary statistics for each tissue"))
+  m_eqtl_outfiles <- list.files(m_eqtl_out_dir, pattern = pattern, full.names = TRUE)
+  if(length(m_eqtl_outfiles)!=48) stop(sprintf("Expecting 48 MatrixEQTL files but got %i.", length(m_eqtl_outfiles)))
+  
+  n_SNPs_per_gene_outfiles <- list.files(treeQTL_dir, pattern = ".txt", full.names = TRUE)
+  if(length(n_SNPs_per_gene_outfiles)!=48) stop(sprintf("Expecting 48 files with nr of SNPs per gene but got %i.", length(n_SNPs_per_gene_outfiles)))
+  
+  n_tissue <- length(tissue_names)
+  for (i in 1:n_tissue) {
+    cur_tissue_name <- tissue_names[i]
+    
+    print(paste("Computing summary statistics for tissue ", cur_tissue_name, sep = ""))
+    n_SNPs_per_gene_this_tissue <- data.frame(fread(input = n_SNPs_per_gene_outfiles[i], header = T), stringsAsFactors = F,check.names = F)
+    colnames(n_SNPs_per_gene_this_tissue)=c("family","n_tests")
+    n_SNPs_per_gene_this_tissue <- n_SNPs_per_gene_this_tissue[n_SNPs_per_gene_this_tissue$n_tests > 0, ]
+    
+    gene_simes_cur_tissue <- get_eGenes(n_tests_per_gene = n_SNPs_per_gene_this_tissue, m_eqtl_out = m_eqtl_outfiles[i], method = "BH", level1 = 1, level2 = 1, silent = TRUE)
+    gene_simes_cur_tissue <- merge(gene_simes_cur_tissue, n_SNPs_per_gene_this_tissue, by = "family", all = TRUE)
+    gene_simes_cur_tissue$fam_p[which(is.na(gene_simes_cur_tissue$fam_p))] <- 1
+    
+    #print("here")
+    if (i == 1) {
+      eGene_pvals <- gene_simes_cur_tissue[, c("family", "fam_p")]
+      n_SNPs_per_gene_xT <- n_SNPs_per_gene_this_tissue
+    } else {
+      eGene_pvals <- merge(eGene_pvals, gene_simes_cur_tissue[, c("family", "fam_p")], by = "family", all = TRUE)
+      n_SNPs_per_gene_xT <- merge(n_SNPs_per_gene_xT, n_SNPs_per_gene_this_tissue, by = "family", all = TRUE)
+    }
+    names(eGene_pvals)[i + 1] <- cur_tissue_name
+    names(n_SNPs_per_gene_xT)[i + 1] <- cur_tissue_name
+  }
+  names(eGene_pvals)[1] <- "gene"
+  remove(cur_tissue_name, n_SNPs_per_gene_this_tissue, gene_simes_cur_tissue)
+  
+  print("Step 0.2: Computing summary statistics across tissues")
+  col_ind_pvals <- 2:(n_tissue + 1)
+  eGene_pvals$simes_p <- apply(eGene_pvals[, col_ind_pvals], 1, TreeQTL:::get_simes_p)
+  
+  print("Step 1: Selecting eGenes across tissues")
+  eGene_xT_qvals <- qvalue(eGene_pvals$simes_p, lambda = 0)$qvalue
+  R_G <- sum(eGene_xT_qvals <= level1)
+  print(paste("Number of cross-tissue eGenes = ", R_G))
+  
+  print("Step 2: Selecting tissues in which eGenes are active")
+  q2_adj <- R_G * level2/nrow(eGene_pvals)
+  ind_sel_simes <- which(eGene_xT_qvals <= level1)
+  sel_eGenes_simes <- eGene_pvals[ind_sel_simes, ]
+  rej_simes <- t(1 * apply(sel_eGenes_simes[, c(col_ind_pvals)], 1, TreeQTL:::qsel_by_fam, q2_adj))
+  
+  print("Step 3: Selecting SNPs associated to each gene in each tissue")
+  sel_eGenes_simes$n_sel_tissues <- rowSums(rej_simes)
+  sel_eGenes_simes$n_tested_tissues <- rowSums(!is.na(sel_eGenes_simes[, col_ind_pvals]))
+  
+  for (i in 1:n_tissue) {
+    cur_tissue_name <- tissue_names[i]
+    print(paste("Selecting SNPs for tissue", cur_tissue_name))
+    sel_gene_names_this_tissue <- sel_eGenes_simes$gene[which(rej_simes[, i] == 1)]
+    sel_gene_info <- n_SNPs_per_gene_xT[which(n_SNPs_per_gene_xT$family %in% sel_gene_names_this_tissue), c(1, i + 1)]
+    names(sel_gene_info)[2] <- "n_tests"
+    sel_gene_info <- merge(sel_gene_info, sel_eGenes_simes[, c("gene", "n_sel_tissues", "n_tested_tissues")],
+                           by.x = "family", by.y = "gene", all.x = TRUE, all.y = FALSE)
+    n_sel_per_gene <- TreeQTL:::get_nsel_SNPs_per_gene_tissue_pair(sel_gene_info, cur_tissue_name, m_eqtl_outfiles[i], R_G, nrow(eGene_pvals),
+                                                                   level3 = level3)
+    
+    print(paste("Total number of associations for tissue", cur_tissue_name, "=", sum(n_sel_per_gene$n_sel_snp)))
+    out_file_name <- paste0(treeQTL_dir,"/eAssoc_by_gene.", cur_tissue_name,exp_suffix,".txt")
+    print(paste("Writing output file", out_file_name))
+    if(nrow(n_sel_per_gene) == 0){
+      input_df <- n_sel_per_gene
+    }else{
+      input_df <- data.frame(family = n_sel_per_gene$family, pval = NA, n_sel = n_sel_per_gene$n_sel_snp)
+    }
+    get_eAssociations(input_df, NULL,
+                      m_eqtl_outfiles[i], out_file_name, by_snp = FALSE, silent = TRUE)
+  }
+  eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene)
+  eGene_xT_sel <- cbind(eGene_xT_sel, rej_simes)
+  names(eGene_xT_sel)[2:(n_tissue + 1)] <- tissue_names
+  eGene_xT_sel
+}
+
   
   
   

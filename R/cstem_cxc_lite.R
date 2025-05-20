@@ -7,7 +7,7 @@
 #target_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_cstem_predictors.txt"
 #target_gbat_pred_exp_file = "/Users/lkrockenberger/C-STEM/example_data/GReXs/gene1_gbat_predictors.txt"
 #target_exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-#run_GBAT = T
+#method = "CSTEM"
 #contexts_vec = target_exp_files
 #target_exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", target_exp_files)
 #regulator_gene_name = "gene1"
@@ -18,7 +18,7 @@
 ####################
 ### have to run this separately for gbat and C-STEM but with different parameter settings
 #' @export
-cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, method, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
   ## get target expression across all contexts
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F)
   
@@ -59,16 +59,17 @@ cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target
   }
   if(target_cis_pred){
     file_prefix = "_cis_cstemlite.txt"
-    if(run_GBAT){
+    if(method == "GBAT"){
       file_prefix = "_cis_gbat.txt"
     }
   }else{
     file_prefix = "_cstemlite.txt"
-    if(run_GBAT){
+    if(method == "GBAT"){
       file_prefix = "_gbat.txt"
     }
   }
   fwrite(this_gene, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
+  return(this_gene)
 }
 
 #cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, FALSE, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
