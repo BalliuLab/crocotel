@@ -31,12 +31,11 @@ devtools::install_github("BalliuLab/C-STEM")
 #### example code:
 ## gene 1:
 ```
-X_file = "example_data/gene1.genos"
-exp_files = list.files("example_data/expression/gene1/")
+X_file = "crocotile_example/gene1.genos"
+exp_files = list.files("crocotile_example/gene1/")
 contexts = exp_files
-exp_files = paste0("example_data/expression/gene1/", exp_files)
-out_dir = "example_data/GReXs/"
-decomposition_dir = "example_data/decomposed_expression/"
+exp_files = paste0("crocotile_example/gene1/", exp_files)
+out_dir = "crocotile_example/GReXs/"
 gene_name = "gene1"
 context_thresh = 3
 alpha = 0.5
