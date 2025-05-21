@@ -220,7 +220,9 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
     remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
     Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat))
-    Yhat_full_mat = Yhat_full_mat[-remove_inds,]
+    if(length(remove_inds) != 0){
+      Yhat_full_mat = Yhat_full_mat[-remove_inds,]
+    }
     fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,".cstem.full_predictors.txt"), sep = "\t")
   }
   
