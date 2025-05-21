@@ -221,6 +221,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
     Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat))
     if(length(remove_inds) != 0){
+      print("here")
       Yhat_full_mat = Yhat_full_mat[-remove_inds,]
     }
     fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,".cstem.full_predictors.txt"), sep = "\t")
