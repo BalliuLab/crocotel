@@ -237,24 +237,23 @@ format_for_treeQTL = function(){
   
 }
 
+get_nSNPs_per_gene = function(){
+  
+}
+
 # Modified treeQTL function to get eGenes in a multi-context experiment
-get_eGenes_multi_tissue_mod = function (m_eqtl_outfiles, treeQTL_dir, tissue_names, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix) {
-  
-  print(paste("Step 0.0: Formatting trans-eQTL summary stat files for treeQTL"))
-  
+get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix) {
   
   print(paste("Step 0.1: Computing summary statistics for each context"))
   sprintf("Proceeding with %i eQTL summary statistic files", length(m_eqtl_outfiles))
+  sprintf("Proceeding with %i tests per gene files", length(n_SNPs_per_gene_files))
   
-  n_SNPs_per_gene_outfiles <- list.files(treeQTL_dir, pattern = ".txt", full.names = TRUE)
-  if(length(n_SNPs_per_gene_outfiles)!=48) stop(sprintf("Expecting 48 files with nr of SNPs per gene but got %i.", length(n_SNPs_per_gene_outfiles)))
-  
-  n_tissue <- length(tissue_names)
+  n_tissue <- length(contexts_vec)
   for (i in 1:n_tissue) {
-    cur_tissue_name <- tissue_names[i]
+    cur_tissue_name <- contexts_vec[i]
     
-    print(paste("Computing summary statistics for tissue ", cur_tissue_name, sep = ""))
-    n_SNPs_per_gene_this_tissue <- data.frame(fread(input = n_SNPs_per_gene_outfiles[i], header = T), stringsAsFactors = F,check.names = F)
+    print(paste("Computing summary statistics for context ", cur_tissue_name, sep = ""))
+    n_SNPs_per_gene_this_tissue <- data.frame(fread(input = n_SNPs_per_gene_files[i], header = T), stringsAsFactors = F,check.names = F)
     colnames(n_SNPs_per_gene_this_tissue)=c("family","n_tests")
     n_SNPs_per_gene_this_tissue <- n_SNPs_per_gene_this_tissue[n_SNPs_per_gene_this_tissue$n_tests > 0, ]
     

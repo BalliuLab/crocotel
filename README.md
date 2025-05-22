@@ -20,7 +20,7 @@ library(emmeans)
 library(broom)
 ```
 
-### Install C-STEM via github:
+### Install Crocotile via github:
 ```
 devtools::install_github("BalliuLab/C-STEM")
 library(cstem)
@@ -45,7 +45,7 @@ run_GBAT = FALSE
 create_GReXs(X_file, exp_files, contexts, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
 ```
 
-### Step 2a: Run C-STEM lite
+### Step 2a: Run Crocotile lite
 ```
 regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
@@ -60,7 +60,7 @@ outdir = "crocotile_example/trans_output/"
 cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 ```
 
-### Step 2b: Run C-STEM lmm
+### Step 2b: Run Crocotile lmm
 ```
 regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
@@ -75,7 +75,15 @@ cstem_lmm(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, conte
 ```
 
 ### Step 3: Multiple testing correction
+#### example using crocotile lmm output
 ```
+m_eqtl_outfiles = list.files("crocotile_example/treeQTL_input/", pattern = "all_gene_pairs.crocotile_lmm")
+n_SNPs_per_gene_files = list.files("crocotile_example/treeQTL_input/", pattern = "n_tests_per_gene.crocotile_lite")
+contexts_vec = as.character(seq(0,9))
+fdr_thresh = 0.05
+outdir = "crocotile_example/treeQTL_output/"
+method = "treeQTL"
+exp_suffix = "crocotile_lmm"
 
 ```
 

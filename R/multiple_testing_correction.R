@@ -1,21 +1,21 @@
  
-
-multiple_testing_correction = function(input_dir, contexts_vec, fdr_thresh, outdir, method = "treeQTL", top_level = "T"){
+#' @export
+multiple_testing_correction = function(m_eqtl_outfiles, n_snps_per_gene_files, contexts_vec, fdr_thresh, outdir, method = "treeQTL", top_level = "R", exp_suffix){
+  dir.create(outdir, showWarnings = F)
   if(method == "treeQTL"){
     level1 = fdr_thresh
     level2 = fdr_thresh
     level3 = fdr_thresh
-    exp_suffix = ""
     
-    eGenes = get_eGenes_multi_tissue_mod(m_eqtl_out_dir = input_dir,
-                                         treeQTL_dir=outdir,
-                                         tissue_names=contexts_vec,
-                                         level1 = level1, level2 = level1, level3 = level1,
-                                         exp_suffix=exp_suffix)
-    fwrite(eGenes, file = paste0(outdir, "test.txt"))
+    eGenes = get_eGenes_multi_tissue_mod(m_eqtl_outfiles = m_eqtl_outfiles, 
+                                         n_snps_per_gene_files = n_snps_per_gene_files, 
+                                         contexts_vec = contexts_vec, 
+                                         level1 = level1, level2 = level2, level3 = level3, 
+                                         exp_suffix = exp_suffix)
+    fwrite(eGenes, file = paste0(outdir, "eGenes.", exp_suffix, ".txt"))
   }
   if(method == "mash"){
-    
+    print("This hasn't been implemented yet! Come back later")
   }
   
 }
