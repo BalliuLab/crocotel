@@ -62,15 +62,14 @@ cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files,
 
 ### Step 2b: Run C-STEM lmm
 ```
-regulator_pred_exp_file = "example_data/GReXs/gene1_cstem_full_predictors.txt"
-target_pred_exp_file = "example_data/GReXs/gene2_cstem_full_predictors.txt"
-target_exp_files = list.files("example_data/expression/gene2/")
-contexts_vec = target_exp_files
-target_exp_files = paste0("example_data/expression/gene2/", target_exp_files)
+regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
+target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
+target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
+contexts_vec = as.character(seq(0,9))
 regulator_gene_name = "gene1"
 target_gene_name = "gene2"
 target_cis_pred = TRUE
-outdir = "example_data/trans_output/"
+outdir = "crocotile_example/trans_output/"
 
 cstem_lmm(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 ```

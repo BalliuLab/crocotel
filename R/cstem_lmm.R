@@ -22,8 +22,8 @@
 get_target_exp = function(target_exp_files, contexts_vec){
   targ_exp = foreach(context = 1:length(contexts_vec), .combine = 'rbind') %dopar% {
     cur_context = contexts_vec[context]
-    cur_file = target_exp_files[grepl(cur_context, target_exp_files)]
-    df = fread(cur_file, sep = "\t", data.table = F)
+    cur_file = target_exp_files[grepl(paste0("/",cur_context), target_exp_files)]
+    df = fread(cur_file, sep = "\t", data.table = F, check.names = F)
     names(df) = c("id", "target_exp")
     df = df %>% mutate(context = cur_context) %>% select(id, context, target_exp)
     return(df)
@@ -33,14 +33,15 @@ get_target_exp = function(target_exp_files, contexts_vec){
 
 
 cstem_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+  dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
-  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F)
+  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F)
   regulator_exp_mat = regulator_exp_mat %>% pivot_longer(cols = -id,
                                                          names_to = "context",
                                                          values_to = "regulator_pred" )
   
   # get target cis predicted expression across all contexts
-  target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F)
+  target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F)
   target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
                                                              names_to = "context",
                                                              values_to = "target_cis_pred")
@@ -54,10 +55,10 @@ cstem_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_f
   
   # setup pvalue matricies for target and regulator cis-predicted expression
   # pvalue matrix for cis-genetic predicted target associations with simulated trans expression
-  target_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+1))
+  target_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+1), check.names = F)
   names(target_assoc_pvalues) = c("target_gene", contexts_vec)
   # pvalue matrix for cis-genetic predicted regulator associations with simulated trans expression
-  regulator_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+2))
+  regulator_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(contexts_vec)+2), check.names = F)
   names(regulator_assoc_pvalues) = c("target_gene", "regulator_gene", contexts_vec)
   
   ref_context = contexts_vec[1]

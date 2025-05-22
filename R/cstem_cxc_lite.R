@@ -19,6 +19,7 @@
 ### have to run this separately for gbat and C-STEM but with different parameter settings
 #' @export
 cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, method, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
+  dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F)
   
