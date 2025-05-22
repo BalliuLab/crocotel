@@ -275,28 +275,28 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
   names(eGene_pvals)[1] <- "gene"
   remove(cur_tissue_name, n_SNPs_per_gene_this_tissue, gene_simes_cur_tissue)
   
-  print("Step 0.2: Computing summary statistics across tissues")
+  print("Step 0.2: Computing summary statistics across contexts")
   col_ind_pvals <- 2:(n_tissue + 1)
   eGene_pvals$simes_p <- apply(eGene_pvals[, col_ind_pvals], 1, TreeQTL:::get_simes_p)
   
-  print("Step 1: Selecting eGenes across tissues")
+  print("Step 1: Selecting eGenes across contexts")
   eGene_xT_qvals <- qvalue(eGene_pvals$simes_p, lambda = 0)$qvalue
   R_G <- sum(eGene_xT_qvals <= level1)
   print(paste("Number of cross-tissue eGenes = ", R_G))
   
-  print("Step 2: Selecting tissues in which eGenes are active")
+  print("Step 2: Selecting contexts in which eGenes are active")
   q2_adj <- R_G * level2/nrow(eGene_pvals)
   ind_sel_simes <- which(eGene_xT_qvals <= level1)
   sel_eGenes_simes <- eGene_pvals[ind_sel_simes, ]
   rej_simes <- t(1 * apply(sel_eGenes_simes[, c(col_ind_pvals)], 1, TreeQTL:::qsel_by_fam, q2_adj))
   
-  print("Step 3: Selecting SNPs associated to each gene in each tissue")
+  print("Step 3: Selecting regulators or targets associated to each gene in each contexts")
   sel_eGenes_simes$n_sel_tissues <- rowSums(rej_simes)
   sel_eGenes_simes$n_tested_tissues <- rowSums(!is.na(sel_eGenes_simes[, col_ind_pvals]))
   
   for (i in 1:n_tissue) {
     cur_tissue_name <- tissue_names[i]
-    print(paste("Selecting SNPs for tissue", cur_tissue_name))
+    print(paste("Selecting regulators or targets for contexts", cur_tissue_name))
     sel_gene_names_this_tissue <- sel_eGenes_simes$gene[which(rej_simes[, i] == 1)]
     sel_gene_info <- n_SNPs_per_gene_xT[which(n_SNPs_per_gene_xT$family %in% sel_gene_names_this_tissue), c(1, i + 1)]
     names(sel_gene_info)[2] <- "n_tests"
