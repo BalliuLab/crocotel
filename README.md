@@ -18,6 +18,7 @@ library(tidyr)
 library(lme4)
 library(emmeans)
 library(broom)
+library(TreeQTL)
 ```
 
 ### Install Crocotile via github:
