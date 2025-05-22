@@ -77,13 +77,15 @@ cstem_lmm(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, conte
 ### Step 3: Multiple testing correction
 #### example using crocotile lmm output
 ```
-m_eqtl_outfiles = list.files("crocotile_example/treeQTL_input/", pattern = "all_gene_pairs.crocotile_lmm")
-n_SNPs_per_gene_files = list.files("crocotile_example/treeQTL_input/", pattern = "n_tests_per_gene.crocotile_lite")
+m_eqtl_outfiles = list.files("crocotile_example/treeQTL_input/", pattern = "all_gene_pairs.crocotile_lmm", full.names = T)
+n_SNPs_per_gene_files = list.files("crocotile_example/treeQTL_input/", pattern = "n_tests_per_gene.crocotile_lite", full.names = T)
 contexts_vec = as.character(seq(0,9))
 fdr_thresh = 0.05
 outdir = "crocotile_example/treeQTL_output/"
 method = "treeQTL"
 exp_suffix = "crocotile_lmm"
+
+multiple_testing_correction(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, fdr_thresh, outdir, method, top_level, exp_suffix)
 
 ```
 
