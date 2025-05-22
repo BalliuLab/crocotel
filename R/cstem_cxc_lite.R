@@ -45,8 +45,10 @@ cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target
       regulator_pvalue <- summary_model$coefficients[2, 4]
       regulator_beta = summary_model$coefficients[2, 1]
       regulator_se = summary_model$coefficients[2,2]
+      regulator_tstat = summary_model$coefficients[2,3]
       #target_pvalue <- summary_model$coefficients[3, 4]
-      df = data.frame(regulator_gene_name, target_gene_name, context_name, regulator_beta, regulator_se, regulator_pvalue)#, target_pvalue))
+      #df = data.frame(regulator_gene_name, target_gene_name, context_name, regulator_beta, regulator_se, regulator_pvalue)#, target_pvalue))
+      df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)#, target_pvalue))
     } else {
       #trans_model <- lm.fit(cbind(1, regulator_exp_vec), trans_exp_df_vec)
       trans_model2 <- lm(lm_df[,"target_exp"] ~ lm_df[,"regulator_pred"])
@@ -54,7 +56,7 @@ cstem_gbat_lite = function(regulator_pred_exp_file, target_pred_exp_file, target
       regulator_pvalue <- summary_model$coefficients[2, 4]
       regulator_beta = summary_model$coefficients[2, 1]
       regulator_se = summary_model$coefficients[2,2]
-      df = data.frame(regulator_gene_name, target_gene_name, context_name, regulator_beta, regulator_se, regulator_pvalue)
+      df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)
     }
   }))
   

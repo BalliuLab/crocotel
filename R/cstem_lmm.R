@@ -67,22 +67,22 @@ cstem_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_f
     trans_model <- lmer(target_exp ~ regulator_pred + target_cis_pred + context + 
                           regulator_pred:context + target_cis_pred:context + (1 | id), data = trans_model_df)
     # extract marginal trends for each predicted exp
-    reg_marginal_trends = emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df) %>% tidy() %>% select(context, regulator_pred.trend, std.error, p.value)
-    names(reg_marginal_trends) = c("context", "beta", "se", "pvalue")
+    reg_marginal_trends = emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df) %>% tidy() %>% mutate(FDR = NA) %>% select(regulator_pred.trend, std.error, p.value, FDR, context)
+    names(reg_marginal_trends) = c("beta", "se", "pvalue", "FDR", "context")
     target_marginal_trends <- emtrends(trans_model, ~ context, var = "target_cis_pred") %>% tidy()
-    output_df = cbind(target = target_gene_name, regulator = regulator_gene_name, reg_marginal_trends)
+    output_df = cbind(SNP = target_gene_name, gene = regulator_gene_name, reg_marginal_trends)
   } else {
     trans_model <- lmer(target_exp ~ regulator_pred + context + 
                           regulator_pred:context + (1 | id), data = trans_model_df)
     # extract marginal trends for each predicted exp
-    reg_marginal_trends = emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df) %>% tidy() %>% select(context, regulator_pred.trend, std.error, p.value)
-    names(reg_marginal_trends) = c("context", "beta", "se", "pvalue")
-    output_df = cbind(target = target_gene_name, regulator = regulator_gene_name, reg_marginal_trends)
+    reg_marginal_trends = emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df) %>% tidy() %>% mutate(FDR = NA) %>% select(regulator_pred.trend, std.error, p.value, FDR, context)
+    names(reg_marginal_trends) = c("beta", "se", "pvalue", "FDR", "context")
+    output_df = cbind(SNP = target_gene_name, gene = regulator_gene_name, reg_marginal_trends)
   }
   if(target_cis_pred){
-    file_prefix = "_cis_cstemlmm.txt"
+    file_prefix = ".cis_cstemlmm.txt"
   }else{
-    file_prefix = "_cstemlmm.txt"
+    file_prefix = ".cstemlmm.txt"
   }
   fwrite(output_df, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
   return(output_df)
