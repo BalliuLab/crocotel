@@ -31,7 +31,7 @@ get_target_exp = function(target_exp_files, contexts_vec){
   return(targ_exp)
 }
 
-
+#' @export
 cstem_lmm = function(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = T){
   dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
