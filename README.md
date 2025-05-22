@@ -47,18 +47,15 @@ create_GReXs(X_file, exp_files, contexts, out_dir, gene_name, context_thresh, al
 
 ### Step 2a: Run C-STEM lite
 ```
-regulator_pred_exp_file = "example_data/GReXs/gene1_cstem_full_predictors.txt"
-regulator_gbat_pred_exp_file = "example_data/GReXs/gene1_gbat_predictors.txt"
-target_pred_exp_file = "example_data/GReXs/gene2_cstem_full_predictors.txt"
-target_gbat_pred_exp_file = "example_data/GReXs/gene2_gbat_predictors.txt"
-target_exp_files = list.files("example_data/expression/gene2/")
+regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
+target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
+target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
 run_GBAT = F
-contexts_vec = target_exp_files
-target_exp_files = paste0("example_data/expression/gene2/", target_exp_files)
+contexts_vec = as.character(seq(0,9))
 regulator_gene_name = "gene1"
 target_gene_name = "gene2"
 target_cis_pred = TRUE
-outdir = "example_data/trans_output/"
+outdir = "crocotile_example/trans_output/"
 
 cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 ```
