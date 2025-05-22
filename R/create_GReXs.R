@@ -46,7 +46,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
   
   message("Reading in files...") 
-  suppressWarnings(expr = {X<-fread(file = X_file, sep='\t', data.table=F)})
+  suppressWarnings(expr = {X<-fread(file = X_file, sep='\t', data.table=F, check.names = F)})
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))
   
   ###### read in expression and decompose - files are written out to decomposed exp directory
@@ -62,7 +62,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   Yhats_full<-vector("list", length(Ys))
   for(i in 1:length(Ys)){
     suppressWarnings(expr={ Ys[[i]]<-fread(file = 
-                                             paste0(decomposition_dir,list.files(decomposition_dir)[i]), sep='\t', data.table=F)})
+                                             paste0(decomposition_dir,list.files(decomposition_dir)[i]), sep='\t', data.table=F, check.names = F)})
     Ys[[i]]<-as.matrix(data.frame(Ys[[i]], row.names=1, check.names = F))
     lengths_y = c(lengths_y, nrow(Ys[[i]]))
     rownames_y[[i]] = rownames(Ys[[i]])
@@ -89,7 +89,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   }
   all_missing<-names(rowMeans(Yhat_tiss_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_tiss_mat, na.rm = T)))])
   remove_inds<-which(rownames(Yhat_tiss_mat) %in% all_missing)
-  Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,])
+  Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
   Yhat_tiss_mat = cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat)
   fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".cstem_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
@@ -102,7 +102,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
     rownames_y_gbat = list()
     for(i in 1:length(Ys_gbat)){
       suppressWarnings(expr={ Ys_gbat[[i]]<-fread(file = 
-                                                   exp_files[i], sep='\t', data.table=F)})
+                                                   exp_files[i], sep='\t', data.table=F, check.names = F)})
       Ys_gbat[[i]]<-as.matrix(data.frame(Ys_gbat[[i]], row.names=1, check.names = F))
       lengths_y_gbat = c(lengths_y_gbat, nrow(Ys_gbat[[i]]))
       rownames_y_gbat[[i]] = rownames(Ys_gbat[[i]])
@@ -124,7 +124,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
     }
     all_missing<-names(rowMeans(Yhat_gbat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_gbat_mat, na.rm = T)))])
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
-    Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,])
+    Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
     fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,".gbat_predictors.txt"), sep = "\t")
     

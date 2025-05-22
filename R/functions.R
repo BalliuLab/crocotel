@@ -150,7 +150,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
         m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp] + 
                 Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         full_values <- predict(m4)
-        full_values = data.frame(full_values)
+        full_values = data.frame(full_values, check.names = F)
         names(full_values) = "pred"
         Yhats_full[[index_exp]][rownames(full_values), ]<- full_values$pred
         
@@ -193,10 +193,10 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
   if(is_GBAT){
     pvaldf=cbind(tiss_cv_pvals)
     rownames(pvaldf)=names(Ys)
-    pvaldf = data.frame(context = rownames(pvaldf), pvaldf)
+    pvaldf = data.frame(context = rownames(pvaldf), pvaldf, check.names = F)
     r2df=cbind(tiss_cv_r2s)
     rownames(r2df)=names(Ys)
-    r2df = data.frame(context = rownames(r2df), r2df)
+    r2df = data.frame(context = rownames(r2df), r2df, check.names = F)
     fwrite(pvaldf, file = paste0(out_dir, gene_name, ".GBAT.crossval_pvalues.txt"), sep = "\t")
     fwrite(r2df, file = paste0(out_dir, gene_name, ".GBAT.crossval_r2.txt"), sep = "\t")
   }else{
@@ -204,8 +204,8 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     rownames(pvaldf)=names(Ys)
     r2df=cbind(het_cv_r2s, het_cv_r2s.herit, hom_cv_r2s, full_cv_r2s)
     rownames(r2df)=names(Ys)
-    pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
-    r2df = data.frame(cbind(context = rownames(r2df), r2df)) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
+    pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
+    r2df = data.frame(cbind(context = rownames(r2df), r2df), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
     
     fwrite(pvaldf, file = paste0(out_dir, gene_name, ".cstem.crossval_pvalues.txt"), sep = "\t")
     fwrite(r2df, file = paste0(out_dir, gene_name, ".cstem.crossval_r2.txt"), sep = "\t")
@@ -219,7 +219,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     }
     all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
     remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
-    Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat))
+    Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat), check.names = F)
     if(length(remove_inds) != 0){
       print("here")
       Yhat_full_mat = Yhat_full_mat[-remove_inds,]
@@ -312,12 +312,12 @@ get_eGenes_multi_tissue_mod = function (m_eqtl_outfiles, treeQTL_dir, tissue_nam
     if(nrow(n_sel_per_gene) == 0){
       input_df <- n_sel_per_gene
     }else{
-      input_df <- data.frame(family = n_sel_per_gene$family, pval = NA, n_sel = n_sel_per_gene$n_sel_snp)
+      input_df <- data.frame(family = n_sel_per_gene$family, pval = NA, n_sel = n_sel_per_gene$n_sel_snp, check.names = F)
     }
     get_eAssociations(input_df, NULL,
                       m_eqtl_outfiles[i], out_file_name, by_snp = FALSE, silent = TRUE)
   }
-  eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene)
+  eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene, check.names = F)
   eGene_xT_sel <- cbind(eGene_xT_sel, rej_simes)
   names(eGene_xT_sel)[2:(n_tissue + 1)] <- tissue_names
   eGene_xT_sel

@@ -34,7 +34,7 @@ library(cstem)
 X_file = "crocotile_example/input_data/gene1_genotypes.txt"
 exp_files = list.files("crocotile_example/input_data/gene1/")
 exp_files = paste0("crocotile_example/input_data/gene1/", exp_files)
-contexts = seq(0,9)
+contexts = as.character(seq(0,9))
 out_dir = "crocotile_example/GReXs/"
 gene_name = "gene1"
 context_thresh = 3
