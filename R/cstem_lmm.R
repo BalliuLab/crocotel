@@ -20,14 +20,12 @@
 
 
 get_target_exp = function(target_exp_files, contexts_vec){
-  targ_exp = foreach(context = 1:length(contexts_vec), .combine = 'rbind') %dopar% {
-    cur_context = contexts_vec[context]
+  targ_exp = bind_rows(lapply(contexts_vec, function(cur_context){
     cur_file = target_exp_files[grepl(paste0("/",cur_context), target_exp_files)]
     df = fread(cur_file, sep = "\t", data.table = F, check.names = F)
     names(df) = c("id", "target_exp")
     df = df %>% mutate(context = cur_context) %>% select(id, context, target_exp)
-    return(df)
-  }
+  }))
   return(targ_exp)
 }
 
