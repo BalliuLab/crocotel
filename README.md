@@ -6,8 +6,6 @@
 library(data.table) 
 library(dplyr) 
 library(reshape2) 
-library(data.table) 
-library(reshape2) 
 library(magrittr) 
 library(bigstatsr)
 library(caret) 
@@ -23,7 +21,7 @@ library(TreeQTL)
 
 ### Install Crocotile via github:
 ```
-devtools::install_github("BalliuLab/C-STEM")
+devtools::install_github("BalliuLab/C-STEM", dependencies = TRUE)
 library(cstem)
 ```
 
