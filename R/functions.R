@@ -285,6 +285,10 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
   print(paste("Number of cross-tissue eGenes = ", R_G))
   
   print("Step 2: Selecting contexts in which eGenes are active")
+  if(R_G == 0){
+    print("no significant eGenes")
+    return(NULL)
+  }
   q2_adj <- R_G * level2/nrow(eGene_pvals)
   ind_sel_simes <- which(eGene_xT_qvals <= level1)
   sel_eGenes_simes <- eGene_pvals[ind_sel_simes, ]
