@@ -2,4 +2,5 @@
 
 export(create_GReXs)
 export(cstem_gbat_lite)
+export(cstem_lmm)
 export(decompose_expression)
