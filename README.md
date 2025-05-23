@@ -20,7 +20,10 @@ library(TreeQTL)
 ```
 
 ### Install Crocotile via github:
+##### Note: qvalue and TreeQTL must be installed from source before Crocotile is installed 
 ```
+install.packages("qvalue")
+install.packages("", repos = NULL, type = "source")
 devtools::install_github("BalliuLab/C-STEM", dependencies = TRUE)
 library(cstem)
 ```
