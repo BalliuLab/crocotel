@@ -21,7 +21,6 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
     print(paste("Finished merging context",i))
   }
   
-  print(exp_all[1:5,1:5])
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
   #if(context_thresh < 2){
@@ -35,7 +34,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   ids_to_keep = names(which(table(exp_all$id) >= context_thresh))
   
   expression = exp_all %>% filter(id %in% ids_to_keep)
-  design = factor(expression$id)
+  design = as.character(factor(expression$id))
   contexts=as.character(unique(expression$context))
   #X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
   X = as.matrix(expression %>%
@@ -53,7 +52,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
                         nrow = length(unique(design)),
                         ncol = dim(X)[2],
                         dimnames = list(levels(as.factor(design)), colnames(X)))
-  Xb = X.mean.indiv[as.character(design), ]
+  Xb = X.mean.indiv[design, ]
   Xw = X - Xb
   dimnames(Xw) = list(indiv.names, colnames(X))
   
