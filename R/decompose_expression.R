@@ -1,3 +1,5 @@
+###### look into how NA rows are introduced
+
 
 ## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
 #' @export
