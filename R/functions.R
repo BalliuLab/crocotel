@@ -181,6 +181,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
       if(!is_GBAT){
         ## first is the hom term heritable:
         index_exp = which(contexts_vec == context)
+        index_avg_exp = which(contexts_vec == "AverageContext")
         hom.tmp=Yhats_tiss[[context]]
         baseline=lm(hom_expr_mat[,index_avg_exp] ~ 1)
         homfit=lm(hom_expr_mat[,index_avg_exp] ~ hom.tmp)

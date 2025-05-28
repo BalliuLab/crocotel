@@ -89,8 +89,10 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   }
   all_missing<-names(rowMeans(Yhat_tiss_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_tiss_mat, na.rm = T)))])
   remove_inds<-which(rownames(Yhat_tiss_mat) %in% all_missing)
-  Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
-  Yhat_tiss_mat = cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat)
+  if(length(remove_inds) != 0){
+    Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
+  }
+  Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
   fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".cstem_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
