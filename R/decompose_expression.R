@@ -21,7 +21,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
     print(paste("Finished merging context",i))
   }
   
-  
+  print(exp_all[1:5,1:5])
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
   #if(context_thresh < 2){

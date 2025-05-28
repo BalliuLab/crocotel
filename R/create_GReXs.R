@@ -42,7 +42,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   dir.create(out_dir, showWarnings = F)
   decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
-  message("Saving decomposed xpression in ",  decomposition_dir)
+  message("Saving decomposed expression in ",  decomposition_dir)
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
   
   message("Reading in files...") 
