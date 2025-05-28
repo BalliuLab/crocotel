@@ -1,5 +1,3 @@
-###### look into how NA rows are introduced
-
 
 ## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
 #' @export
@@ -13,7 +11,9 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   for(i in 2:length(exp_files)){
     
     # Read expression matrix for Context t
-    exp_t=data.frame(fread(input = exp_files[i], header = T), check.names = F,stringsAsFactors = F)
+    exp_t=data.frame(fread(input = exp_files[i], header = F), check.names = F,stringsAsFactors = F)
+    #### remove NA rows
+    exp_t = na.omit(exp_t)
     names(exp_t) = c("id", gene)
     exp_t = exp_t %>% mutate(context = contexts[i]) %>% select("id", "context", all_of(gene))
     
@@ -22,6 +22,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
     
     print(paste("Finished merging context",i))
   }
+  
   
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
@@ -36,14 +37,14 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   ids_to_keep = names(which(table(exp_all$id) >= context_thresh))
   
   expression = exp_all %>% filter(id %in% ids_to_keep)
-  design = factor(as.character(expression$id))
+  design = factor(expression$id)
   contexts=as.character(unique(expression$context))
   #X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
   X = as.matrix(expression %>%
-    group_by(context) %>%
-    mutate(
-      scaled = scale(!!sym(gene))
-    ) %>% ungroup() %>% select(scaled))
+                  group_by(context) %>%
+                  mutate(
+                    scaled = scale(!!sym(gene))
+                  ) %>% ungroup() %>% select(scaled))
   
   indiv.names = expression$id
   rownames(X) = expression$id
@@ -54,7 +55,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
                         nrow = length(unique(design)),
                         ncol = dim(X)[2],
                         dimnames = list(levels(as.factor(design)), colnames(X)))
-  Xb = X.mean.indiv[design, ]
+  Xb = X.mean.indiv[as.character(design), ]
   Xw = X - Xb
   dimnames(Xw) = list(indiv.names, colnames(X))
   
