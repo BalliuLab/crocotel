@@ -34,7 +34,7 @@ decompose_expression = function(exp_files, gene, contexts, context_thresh, data_
   ids_to_keep = names(which(table(exp_all$id) >= context_thresh))
   
   expression = exp_all %>% filter(id %in% ids_to_keep)
-  design = as.character(factor(expression$id))
+  design = factor(as.character(expression$id))
   contexts=as.character(unique(expression$context))
   #X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
   X = as.matrix(expression %>%
