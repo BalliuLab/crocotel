@@ -90,7 +90,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       }
     }))
   }else{
-    print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
+    print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name))
     # get target cis predicted expression across all contexts
     target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F)
     target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
