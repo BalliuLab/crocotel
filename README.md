@@ -18,6 +18,7 @@ library(emmeans)
 library(broom)
 library(TreeQTL)
 library(mashr)
+library(MuMIn)
 ```
 
 ### Install Crocotile via github:
