@@ -19,7 +19,7 @@ get_target_exp = function(target_exp_files, contexts_vec){
 }
 
 #' @export
-crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = F, target_pred_exp_file, r2_thresh = NULL, regulator_r2_file, = NULL, context_dependence = F){
+crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = F, target_pred_exp_file, r2_thresh = NULL, regulator_r2_file = NULL, context_dependence = F){
   dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
   target_output = get_target_exp(target_exp_files, contexts_vec)

@@ -11,7 +11,7 @@ multiple_testing_correction = function(m_eqtl_outfiles, n_sSNPs_per_gene_files, 
                                          n_SNPs_per_gene_files = n_SNPs_per_gene_files, 
                                          contexts_vec = contexts_vec, 
                                          level1 = level1, level2 = level2, level3 = level3, 
-                                         exp_suffix = exp_suffix
+                                         exp_suffix = exp_suffix,
                                          outdir = outdir)
     fwrite(eGenes, file = paste0(outdir, "eGenes.", exp_suffix, ".txt"))
   }
