@@ -90,6 +90,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       }
     }))
   }else{
+    print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
     # get target cis predicted expression across all contexts
     target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F)
     target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
@@ -117,6 +118,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       trans_model <- suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + target_cis_pred + context + 
                             regulator_pred:context + target_cis_pred:context + (1 | id), data = trans_model_df)))
       if(context_dependence){
+        print(paste("Assessing r2 of regulator GReX by context interaction for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
         null_model = suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + target_cis_pred + context + target_cis_pred:context + (1 | id), data = trans_model_df)))
         context_dependence_pval = anova(trans_model, null_model, test = "LRT")[2,"Pr(>Chisq)"]
         r2_null = r.squaredGLMM(null_model)[,"R2m"]
@@ -145,9 +147,9 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
   }
   
   if(target_cis_pred){
-    file_prefix = ".cis_crocotellmm.txt"
+    file_prefix = ".cis_crocotel_lmm.txt"
   }else{
-    file_prefix = ".crocotellmm.txt"
+    file_prefix = ".crocotel_lmm.txt"
   }
   
   fwrite(output_df, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
