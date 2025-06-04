@@ -243,7 +243,7 @@ get_nSNPs_per_gene = function(){
 }
 
 # Modified treeQTL function to get eGenes in a multi-context experiment
-get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix) {
+get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix, outdir) {
   
   print(paste("Step 0.1: Computing summary statistics for each context"))
   sprintf("Proceeding with %i eQTL summary statistic files", length(m_eqtl_outfiles))
@@ -300,7 +300,7 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
   sel_eGenes_simes$n_tested_tissues <- rowSums(!is.na(sel_eGenes_simes[, col_ind_pvals]))
   
   for (i in 1:n_tissue) {
-    cur_tissue_name <- tissue_names[i]
+    cur_tissue_name <- contexts_vec[i]
     print(paste("Selecting regulators or targets for contexts", cur_tissue_name))
     sel_gene_names_this_tissue <- sel_eGenes_simes$gene[which(rej_simes[, i] == 1)]
     sel_gene_info <- n_SNPs_per_gene_xT[which(n_SNPs_per_gene_xT$family %in% sel_gene_names_this_tissue), c(1, i + 1)]
@@ -310,8 +310,8 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
     n_sel_per_gene <- TreeQTL:::get_nsel_SNPs_per_gene_tissue_pair(sel_gene_info, cur_tissue_name, m_eqtl_outfiles[i], R_G, nrow(eGene_pvals),
                                                                    level3 = level3)
     
-    print(paste("Total number of associations for tissue", cur_tissue_name, "=", sum(n_sel_per_gene$n_sel_snp)))
-    out_file_name <- paste0(treeQTL_dir,"/eAssoc_by_gene.", cur_tissue_name,exp_suffix,".txt")
+    print(paste("Total number of associations for context", cur_tissue_name, "=", sum(n_sel_per_gene$n_sel_snp)))
+    out_file_name <- paste0(outdir,"/eAssoc_by_gene.", cur_tissue_name, ".", exp_suffix,".txt")
     print(paste("Writing output file", out_file_name))
     if(nrow(n_sel_per_gene) == 0){
       input_df <- n_sel_per_gene
@@ -323,7 +323,7 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
   }
   eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene, check.names = F)
   eGene_xT_sel <- cbind(eGene_xT_sel, rej_simes)
-  names(eGene_xT_sel)[2:(n_tissue + 1)] <- tissue_names
+  names(eGene_xT_sel)[2:(n_tissue + 1)] <- contexts_vec
   eGene_xT_sel
 }
 

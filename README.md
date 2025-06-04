@@ -17,6 +17,7 @@ library(lme4)
 library(emmeans)
 library(broom)
 library(TreeQTL)
+library(mashr)
 ```
 
 ### Install Crocotile via github:
@@ -52,14 +53,14 @@ create_GReXs(X_file, exp_files, contexts, out_dir, gene_name, context_thresh, al
 regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
 target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
-run_GBAT = F
+method = "Crocotel"
 contexts_vec = as.character(seq(0,9))
 regulator_gene_name = "gene1"
 target_gene_name = "gene2"
 target_cis_pred = TRUE
 outdir = "crocotile_example/trans_output/"
 
-cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, run_GBAT, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
+cstem_gbat_lite(regulator_pred_exp_file, target_pred_exp_file, target_exp_files, contexts_vec, method, regulator_gene_name, target_gene_name, outdir, target_cis_pred)
 ```
 
 ### Step 2b: Run Crocotile lmm
@@ -90,6 +91,9 @@ exp_suffix = "crocotile_lmm"
 multiple_testing_correction(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, fdr_thresh, outdir, method, top_level, exp_suffix)
 
 ```
+
+### Important notes:
+1. Input file names for expression of each gene must have its own directory with no other files. The names of the files should be "contextName.txt" or "contextName" with no other leading or trailing strings.
 
 
 

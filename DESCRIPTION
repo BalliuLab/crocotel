@@ -22,7 +22,9 @@ Imports:
   lme4,
   emmeans,
   broom,
-  TreeQTL
+  TreeQTL,
+  mashr,
+  MuMIn
 Depends:
   data.table,
   dplyr,
@@ -37,7 +39,9 @@ Depends:
   lme4,
   emmeans,
   broom,
-  TreeQTL  
+  TreeQTL,
+  mashr,
+  MuMIn
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8
