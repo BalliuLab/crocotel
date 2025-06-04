@@ -63,7 +63,6 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       names(regulator_exp_vec) = c("id", "regulator_pred")
       
       if (target_cis_pred) {
-        file_prefix = ".cis_crocotellmm.txt"
         target_cis_pred_vec = target_cis_pred_mat %>% filter(context == context_name) %>% select(id, target_cis_pred)
         names(target_cis_pred_vec) = c("id", "target_pred")
         lm_df = target_exp_vec %>%
@@ -79,7 +78,6 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
         #df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)#, target_pvalue))
         df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, context = context_name)#, target_pvalue))
       } else {
-        file_prefix = ".crocotellmm.txt"
         lm_df = target_exp_vec %>%
           full_join(regulator_exp_vec, by = "id")
         trans_model <- lm(lm_df[,"target_exp"] ~ lm_df[,"regulator_pred"])
@@ -144,6 +142,12 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       names(reg_marginal_trends) = c("beta", "se", "pvalue", "context")
       output_df = cbind(target = target_gene_name, regulator = regulator_gene_name, reg_marginal_trends)
     }
+  }
+  
+  if(target_cis_pred){
+    file_prefix = ".cis_crocotellmm.txt"
+  }else{
+    file_prefix = ".crocotellmm.txt"
   }
   
   fwrite(output_df, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
