@@ -30,7 +30,11 @@ crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec
   intersected_contexts = intersect(regulator_contexts, target_contexts)
   
   this_gene = bind_rows(lapply(intersected_contexts, function(context_name){
-    print(paste("Running Crocotel lite for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
+    if(method != "GBAT"){
+      print(paste("Running Crocotel lite for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
+    }else{
+      print(paste("Running GBAT for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
+    }
     target_exp_vec = fread(target_exp_files[grepl(paste0("/",context_name), target_exp_files)], sep = "\t", data.table = F)
     names(target_exp_vec) = c("id", "target_exp")
     

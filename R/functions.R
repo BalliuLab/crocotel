@@ -232,22 +232,82 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
   
 }
 
-
-
-format_for_treeQTL = function(){
+# function to format Crocotel summary stat ouput file into a format that can be input into treeQTL
+format_treeQTL = function(input_file, outdir, top_level){
+  df = fread(input_file, sep = "\t", data.table = F)
   
-}
-
-get_nSNPs_per_gene = function(){
+  df %>%
+    group_by(context) %>%
+    arrange(pvalue) %>%
+    group_split() %>%
+    purrr::walk(function(sub_df) {
+      group_name <- unique(sub_df$context)
+      if (top_level == "R"){
+        sub_df = sub_df %>%
+          rename(
+            SNP = target,
+            gene = regulator,
+            t.stat = se,
+            p.value = pvalue
+          ) 
+      }else if(top_level == "T"){
+        sub_df = sub_df %>%
+          rename(
+            SNP = regulator,
+            gene = target,
+            t.stat = se,
+            p.value = pvalue
+          ) 
+      }else{
+        stop("No valid input specified for target or regulator as top level.")
+        }
+      
+      sub_df%>% mutate(FDR = NA) %>% select(SNP, gene, beta, t.stat, p.value, FDR) %>%
+        fwrite(file = paste0(outdir, "all_gene_pairs.", group_name, ".txt"), sep = "\t", na = NA)
+    })
   
+  df %>%
+    group_by(context) %>%
+    group_split() %>%
+    purrr::walk(function(sub_df) {
+      group_name <- unique(sub_df$context)
+      
+      if (top_level == "R"){
+        sub_df = sub_df %>%
+          rename(
+            SNP = target,
+            gene = regulator
+          ) 
+      }else if(top_level == "T"){
+        sub_df = sub_df %>%
+          rename(
+            SNP = regulator,
+            gene = target
+          ) 
+      }
+      
+      sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
+        select(family, fam_p) %>%
+        fwrite(file = paste0(outdir, "n_tests_per_gene.", group_name, ".txt"), sep = ",")
+    })
 }
 
 # Modified treeQTL function to get eGenes in a multi-context experiment
-get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, contexts_vec, level1 = 0.05, level2 = 0.05, level3 = 0.05, exp_suffix, outdir) {
+get_eGenes_multi_tissue_mod = function(crocotel_sum_stats, contexts_vec, exp_suffix, outdir, top_level = "R", level1 = 0.05, level2 = 0.05, level3 = 0.05) {
   
   print(paste("Step 0.1: Computing summary statistics for each context"))
-  sprintf("Proceeding with %i eQTL summary statistic files", length(m_eqtl_outfiles))
+  
+  ### set up summary stats per context and number of tests per context
+  tmp_dir = paste0(outdir, "/treeQTL_tmp/")
+  dir.create(tmp_dir)
+  
+  format_treeQTL(crocotel_sum_stats, tmp_dir, top_level)
+  
+  crocotel_outfiles = list.files(tmp_dir, pattern = "all_gene_pairs", full.names = T)
+  n_SNPs_per_gene_files = list.files(tmp_dir, pattern = "n_tests_per_gene", full.names = T)
+  sprintf("Proceeding with %i summary statistic files", length(crocotel_outfiles))
   sprintf("Proceeding with %i tests per gene files", length(n_SNPs_per_gene_files))
+  
   
   n_tissue <- length(contexts_vec)
   for (i in 1:n_tissue) {
@@ -258,7 +318,7 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
     colnames(n_SNPs_per_gene_this_tissue)=c("family","n_tests")
     n_SNPs_per_gene_this_tissue <- n_SNPs_per_gene_this_tissue[n_SNPs_per_gene_this_tissue$n_tests > 0, ]
     
-    gene_simes_cur_tissue <- get_eGenes(n_tests_per_gene = n_SNPs_per_gene_this_tissue, m_eqtl_out = m_eqtl_outfiles[i], method = "BH", level1 = 1, level2 = 1, silent = TRUE)
+    gene_simes_cur_tissue <- get_eGenes(n_tests_per_gene = n_SNPs_per_gene_this_tissue, m_eqtl_out = crocotel_outfiles[i], method = "BH", level1 = 1, level2 = 1, silent = TRUE)
     gene_simes_cur_tissue <- merge(gene_simes_cur_tissue, n_SNPs_per_gene_this_tissue, by = "family", all = TRUE)
     gene_simes_cur_tissue$fam_p[which(is.na(gene_simes_cur_tissue$fam_p))] <- 1
     
@@ -287,8 +347,7 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
   
   print("Step 2: Selecting contexts in which eGenes are active")
   if(R_G == 0){
-    print("no significant eGenes")
-    return(NULL)
+    stop("no significant eGenes. Not writing output.")
   }
   q2_adj <- R_G * level2/nrow(eGene_pvals)
   ind_sel_simes <- which(eGene_xT_qvals <= level1)
@@ -307,7 +366,7 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
     names(sel_gene_info)[2] <- "n_tests"
     sel_gene_info <- merge(sel_gene_info, sel_eGenes_simes[, c("gene", "n_sel_tissues", "n_tested_tissues")],
                            by.x = "family", by.y = "gene", all.x = TRUE, all.y = FALSE)
-    n_sel_per_gene <- TreeQTL:::get_nsel_SNPs_per_gene_tissue_pair(sel_gene_info, cur_tissue_name, m_eqtl_outfiles[i], R_G, nrow(eGene_pvals),
+    n_sel_per_gene <- TreeQTL:::get_nsel_SNPs_per_gene_tissue_pair(sel_gene_info, cur_tissue_name, crocotel_outfiles[i], R_G, nrow(eGene_pvals),
                                                                    level3 = level3)
     
     print(paste("Total number of associations for context", cur_tissue_name, "=", sum(n_sel_per_gene$n_sel_snp)))
@@ -319,18 +378,18 @@ get_eGenes_multi_tissue_mod = function(m_eqtl_outfiles, n_SNPs_per_gene_files, c
       input_df <- data.frame(family = n_sel_per_gene$family, pval = NA, n_sel = n_sel_per_gene$n_sel_snp, check.names = F)
     }
     get_eAssociations(input_df, NULL,
-                      m_eqtl_outfiles[i], out_file_name, by_snp = FALSE, silent = TRUE)
+                      crocotel_outfiles[i], out_file_name, by_snp = FALSE, silent = TRUE)
   }
   eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene, check.names = F)
   eGene_xT_sel <- cbind(eGene_xT_sel, rej_simes)
   names(eGene_xT_sel)[2:(n_tissue + 1)] <- contexts_vec
   eGene_xT_sel
+  
+  ### remove tmp directory
+  unlink(tmp_dir, recursive = TRUE)
 }
 
-  
-  
-  
-  
+
   
   
   
