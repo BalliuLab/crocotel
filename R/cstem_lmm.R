@@ -24,7 +24,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
   ## get target expression across all contexts
   target_output = get_target_exp(target_exp_files, contexts_vec)
   target_exp_mat = target_output[[1]]
-  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F)
+  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
   ###### get contexts present for regulator and for target
   regulator_contexts = names(regulator_exp_mat)
   target_contexts = target_output[[2]]
@@ -42,7 +42,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
   target_exp_mat = target_exp_mat %>% filter(context %in% intersected_contexts)
   
   if(!is.null(r2_thresh)){
-    regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F)
+    regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F, header = T)
     ### checks that at least one contexts has r2 > threshold
     r2 = max(regulator_r2$full_cv_r2s, na.rm = T) < r2_thresh
     if(r2){
@@ -92,7 +92,7 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
   }else{
     print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name))
     # get target cis predicted expression across all contexts
-    target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F)
+    target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
     target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
                                                                names_to = "context",
                                                                values_to = "target_cis_pred")

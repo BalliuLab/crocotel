@@ -5,10 +5,10 @@
 crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method = "Crocotel", target_cis_pred = F, target_pred_exp_file = NULL, r2_thresh = NULL, regulator_r2_file = NULL){
   dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
-  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F)
+  regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
   
   if(!is.null(r2_thresh)){
-    regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F)
+    regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F, header = T)
     ### checks that at least one contexts has r2 > threshold
     r2 = max(regulator_r2$full_cv_r2s, na.rm = T) < r2_thresh
     if(r2){
@@ -44,7 +44,7 @@ crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec
     if (target_cis_pred) {
       # if get target cis predicted expression across all contexts
       if(!is.null(target_pred_exp_file)){
-        target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F)
+        target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
       }else{
         stop("Target GReX flag set, but no target GReX file provided. Exiting.")
       }
