@@ -1,4 +1,4 @@
-# C-STEM R package
+# Crocotel R package
 
 
 ### Necessary packages:
@@ -21,8 +21,8 @@ library(mashr)
 library(MuMIn)
 ```
 
-### Install Crocotile via github:
-##### Note: qvalue and TreeQTL must be installed from source before Crocotile is installed 
+### Install Crocotel via github:
+##### Note: qvalue and TreeQTL must be installed from source before Crocotel is installed 
 ```
 install.packages("qvalue")
 install.packages("", repos = NULL, type = "source")
@@ -49,7 +49,7 @@ run_GBAT = FALSE
 create_GReXs(X_file, exp_files, contexts, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
 ```
 
-### Step 2a: Run Crocotile lite
+### Step 2a: Run Crocotel lite
 ```
 regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
@@ -64,7 +64,7 @@ outdir = "crocotile_example/trans_output/"
 crocotel_lite(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method, target_cis_pred, target_pred_exp_file)
 ```
 
-### Step 2b: Run Crocotile lmm
+### Step 2b: Run Crocotel lmm
 ```
 regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
@@ -79,7 +79,7 @@ crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_
 ```
 
 ### Step 3: Multiple testing correction
-#### example using crocotile lmm output
+#### example using Crocotel lmm output
 ```
 crocotel_sum_stats = "crocotile_example/all_gene_pairs.crocotel_lmm.txt"
 contexts_vec = as.character(seq(0,9))
