@@ -85,7 +85,7 @@ crocotel_sum_stats = "crocotile_example/all_gene_pairs.crocotel_lmm.txt"
 contexts_vec = as.character(seq(0,9))
 fdr_thresh = 0.05
 outdir = "crocotile_example/treeQTL_output/"
-method = "treeQTL"
+method = "mashr"
 
 multiple_testing_correction(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir, method)
 
