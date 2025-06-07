@@ -26,8 +26,8 @@ library(MuMIn)
 ```
 install.packages("qvalue")
 install.packages("", repos = NULL, type = "source")
-devtools::install_github("BalliuLab/C-STEM", dependencies = TRUE)
-library(cstem)
+devtools::install_github("BalliuLab/Crocotel", dependencies = TRUE)
+library(Crocotel)
 ```
 
 ### Step 1: Build GReXs
