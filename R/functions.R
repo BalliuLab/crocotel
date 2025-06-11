@@ -287,7 +287,7 @@ format_treeQTL = function(input_file, outdir, top_level){
       }
       
       sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
-        select(family, fam_p) %>%
+        select(family, fam_p) %>% distinct() %>%
         fwrite(file = paste0(outdir, "n_tests_per_gene.", group_name, ".txt"), sep = ",")
     })
 }
@@ -299,7 +299,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_sum_stats, contexts_vec, exp_suf
   
   ### set up summary stats per context and number of tests per context
   tmp_dir = paste0(outdir, "/treeQTL_tmp/")
-  dir.create(tmp_dir)
+  dir.create(tmp_dir, showWarnings = F)
   
   format_treeQTL(crocotel_sum_stats, tmp_dir, top_level)
   

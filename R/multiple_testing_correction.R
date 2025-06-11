@@ -89,7 +89,7 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     #### run mash
     m = mash(mash_data, c(U.c,U.ed))
     sig_results = get_lfsr(m)
-    significant_rows <- which(sig_results < 0.05)
+    significant_rows <- which(sig_results <= 0.05)
     
     fwrite(sig_results[significant_rows,], file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
   }
