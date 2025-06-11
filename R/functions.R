@@ -387,6 +387,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_sum_stats, contexts_vec, exp_suf
   
   ### remove tmp directory
   unlink(tmp_dir, recursive = TRUE)
+  return(eGene_xT_sel)
 }
 
 
