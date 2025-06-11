@@ -33,7 +33,7 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     output_prefix = "eRegulators"
   }else if(top_level == "T"){
     output_prefix = "eTargets"
-  }esle{
+  }else{
     stop("No valid input specified for target or regulator as top level.")
   }
   if(method == "treeQTL"){
