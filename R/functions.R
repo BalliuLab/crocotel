@@ -262,7 +262,7 @@ format_treeQTL = function(input_file, outdir, top_level){
         stop("No valid input specified for target or regulator as top level.")
         }
       
-      sub_df%>% mutate(FDR = NA) %>% select(SNP, gene, beta, t.stat, p.value, FDR) %>%
+      sub_df%>% mutate(FDR = NA) %>% select(SNP, gene, beta, t.stat, p.value, FDR) %>% filter(p.value <= 0.05) %>%
         fwrite(file = paste0(outdir, "all_gene_pairs.", group_name, ".txt"), sep = "\t", na = NA)
     })
   

@@ -29,6 +29,13 @@ get_top_pairs = function(data, top_level){
 multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir, method = "treeQTL", top_level = "R"){
   dir.create(outdir, showWarnings = F)
   exp_suffix = strsplit(crocotel_sum_stats, "\\.")[[1]][2]
+  if(top_level == "R"){
+    output_prefix = "eRegulators"
+  }else if(top_level == "T"){
+    output_prefix = "eTargets"
+  }esle{
+    stop("No valid input specified for target or regulator as top level.")
+  }
   if(method == "treeQTL"){
     level1 = fdr_thresh
     level2 = fdr_thresh
@@ -40,7 +47,7 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
                                          outdir = outdir,
                                          top_level = top_level,
                                          level1 = level1, level2 = level2, level3 = level3)
-    fwrite(eGenes, file = paste0(outdir, "eGenes.", exp_suffix, ".txt"))
+    fwrite(eGenes, file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
   }
   if(method == "mashr"){
     data = fread(crocotel_sum_stats, sep = "\t", data.table = F)
@@ -84,7 +91,7 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     sig_results = get_lfsr(m)
     significant_rows <- which(sig_results < 0.05)
     
-    fwrite(sig_results[significant_rows,], file = paste0(outdir, "mashr_pairs.", exp_suffix, ".txt"))
+    fwrite(sig_results[significant_rows,], file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
   }
   
 }
