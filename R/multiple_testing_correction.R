@@ -47,7 +47,7 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
                                          outdir = outdir,
                                          top_level = top_level,
                                          level1 = level1, level2 = level2, level3 = level3)
-    fwrite(eGenes, file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
+    fwrite(eGenes, file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"), sep = "\t")
   }
   if(method == "mashr"){
     data = fread(crocotel_sum_stats, sep = "\t", data.table = F)
