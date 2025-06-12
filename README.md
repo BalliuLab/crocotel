@@ -38,7 +38,6 @@ library(Crocotel)
 X_file = "crocotile_example/input_data/gene1_genotypes.txt"
 exp_files = list.files("crocotile_example/input_data/gene1/")
 exp_files = paste0("crocotile_example/input_data/gene1/", exp_files)
-contexts = as.character(seq(0,9))
 out_dir = "crocotile_example/GReXs/"
 gene_name = "gene1"
 context_thresh = 3
@@ -46,7 +45,7 @@ alpha = 0.5
 num_folds = 10
 run_GBAT = FALSE
 
-create_GReXs(X_file, exp_files, contexts, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
+create_GReXs(X_file, exp_files, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
 ```
 
 ### Step 2a: Run Crocotel lite

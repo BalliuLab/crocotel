@@ -208,8 +208,8 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
     pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
     r2df = data.frame(cbind(context = rownames(r2df), r2df), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
     
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".cstem.crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, ".cstem.crossval_r2.txt"), sep = "\t")
+    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".crocotel.crossval_pvalues.txt"), sep = "\t")
+    fwrite(r2df, file = paste0(out_dir, gene_name, ".crocotel.crossval_r2.txt"), sep = "\t")
     
     Yhat_full_mat<-matrix(NA, nrow = nrow(hom_expr_mat), ncol=length(contexts_vec))
     rownames(Yhat_full_mat)<-rownames(hom_expr_mat)

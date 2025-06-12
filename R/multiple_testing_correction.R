@@ -89,7 +89,16 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     #### run mash
     m = mash(mash_data, c(U.c,U.ed))
     sig_results = get_lfsr(m)
-    significant_rows <- which(sig_results <= 0.05)
+    sig_beta = get_pm(m) 
+    sig_se = get_psd(m)
+    ## pivot to long format
+    sig_results = as.data.frame(sig_results) %>% mutate(pair = rownames(.)) %>%
+      separate(pair, into = c("regulator", "target"), sep = ":") %>%
+      pivot_longer(
+        cols = -c(regulator, target),
+        names_to = "context",
+        values_to = "p.value"
+      ) %>% filter(p.value <= 0.05)
     
     fwrite(sig_results[significant_rows,], file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
   }

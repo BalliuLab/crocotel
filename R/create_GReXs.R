@@ -27,7 +27,6 @@
 #'
 #' @param X_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
 #' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (X_file). Contains an unnamed
-#' @param contexts - vector of strings which have context names in them.
 #' @param out_dir - output directory for GReXs
 #' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
 #' @param context_thresh - minimum number of contexts to run C-STEM on. 
@@ -36,7 +35,7 @@
 #' @param run_GBAT - Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the GBAT* method too.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
+create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
   seed = 9000
   set.seed(seed)
   dir.create(out_dir, showWarnings = F)
@@ -50,7 +49,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))
   
   ###### read in expression and decompose - files are written out to decomposed exp directory
-  decompose_expression(exp_files, gene_name, contexts, context_thresh, decomposition_dir)
+  decompose_expression(exp_files, gene_name, context_thresh, decomposition_dir)
   ## this assumes that the file name of decomposition dir is saved as "gene.context.etc" and shared is called "Average Context" (output of decompose function)
   contexts_vec = sapply(strsplit(list.files(decomposition_dir), "\\."), "[[", 2)
   
@@ -93,7 +92,7 @@ create_GReXs = function(X_file, exp_files, contexts, out_dir, gene_name, context
     Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
   }
   Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
-  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".cstem_predictors.txt"), sep = "\t")
+  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
   ### read in expression for gbat

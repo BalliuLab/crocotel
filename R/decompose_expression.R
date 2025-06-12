@@ -1,8 +1,11 @@
 
 ## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
 #' @export
-decompose_expression = function(exp_files, gene, contexts, context_thresh, data_dir){
+decompose_expression = function(exp_files, gene, context_thresh, data_dir){
   # Read expression matrix for Context t and merge with other Contexts 
+  contexts = sub("^.*/", "", exp_files)
+  contexts = sub("*.txt", "", contexts)
+  contexts = sub("*.tsv", "", contexts)
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
   names(exp_all) = c("id", gene)
   exp_all = exp_all %>% mutate(context = contexts[1]) %>% select("id", "context", all_of(gene))
