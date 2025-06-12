@@ -2,7 +2,7 @@
 
 ### have to run this separately for gbat and Crocotel but with different parameter settings
 #' @export
-crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method = "Crocotel", target_cis_pred = F, target_pred_exp_file = NULL, r2_thresh = NULL, regulator_r2_file = NULL){
+crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method = "Crocotel", target_cis_pred = F, target_pred_exp_file = NULL, r2_thresh = NULL, regulator_r2_file = NULL, write_output = F){
   dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
@@ -87,7 +87,9 @@ crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec
       file_prefix = ".gbat.txt"
     }
   }
-  fwrite(this_gene, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
+  if(write_output){
+    fwrite(this_gene, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t") 
+  }
   return(this_gene)
 }
 
