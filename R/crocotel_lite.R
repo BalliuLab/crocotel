@@ -92,9 +92,43 @@ crocotel_lite_old = function(regulator_pred_exp_file, target_exp_files, contexts
   return(this_gene)
 }
 
-crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method = "Crocotel", target_cis_pred = F, target_pred_exp_file = NULL, r2_thresh = NULL, regulator_r2_file = NULL, write_output = F){
+get_trans_genes = function(gene, geneloc_file, trans_threshold){
+  genelocs = fread(geneloc_file, sep = "\t", data.table = F)
+  cur_gene_chr = genelocs %>% filter(geneid == gene) %>% select(chr) %>% unlist()
+  cur_gene_start = genelocs %>% filter(geneid == gene) %>% select(s1) %>% unlist()
+  upstream_pos = cur_gene_start - trans_threshold
+  downstream_pos = cur_gene_start + trans_threshold
+  same_chr_trans = genelocs %>% filter(chr == chr, geneid != gene) %>% filter(s1 <= upstream_pos & s2 >= downstream_pos) %>% select(geneid) %>% unlist() %>% unname()
+  trans_genes = genelocs %>% filter(chr != cur_gene_chr) %>% select(geneid) %>% unlist() %>% unname()
+  trans_genes = c(trans_genes, same_chr_trans)
+  return(trans_genes)
+}
+
+trans_genes = get_trans_genes(gene_name, geneloc_file, trans_threshold)
+regulator_pred_exp_file = paste0(workdir, gene_name, ".cstem.full_predictors.txt")
+regulator_gene_name = gene_name
+output = bind_rows(lapply(trans_genes, function(trans_gene){
+  if(trans_gene != gene_name){
+    target_pred_exp_file = paste0(workdir, trans_gene, ".cstem.full_predictors.txt")
+    if(file.exists(target_pred_exp_file)){
+      target_exp_files = list.files(paste0(target_exp_dir, trans_gene, "/"), full.names = T)
+      target_gene_name = trans_gene
+      
+      #df = crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred, target_pred_exp_file)
+      df = crocotel_lite(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method, target_cis_pred, target_pred_exp_file)
+      
+    }
+  }
+}))
+fwrite(output, file = paste0(outdir, gene_name, ".", method, ".txt"), sep = "\t")
+
+
+#' @export
+crocotel_lite = function(regulator_pred_exp_file, target_exp_dir, contexts_vec, outdir, r2_thresh = NULL, regulator_r2_file = NULL, write_output = F){
   dir.create(outdir, showWarnings = F)
   ## get target expression across all contexts
+  regulator_gene_name = sapply(strsplit(regulator_pred_exp_file, "\\."), "[[", 1)
+  
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
   
   if(!is.null(r2_thresh)){
@@ -120,11 +154,8 @@ crocotel_lite = function(regulator_pred_exp_file, target_exp_files, contexts_vec
   intersected_contexts = intersect(regulator_contexts, target_contexts)
   
   this_gene = bind_rows(lapply(intersected_contexts, function(context_name){
-    if(method != "GBAT"){
-      print(paste("Running Crocotel lite for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
-    }else{
-      print(paste("Running GBAT for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
-    }
+      print(paste("Running Crocotel lite for gene ", regulator_gene_name, " in context ", context_name))
+
     target_exp_vec = fread(target_exp_files[grepl(paste0("/",context_name), target_exp_files)], sep = "\t", data.table = F)
     names(target_exp_vec) = c("id", "target_exp")
     

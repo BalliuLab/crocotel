@@ -1,28 +1,4 @@
 
-### Test parameters
-#X_file = "/Users/lkrockenberger/C-STEM/example_data/genos"
-#exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-#contexts = exp_files
-#exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
-#out_dir = "/Users/lkrockenberger/C-STEM/example_data/GReXs/"
-#snps = "/Users/lkrockenberger/C-STEM/example_data/snps.txt"
-#decomposition_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
-#gene_name = "gene1"
-#context_thresh = 3
-#alpha = 0.5
-#num_folds = 10
-#run_GBAT = TRUE
-
-#library(data.table)
-#library(bigstatsr)
-#library(dplyr)
-#library(caret)
-#library(purrr)
-
-#source("R/decompose_expression.R")
-#source("R/functions.R")
-
-
 #' Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
 #'
 #' @param X_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names

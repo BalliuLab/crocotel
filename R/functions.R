@@ -108,6 +108,10 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
   names(Yhats_tiss)<-names(Ys)
   message("removing temporary files")
   system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
+  
+  ######## regress out GREx and save to directory ######
+  dir.create(paste0(outdir, "GREx_residuals/"), showWarnings = F)
+  for(index in )
   return(list(Yhats_tiss = Yhats_tiss, hom_expr_mat = hom_expr_mat))
   
 }
@@ -225,7 +229,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
       print("here")
       Yhat_full_mat = Yhat_full_mat[-remove_inds,]
     }
-    fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,".cstem.full_predictors.txt"), sep = "\t")
+    fwrite(Yhat_full_mat, file = paste0(out_dir,gene_name,".crocotel.full_predictors.txt"), sep = "\t")
   }
   
   message("Done computing evaluation metrics.")
