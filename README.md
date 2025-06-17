@@ -10,7 +10,7 @@ if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 BiocManager::install("qvalue")
 }
 
-install.packages("", repos = NULL, type = "source")
+install.packages("TreeQTL_2.0.tar.gz", repos = NULL, type = "source")
 devtools::install_github("BalliuLab/Crocotel", dependencies = TRUE)
 library(Crocotel)
 ```
