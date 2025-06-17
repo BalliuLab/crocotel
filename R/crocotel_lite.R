@@ -261,7 +261,7 @@ crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, contexts_vec, ou
     
     outfile = paste0(outdir, context, ".", file_prefix)
     fwrite(me$)
-    
+    print(paste0("finished analysis association mapping for context ", context))
   }
 
 }
