@@ -1,30 +1,15 @@
-# Crocotel R package
+# _crocotel_ R package
 
 
-### Necessary packages:
-```
-library(data.table) 
-library(dplyr) 
-library(reshape2) 
-library(magrittr) 
-library(bigstatsr)
-library(caret) 
-library(devtools) 
-library(purrr) 
-library(foreach)
-library(tidyr)
-library(lme4)
-library(emmeans)
-library(broom)
-library(TreeQTL)
-library(mashr)
-library(MuMIn)
+### Install _crocotel_ via Github:
+##### Note: qvalue and TreeQTL must be installed from source before crocotel is installed 
 ```
 
-### Install Crocotel via github:
-##### Note: qvalue and TreeQTL must be installed from source before Crocotel is installed 
-```
-install.packages("qvalue")
+if (!requireNamespace("qvalue", quietly = TRUE)) {
+if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
+BiocManager::install("qvalue")
+}
+
 install.packages("", repos = NULL, type = "source")
 devtools::install_github("BalliuLab/Crocotel", dependencies = TRUE)
 library(Crocotel)
