@@ -5,16 +5,16 @@
 ##### Note: qvalue and TreeQTL must be installed from source before crocotel is installed 
 ```
 
-# Install _qvalue_
+# Install qvalue
 if (!requireNamespace("qvalue", quietly = TRUE)) {
 if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
 BiocManager::install("qvalue")
 }
 
-# Install _treeQTL_
+# Install treeQTL
 install.packages("http://bioinformatics.org/treeqtl/TreeQTL_2.0.tar.gz", repos = NULL, type = "source")
 
-# Install _crocotel_
+# Install crocotel
 devtools::install_github("BalliuLab/crocotel", dependencies = TRUE)
 library(Crocotel)
 ```
