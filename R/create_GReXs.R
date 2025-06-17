@@ -1,17 +1,17 @@
 
 #' Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
 #'
-#' @param X_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
-#' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (X_file). Contains an unnamed
+#' @param genotype_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
+#' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
 #' @param out_dir - output directory for GReXs
 #' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
 #' @param context_thresh - minimum number of contexts to run C-STEM on. 
 #' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
 #' @param num_folds - Number of folds for cross-validation
-#' @param run_GBAT - Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the GBAT* method too.
+#' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will buil GReXs in a context by context manner.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, run_GBAT = FALSE){
+create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
   dir.create(out_dir, showWarnings = F)
@@ -21,7 +21,7 @@ create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 
   message("Saving cross-validated predictors and performance metrics in ", out_dir)
   
   message("Reading in files...") 
-  suppressWarnings(expr = {X<-fread(file = X_file, sep='\t', data.table=F, check.names = F)})
+  suppressWarnings(expr = {X<-fread(file = genotype_file, sep='\t', data.table=F, check.names = F)})
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))
   
   ###### read in expression and decompose - files are written out to decomposed exp directory
@@ -50,7 +50,7 @@ create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 
                             dimnames = list(rownames_y[[i]], "pred"))
   }
   
-  
+  unlink(decomposition_dir, recursive = TRUE)
   crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
@@ -68,11 +68,11 @@ create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 
     Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
   }
   Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
-  fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
+  #fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
   evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
   
   ### read in expression for gbat
-  if(run_GBAT){
+  if(method == "cxc"){
     Ys_gbat<-vector("list", length = length(exp_files))
     names(Ys_gbat)<-sapply(strsplit(exp_files, "/"), tail, 1)
     lengths_y_gbat = c()
@@ -103,7 +103,7 @@ create_GReXs = function(X_file, exp_files, out_dir, gene_name, context_thresh = 
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
     Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
-    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,".gbat_predictors.txt"), sep = "\t")
+    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,".cxc.predictors.txt"), sep = "\t")
     
     evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, out_dir, gene_name)
   }

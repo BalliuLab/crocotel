@@ -24,7 +24,9 @@ Imports:
   broom,
   TreeQTL,
   mashr,
-  MuMIn
+  MuMIn,
+  future.apply,
+  MatrixEQTL
 Depends:
   data.table,
   dplyr,
@@ -41,7 +43,9 @@ Depends:
   broom,
   TreeQTL,
   mashr,
-  MuMIn
+  MuMIn,
+  future.apply,
+  MatrixEQTL
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8

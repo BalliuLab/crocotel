@@ -83,7 +83,9 @@ multiple_testing_correction(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir
 ```
 
 ### Important notes:
-1. Input file names for expression of each gene must have its own directory with no other files. The names of the files should be "contextName.txt" or "contextName" with no other leading or trailing strings.
+1. Input file names for total expression should be in the following format with the following filenames "contextName.txt":
+    
+2. Input file names for expression of each gene must have its own directory with no other files. The names of the files should be "contextName.txt" or "contextName" with no other leading or trailing strings.
 
 
 
