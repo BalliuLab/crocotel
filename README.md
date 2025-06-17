@@ -16,23 +16,25 @@ install.packages("http://bioinformatics.org/treeqtl/TreeQTL_2.0.tar.gz", repos =
 
 # Install crocotel
 devtools::install_github("BalliuLab/crocotel", dependencies = TRUE)
-library(Crocotel)
+library(crocotel)
 ```
 
-### Step 1: Build GReXs
-#### This step decomposes expression and builds cross-validated cis genetic predictors of expression using elastic net regularized regression.
+### Step 1: Build cis Genetically Regulated eXpression componentS (GReXs)
+#### This step builds cross-validated cis genetic predictors of expression for a gene across all contexts (e.g. cell types and tissues) using elastic net regularized regression.
 
 #### example code for one gene:
 ```
-X_file = "crocotile_example/input_data/gene1_genotypes.txt"
-exp_files = list.files("crocotile_example/input_data/gene1/")
-exp_files = paste0("crocotile_example/input_data/gene1/", exp_files)
+gene_name="gene1"
+expression_directory=paste0("crocotile_example/",gene_name,"/")
+exp_files = paste0(expression_directory, list.files(expression_directory))
+genotype_file = paste0("crocotile_example/",gene_name,"_genotypes.txt") # maybe change this one
+
 out_dir = "crocotile_example/GReXs/"
-gene_name = "gene1"
-context_thresh = 3
-alpha = 0.5
-num_folds = 10
-run_GBAT = FALSE
+
+context_thresh = 3 # minimum # of contexts a gene has to have expression on 
+alpha = 0.5 # elastic net mixture parameter 
+num_folds = 10 # number of folds for cross-validation 
+run_GBAT = FALSE 
 
 create_GReXs(X_file, exp_files, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
 ```
