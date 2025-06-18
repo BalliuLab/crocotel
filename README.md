@@ -29,7 +29,7 @@ expression_directory=paste0("crocotile_example/input_data/",gene_name,"/")
 exp_files = paste0(expression_directory, list.files(expression_directory))
 genotype_file = paste0("crocotile_example/input_data/",gene_name,"_genotypes.txt") # maybe change this one
 
-out_dir = "crocotile_example/GReXs/"
+out_dir = "crocotile_example/"
 
 context_thresh = 3 # minimum # of contexts a gene has to have expression on 
 alpha = 0.5 # elastic net mixture parameter 

@@ -53,11 +53,11 @@ regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
 create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
-  dir.create(paste0(outdir, "GReXs"), showWarnings = F)
-  decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
+  dir.create(paste0(out_dir, "GReXs/"), showWarnings = F)
+  decomposition_dir = paste0(out_dir, "GReXs/", gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
   message("Saving decomposed expression in ",  decomposition_dir)
-  message("Saving cross-validated predictors and performance metrics in ", out_dir)
+  message("Saving cross-validated predictors and performance metrics in ", paste0(out_dir, "GReXs/"))
   
   message("Reading in files...") 
   suppressWarnings(expr = {X<-fread(file = genotype_file, sep='\t', data.table=F, check.names = F)})
@@ -90,11 +90,11 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
   }
   
   unlink(decomposition_dir, recursive = TRUE)
-  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha)
+  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, paste0(out_dir, "GReXs/"), gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
   ### residualise GReXs from target expression
-  regress_target_GReX(exp_files, Yhats_tiss, outdir)
+  regress_target_GReX(exp_files, Yhats_tiss, out_dir)
   
   ## combine Yhats_tiss into large dataframe with individuals as rows and contexts as columns:
   Yhat_tiss_mat<-matrix(NA, nrow = nrow(X), ncol=length(contexts_vec))
@@ -110,7 +110,7 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
   }
   Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
   #fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
-  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, out_dir, gene_name)
+  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, paste0(out_dir, "GReXs/"), gene_name)
   
   ### read in expression for gbat
   if(method == "cxc"){
@@ -130,7 +130,7 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
       }
     }
     gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
-    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, out_dir, gene_name, num_folds, alpha)
+    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, paste0(out_dir, "GReXs/"), gene_name, num_folds, alpha)
     Yhats_gbat = output_gbat[["Yhats_tiss"]]
     hom_expr_mat_gbat = output_gbat[["hom_expr_mat"]]
     
@@ -144,9 +144,9 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
     Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
-    fwrite(Yhat_gbat_mat, file = paste0(out_dir,gene_name,".cxc.predictors.txt"), sep = "\t")
+    fwrite(Yhat_gbat_mat, file = paste0(out_dir, "GReXs/", gene_name,".cxc.predictors.txt"), sep = "\t")
     
-    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, out_dir, gene_name)
+    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, paste0(out_dir, "GReXs/"), gene_name)
   }
   message("Finished computing GReXs and evalutation metrics")
   
