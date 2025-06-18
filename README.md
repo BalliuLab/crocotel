@@ -25,9 +25,9 @@ library(crocotel)
 #### example code for one gene:
 ```
 gene_name="gene1"
-expression_directory=paste0("crocotile_example/",gene_name,"/")
+expression_directory=paste0("crocotile_example/input_data/",gene_name,"/")
 exp_files = paste0(expression_directory, list.files(expression_directory))
-genotype_file = paste0("crocotile_example/",gene_name,"_genotypes.txt") # maybe change this one
+genotype_file = paste0("crocotile_example/input_data/",gene_name,"_genotypes.txt") # maybe change this one
 
 out_dir = "crocotile_example/GReXs/"
 
