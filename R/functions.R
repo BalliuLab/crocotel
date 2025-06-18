@@ -226,7 +226,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
       print("here")
       Yhat_full_mat = Yhat_full_mat[-remove_inds,]
     }
-    fwrite(Yhat_full_mat[,!names(df) %in% "AverageContext"], file = paste0(out_dir,gene_name,".crocotel.GReX_predictors.txt"), sep = "\t")
+    fwrite(Yhat_full_mat[,!names(Yhat_full_mat) %in% "AverageContext"], file = paste0(out_dir,gene_name,".crocotel.GReX_predictors.txt"), sep = "\t")
   }
   
   message("Done computing evaluation metrics.")
