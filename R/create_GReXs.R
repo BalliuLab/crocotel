@@ -53,7 +53,7 @@ regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
 create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
-  #dir.create(paste0(outdir, "GReXs"), showWarnings = F)
+  dir.create(paste0(outdir, "GReXs"), showWarnings = F)
   decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
   message("Saving decomposed expression in ",  decomposition_dir)

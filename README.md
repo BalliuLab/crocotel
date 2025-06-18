@@ -36,7 +36,7 @@ alpha = 0.5 # elastic net mixture parameter
 num_folds = 10 # number of folds for cross-validation 
 method = "crocotel"
 
-create_GReXs(X_file, exp_files, out_dir, gene_name, context_thresh, alpha, num_folds, run_GBAT)
+create_GReXs(genotype_file, exp_files, out_dir, gene_name, context_thresh, alpha, num_folds, method)
 ```
 
 ### Step 2: Run regulator-target associations 
