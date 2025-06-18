@@ -108,7 +108,7 @@ format_GReX_for_association = function(GReX_dir, contexts_vec, r2_genes, tmp_dir
   plan(multisession, workers = parallel::detectCores() - 1)
   
   ### change this after changing other functions
-  files = list.files(GReX_dir, pattern = "*.crocotel.GReX_predictors.txt")
+  files = list.files(GReX_dir, pattern = "*.crocotel.GReX*.txt")
   
   # Function to process one file
   process_file <- function(f, GReX_dir, contexts_vec) {
@@ -168,7 +168,7 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
 }
 
 #' @export
-crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, contexts_vec, outdir, pval_thresh = 1, r2_thresh = NULL){
+crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, context, outdir, pval_thresh = 1, r2_thresh = NULL){
   dir.create(outdir, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
   tmp_dir = paste0(outdir, "MEQTL_input/")
@@ -201,69 +201,67 @@ crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, contexts_vec, ou
   errorCovariance = numeric();
   useModel = modelLINEAR; # modelANOVA, modelLINEAR, or modelLINEAR_CROSS
   
-  for(context in contexts_vec){
-    # Genotype file name
-    SNP_file_name = paste0(tmp_dir, context, ".txt");
-    
-    # Gene expression file name
-    expression_file_name = paste0(exp_files_dir, context, ".txt");
-    
-    
-    ## Load genotype data
-    
-    snps = SlicedData$new();
-    snps$fileDelimiter = "\t";      # the TAB character
-    snps$fileOmitCharacters = "NA"; # denote missing values;
-    snps$fileSkipRows = 1;          # one row of column labels
-    snps$fileSkipColumns = 1;       # one column of row labels
-    snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
-    snps$LoadFile(SNP_file_name);
-    
-    ## Load gene expression data
-    
-    gene = SlicedData$new();
-    gene$fileDelimiter = "\t";      # the TAB character
-    gene$fileOmitCharacters = "NA"; # denote missing values;
-    gene$fileSkipRows = 1;          # one row of column labels
-    gene$fileSkipColumns = 1;       # one column of row labels
-    gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
-    gene$LoadFile(expression_file_name);
-    
-    cvrt = SlicedData$new();
-    cvrt$fileDelimiter = "\t";      # the TAB character
-    cvrt$fileOmitCharacters = "NA"; # denote missing values;
-    cvrt$fileSkipRows = 1;          # one row of column labels
-    cvrt$fileSkipColumns = 1;       # one column of row labels
-    if(length(covariates_file_name)>0) {
-      cvrt$LoadFile(covariates_file_name);
-    }
-    
-    # Output file name
-    output_file_name_cis = tempfile();
-    output_file_name_tra = tempfile();
-    
-    
-    ## Run the analysis
-    me = Matrix_eQTL_main(
-      snps = snps,
-      gene = gene,
-      cvrt = cvrt,
-      output_file_name     = output_file_name_tra,
-      pvOutputThreshold     = pvOutputThreshold_tra,
-      useModel = useModel,
-      errorCovariance = errorCovariance,
-      verbose = TRUE,
-      snpspos = snpspos,
-      genepos = genepos,
-      cisDist = cisDist,
-      min.pv.by.genesnp = FALSE,
-      noFDRsaveMemory = FALSE);
-    
-    outfile = paste0(outdir, context, ".", file_prefix)
-    fwrite(me$all$eqtls, file = outfile, sep = "\t", quote = F)
-    print(paste0("finished analysis association mapping for context ", context))
+  # Genotype file name
+  SNP_file_name = paste0(tmp_dir, context, ".txt");
+  
+  # Gene expression file name
+  expression_file_name = paste0(exp_files_dir, context, ".txt");
+  
+  
+  ## Load genotype data
+  
+  snps = SlicedData$new();
+  snps$fileDelimiter = "\t";      # the TAB character
+  snps$fileOmitCharacters = "NA"; # denote missing values;
+  snps$fileSkipRows = 1;          # one row of column labels
+  snps$fileSkipColumns = 1;       # one column of row labels
+  snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  snps$LoadFile(SNP_file_name);
+  
+  ## Load gene expression data
+  
+  gene = SlicedData$new();
+  gene$fileDelimiter = "\t";      # the TAB character
+  gene$fileOmitCharacters = "NA"; # denote missing values;
+  gene$fileSkipRows = 1;          # one row of column labels
+  gene$fileSkipColumns = 1;       # one column of row labels
+  gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  gene$LoadFile(expression_file_name);
+  
+  cvrt = SlicedData$new();
+  cvrt$fileDelimiter = "\t";      # the TAB character
+  cvrt$fileOmitCharacters = "NA"; # denote missing values;
+  cvrt$fileSkipRows = 1;          # one row of column labels
+  cvrt$fileSkipColumns = 1;       # one column of row labels
+  if(length(covariates_file_name)>0) {
+    cvrt$LoadFile(covariates_file_name);
   }
-
+  
+  # Output file name
+  output_file_name_cis = tempfile();
+  output_file_name_tra = tempfile();
+  
+  
+  ## Run the analysis
+  me = Matrix_eQTL_main(
+    snps = snps,
+    gene = gene,
+    cvrt = cvrt,
+    output_file_name     = output_file_name_tra,
+    pvOutputThreshold     = pvOutputThreshold_tra,
+    pvOutputThreshold.cis = 0,
+    useModel = useModel,
+    errorCovariance = errorCovariance,
+    verbose = TRUE,
+    snpspos = snpsloc,
+    genepos = geneloc,
+    cisDist = cisDist,
+    min.pv.by.genesnp = FALSE,
+    noFDRsaveMemory = FALSE);
+  
+  outfile = paste0(outdir, context, ".", file_prefix)
+  fwrite(me$all$eqtls, file = outfile, sep = "\t", quote = F)
+  print(paste0("finished analysis association mapping for context ", context))
 }
 
 

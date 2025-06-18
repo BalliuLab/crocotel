@@ -109,9 +109,6 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
   message("removing temporary files")
   system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
   
-  ######## regress out GREx and save to directory ######
-  dir.create(paste0(outdir, "GREx_residuals/"), showWarnings = F)
-  for(index in )
   return(list(Yhats_tiss = Yhats_tiss, hom_expr_mat = hom_expr_mat))
   
 }

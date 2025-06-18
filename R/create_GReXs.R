@@ -1,11 +1,50 @@
 
+
+regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
+  dir.create(paste0(outdir, "exp_residualized_GReX/"))
+  all_residuals = NULL
+  for(file in exp_files){
+    context = gsub(".*/", "", file)
+    context = sub("\\..*", "", context)
+    original_exp = data.frame(fread(file, header = F), check.names = F,stringsAsFactors = F)
+    ids <- original_exp[, 1]
+    expr <- original_exp[, 2]
+    
+    cur_grex = Yhats_tiss[[context]]
+    
+    # Make sure IDs match — reorder or subset if needed
+    matching_ids <- intersect(ids, rownames(cur_grex))
+    expr_sub <- expr[ids %in% matching_ids]
+    grex_sub <- cur_grex[matching_ids,]
+    ids_sub <- ids[ids %in% matching_ids]
+    
+    ## get GReX expression of context
+    
+    model <- lm(expr_sub ~ grex_sub)
+    residuals_vec <- residuals(model)
+    
+    sub_df = data.frame(id = ids_sub, residual = residuals_vec)
+    names(sub_df)[2] = context
+    
+    # Merge into final residuals data frame
+    if (is.null(all_residuals)) {
+      all_residuals = sub_df
+    } else {
+      all_residuals = merge(all_residuals, sub_df, by = "id", all = TRUE)
+    }
+  }
+  outfile = paste0(outdir, "exp_residualized_GReX/", context, ".crocotel.GReX_residuals.txt")
+  fwrite(all_residuals, outfile, sep = "\t", quote = F)
+}
+
+
 #' Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
 #'
 #' @param genotype_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
 #' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
 #' @param out_dir - output directory for GReXs
 #' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
-#' @param context_thresh - minimum number of contexts to run C-STEM on. 
+#' @param context_thresh - minimum number of contexts to run crocotel on. 
 #' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
 #' @param num_folds - Number of folds for cross-validation
 #' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will buil GReXs in a context by context manner.
@@ -14,7 +53,7 @@
 create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
-  dir.create(out_dir, showWarnings = F)
+  #dir.create(paste0(outdir, "GReXs"), showWarnings = F)
   decomposition_dir = paste0(out_dir, gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
   message("Saving decomposed expression in ",  decomposition_dir)
@@ -54,6 +93,8 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
   crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
+  ### residualise GReXs from target expression
+  regress_target_GReX(exp_files, Yhats_tiss, outdir)
   
   ## combine Yhats_tiss into large dataframe with individuals as rows and contexts as columns:
   Yhat_tiss_mat<-matrix(NA, nrow = nrow(X), ncol=length(contexts_vec))
