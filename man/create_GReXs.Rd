@@ -5,28 +5,23 @@
 \title{Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts}
 \usage{
 create_GReXs(
-  X_file,
+  genotype_file,
   exp_files,
-  contexts,
   out_dir,
   gene_name,
   context_thresh = 3,
   alpha = 0.5,
   num_folds = 10,
-  run_GBAT = FALSE
+  method = "crocotel"
 )
 }
 \arguments{
-\item{X_file}{\itemize{
+\item{genotype_file}{\itemize{
 \item a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
 }}
 
 \item{exp_files}{\itemize{
-\item vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (X_file). Contains an unnamed
-}}
-
-\item{contexts}{\itemize{
-\item vector of strings which have context names in them.
+\item vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
 }}
 
 \item{out_dir}{\itemize{
@@ -38,7 +33,7 @@ create_GReXs(
 }}
 
 \item{context_thresh}{\itemize{
-\item minimum number of contexts to run C-STEM on.
+\item minimum number of contexts to run crocotel on.
 }}
 
 \item{alpha}{\itemize{
@@ -49,8 +44,8 @@ create_GReXs(
 \item Number of folds for cross-validation
 }}
 
-\item{run_GBAT}{\itemize{
-\item Takes values of TRUE or FALSE. Default is FALSE, if TRUE then will run the GBAT* method too.
+\item{method}{\itemize{
+\item Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will buil GReXs in a context by context manner.
 }}
 }
 \value{
