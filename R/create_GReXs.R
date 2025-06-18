@@ -32,9 +32,10 @@ regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
     } else {
       all_residuals = merge(all_residuals, sub_df, by = "id", all = TRUE)
     }
+    outfile = paste0(outdir, "exp_residualized_GReX/", context, ".crocotel.GReX_residuals.txt")
+    fwrite(all_residuals, outfile, sep = "\t", quote = F)
   }
-  outfile = paste0(outdir, "exp_residualized_GReX/", context, ".crocotel.GReX_residuals.txt")
-  fwrite(all_residuals, outfile, sep = "\t", quote = F)
+  
 }
 
 
