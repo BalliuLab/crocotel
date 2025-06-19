@@ -40,10 +40,12 @@ format_data(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir)
 
 #### example code for one gene:
 ```
+out_dir="crocotel_example/"
+gene_name = "gene1"
 context_thresh = 3 # minimum # of contexts a gene has to have expression on 
 alpha = 0.5 # elastic net mixture parameter 
 num_folds = 10 # number of folds for cross-validation 
-method = "crocotel"
+method = "crocotel" # alternative is "cxc"
 
 create_GReXs(gene_name, out_dir, context_thresh, alpha, num_folds, method)
 ```

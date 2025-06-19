@@ -62,12 +62,14 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   message("Saving cross-validated predictors and performance metrics in ", GReX_outdir)
   
   if(is.null(genotype_file)){
+    print("inferring genotype file...")
     genotype_file = paste0(out_dir, "/crocotel_formatted_data/",gene_name,"_genotypes.txt")
     if(!file.exists(genotype_file)){
       stop(paste0("genotype file not specified and inferred genotype file: ", genotype_file ," does not exit. exiting."))
     }
   }
   if(is.null(exp_files)){
+    print("inferring expression files...")
     expression_directory=paste0(out_dir, "/crocotel_formatted_data/",gene_name,"/")
     exp_files = list.files(expression_directory, full.names = T)
     if(!file.exists(exp_files[1])){
