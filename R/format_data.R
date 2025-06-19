@@ -58,5 +58,5 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
     }
     print(paste0("finished formatting context ", i))
   
-  
+  }
 }
