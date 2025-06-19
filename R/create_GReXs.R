@@ -1,7 +1,7 @@
 
 
 regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
-  dir.create(paste0(outdir, "exp_residualized_GReX/"))
+  dir.create(paste0(outdir, "exp_residualized_GReX/"), showWarnings = F)
   all_residuals = NULL
   for(file in exp_files){
     context = gsub(".*/", "", file)
