@@ -26,9 +26,10 @@ get_top_pairs = function(data, top_level){
 
 
 #' @export
-multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir, method = "treeQTL", top_level = "R"){
-  dir.create(outdir, showWarnings = F)
-  exp_suffix = strsplit(crocotel_sum_stats, "\\.")[[1]][2]
+multiple_testing_correction = function(crocotel_dir, out_dir, fdr_thresh = 0.05, method = "treeQTL", top_level = "R"){
+  method_outdir = paste0(out_dir, "/", method, "_output/")
+  dir.create(method_outdir, showWarnings = F)
+  exp_suffix = gsub("_output", "", basename(crocotel_dir))
   if(top_level == "R"){
     output_prefix = "eRegulators"
   }else if(top_level == "T"){
@@ -41,13 +42,12 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     level2 = fdr_thresh
     level3 = fdr_thresh
     
-    eGenes = get_eGenes_multi_tissue_mod(crocotel_sum_stats = crocotel_sum_stats, 
-                                         contexts_vec = contexts_vec, 
+    eGenes = get_eGenes_multi_tissue_mod(crocotel_dir = crocotel_dir, 
                                          exp_suffix = exp_suffix,
-                                         outdir = outdir,
+                                         out_dir = method_outdir,
                                          top_level = top_level,
                                          level1 = level1, level2 = level2, level3 = level3)
-    fwrite(eGenes, file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"), sep = "\t")
+    fwrite(eGenes, file = paste0(method_outdir, output_prefix, ".", exp_suffix, ".txt"), sep = "\t")
   }
   if(method == "mashr"){
     data = fread(crocotel_sum_stats, sep = "\t", data.table = F)
@@ -102,5 +102,4 @@ multiple_testing_correction = function(crocotel_sum_stats, contexts_vec, fdr_thr
     
     fwrite(sig_results[significant_rows,], file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
   }
-  
 }

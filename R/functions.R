@@ -234,7 +234,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
 }
 
 # function to format Crocotel summary stat ouput file into a format that can be input into treeQTL
-format_treeQTL = function(input_file, outdir, top_level){
+format_treeQTL_old = function(input_file, outdir, top_level){
   df = fread(input_file, sep = "\t", data.table = F)
   
   df %>%
@@ -293,16 +293,64 @@ format_treeQTL = function(input_file, outdir, top_level){
     })
 }
 
+format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
+  files = list.files(crocotel_dir, full.names = T)
+  for(file in files){
+    context = sub("\\..*", "", basename(file))
+    sub_df = fread(file, sep = "\t", data.table = F)
+    if (top_level == "R"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = target,
+          gene = regulator,
+        ) 
+    }else if(top_level == "T"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = regulator,
+          gene = target,
+        ) 
+    }else{
+      stop("No valid input specified for target or regulator as top level.")
+    }
+    sub_df %>% fwrite(file = paste0(tmp_dir, "all_pairs.", context, ".txt"), sep = "\t", na = NA)
+  }
+  
+  sub_df = fread(file, sep = "\t", data.table = F)
+  if (top_level == "R"){
+    sub_df = sub_df %>%
+      rename(
+        SNP = target,
+        gene = regulator
+      ) 
+  }else if(top_level == "T"){
+    sub_df = sub_df %>%
+      rename(
+        SNP = regulator,
+        gene = target
+      ) 
+  }
+  
+  sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
+    select(family, fam_p) %>% distinct() %>%
+    fwrite(file = paste0(outdir, "n_tests_per_gene.", context, ".txt"), sep = ",")
+  
+  
+  
+}
+
 # Modified treeQTL function to get eGenes in a multi-context experiment
-get_eGenes_multi_tissue_mod = function(crocotel_sum_stats, contexts_vec, exp_suffix, outdir, top_level = "R", level1 = 0.05, level2 = 0.05, level3 = 0.05) {
+get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_level = "R", level1 = 0.05, level2 = 0.05, level3 = 0.05) {
   
   print(paste("Step 0.1: Computing summary statistics for each context"))
   
   ### set up summary stats per context and number of tests per context
-  tmp_dir = paste0(outdir, "/treeQTL_tmp/")
+  treeQTL_dir = paste0(out_dir, "/treeQTL_output/")
+  dir.create(treeQTL_dir, showWarnings = F)
+  tmp_dir = paste0(treeQTL_dir, "/treeQTL_tmp/")
   dir.create(tmp_dir, showWarnings = F)
   
-  format_treeQTL(crocotel_sum_stats, tmp_dir, top_level)
+  
   
   crocotel_outfiles = list.files(tmp_dir, pattern = "all_gene_pairs", full.names = T)
   n_SNPs_per_gene_files = list.files(tmp_dir, pattern = "n_tests_per_gene", full.names = T)
