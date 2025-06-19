@@ -5,10 +5,10 @@
 \title{Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts}
 \usage{
 create_GReXs(
-  genotype_file,
-  exp_files,
-  out_dir,
   gene_name,
+  out_dir,
+  genotype_file = NULL,
+  exp_files = NULL,
   context_thresh = 3,
   alpha = 0.5,
   num_folds = 10,
@@ -16,20 +16,20 @@ create_GReXs(
 )
 }
 \arguments{
-\item{genotype_file}{\itemize{
-\item a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
-}}
-
-\item{exp_files}{\itemize{
-\item vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
+\item{gene_name}{\itemize{
+\item identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
 }}
 
 \item{out_dir}{\itemize{
 \item output directory for GReXs
 }}
 
-\item{gene_name}{\itemize{
-\item identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
+\item{genotype_file}{\itemize{
+\item a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
+}}
+
+\item{exp_files}{\itemize{
+\item vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
 }}
 
 \item{context_thresh}{\itemize{
@@ -45,7 +45,7 @@ create_GReXs(
 }}
 
 \item{method}{\itemize{
-\item Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will buil GReXs in a context by context manner.
+\item Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
 }}
 }
 \value{
