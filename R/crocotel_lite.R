@@ -104,52 +104,45 @@ get_trans_genes = function(gene, geneloc_file, trans_threshold){
   return(trans_genes)
 }
 
-format_GReX_for_association = function(GReX_dir, contexts_vec, r2_genes, tmp_dir){
+format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
   plan(multisession, workers = parallel::detectCores() - 1)
   
   ### change this after changing other functions
-  files = list.files(GReX_dir, pattern = "*.crocotel.GReX*.txt")
+  files = list.files(GReX_dir, pattern = "GReX")
   
   # Function to process one file
-  process_file <- function(f, GReX_dir, contexts_vec) {
+  process_file <- function(f, GReX_dir, context) {
     gene_id <- sub("\\.crocotel.*", "", basename(f))
     dt <- fread(paste0(GReX_dir, f), sep = "\t", header = T)
     
     result <- list()
-    for (ct in contexts_vec) {
-      if (ct %in% names(dt)) {
-        sub_dt <- dt %>% select(id, value = get("ct"))
-        sub_dt[, gene := gene_id]
-        casted <- dcast(sub_dt, gene ~ id, value.var = "value")
-        result[[ct]] <- casted
-      }
+    ct = context
+    if (ct %in% names(dt)) {
+      sub_dt <- dt %>% select(id, value = get("ct"))
+      sub_dt[, gene := gene_id]
+      casted <- dcast(sub_dt, gene ~ id, value.var = "value")
+      result[[ct]] <- casted
     }
     result
   }
   
   # Process all files in parallel
-  all_results <- future_lapply(files, process_file, GReX_dir, contexts_vec)
+  all_results <- future_lapply(files, process_file, GReX_dir, context)
   
   # Reorganize by cell type
-  context_matrices <- lapply(contexts_vec, function(ct) {
-    ct_list <- lapply(all_results, function(res) res[[ct]])
-    ct_combined <- rbindlist(ct_list, fill = TRUE)
-    return(ct_combined)
-  })
-  names(context_matrices) <- contexts_vec
+
+  ct = context
+  ct_list <- lapply(all_results, function(res) res[[ct]])
+  ct_combined <- rbindlist(ct_list, fill = TRUE)
   
   if(!is.null(r2_genes)){
-    for(context in contexts_vec){
-      if(nrow(context_matrices[[context]] != 0)){
-        context_matrices[[context]] = context_matrices[[context]] %>% filter(gene %in% r2_genes[[context]])
-      }
+    if(nrow(ct_combined != 0)){
+      ct_combined = ct_combined %>% filter(gene %in% r2_genes[[context]])
     }
   }
   
-  # Write out files
-  for (ct in names(context_matrices)) {
-    fwrite(data.frame(context_matrices[[ct]]), paste0(tmp_dir, ct, ".txt"), sep = "\t", na = "NA", quote = F)
-  }
+  fwrite(data.frame(ct_combined), paste0(tmp_dir, context, ".txt"), sep = "\t", na = "NA", quote = F)
+
 }
 
 get_genes_passing_r2 = function(GReX_dir, r2_thresh){
@@ -168,21 +161,36 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
 }
 
 #' @export
-crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, context, outdir, pval_thresh = 1, r2_thresh = NULL){
-  dir.create(outdir, showWarnings = F)
+crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL){
+  out_dir_crocotel_lite = paste0(out_dir, "/crocotel_lite_output/")
+  dir.create(out_dir_crocotel_lite, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
-  tmp_dir = paste0(outdir, "MEQTL_input/")
+  tmp_dir = paste0(out_dir_crocotel_lite, "/MEQTL_input/")
   dir.create(tmp_dir, showWarnings = F)
   
   if(!is.null(r2_thresh)){
     r2_genes = get_genes_passing_r2(GReX_dir, r2_thresh)
-  }
-  else{
+  }else{
     r2_genes = NULL
   }
   
   #### write out formatted GReX files in MatrixEQTL format
-  format_GReX_for_association(GReX_dir, contexts_vec, r2_genes, tmp_dir)
+  if(is.null(GReX_dir)){
+    message("inferring GReX directory...")
+    GReX_dir = paste0(out_dir, "/GReXs/")
+  }
+  if(is.null(exp_files)){
+    if(regress_target_GReX == T){
+      message("inferring expression files with residualized target GReX and formatting.")
+      tmp_dir_regressed = paste0(out_dir_crocotel_lite, "/MEQTL_input/regressed_exp/")
+      dir.create(tmp_dir_regressed, showWarnings = F)
+      format_GReX_for_association(paste0(out_dir, "/exp_residualized_GReX/"), context, NULL, tmp_dir_regressed)
+    }else{
+      stop("You are running crocotel lite without regressing out GReX for each target. Please specify a vector of expression files in the `exp_files` parameter.")
+    }
+  }
+  format_GReX_for_association(GReX_dir, context, r2_genes, tmp_dir)
+    
   
   ### unchanging parameters across contexts
   geneloc = fread(geneloc_file, sep = "\t", data.table = F)
@@ -205,7 +213,19 @@ crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, context, outdir,
   SNP_file_name = paste0(tmp_dir, context, ".txt");
   
   # Gene expression file name
-  expression_file_name = paste0(exp_files_dir, context, ".txt");
+  if(!is.null(exp_files)){
+    pattern <- paste0("(^|[^A-Za-z0-9])", context, "([^A-Za-z0-9]|$)")
+    # Match against basenames
+    matching_file <- exp_files[grepl(pattern, basename(exp_files))]
+    # Check for match
+    if (length(matching_file) == 0) {
+      stop(paste0("No file found matching context exactly: ", context))
+    }
+    expression_file_name <- matching_file[1]
+  }else{
+    expression_file_name = paste0(tmp_dir_regressed, context, ".txt");
+  }
+  
   
   
   ## Load genotype data
@@ -259,7 +279,9 @@ crocotel_lite = function(GReX_dir, exp_files_dir, geneloc_file, context, outdir,
     min.pv.by.genesnp = FALSE,
     noFDRsaveMemory = FALSE);
   
-  outfile = paste0(outdir, context, ".", file_prefix)
+  output = me$all$eqtls
+  output = output %>% filter(snps != gene)
+  outfile = paste0(out_dir, context, ".", file_prefix)
   fwrite(me$all$eqtls, file = outfile, sep = "\t", quote = F)
   print(paste0("finished analysis association mapping for context ", context))
 }

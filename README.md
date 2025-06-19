@@ -58,17 +58,11 @@ create_GReXs(gene_name, out_dir,
 ### Step 2: Run regulator-target associations 
 ##### Option 1 (faster but less powerful): Lite version which tests all regulator-target pairs simultaneously in each context using ultra-fast linear regression 
 ```
-regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
-target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
-target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
-method = "Crocotel"
-contexts_vec = as.character(seq(0,9))
-regulator_gene_name = "gene1"
-target_gene_name = "gene2"
-target_cis_pred = TRUE
-outdir = "crocotile_example/trans_output/"
+out_dir="crocotel_example/"
+context = "0"
+geneloc_file = "crocotel_example/input_data/geneloc.txt"
 
-crocotel_lite(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, method, target_cis_pred, target_pred_exp_file)
+crocotel_lite()
 ```
 
 ##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair 
