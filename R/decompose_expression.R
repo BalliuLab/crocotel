@@ -3,7 +3,8 @@
 #' @export
 decompose_expression = function(exp_files, gene, context_thresh, data_dir){
   # Read expression matrix for Context t and merge with other Contexts 
-  contexts = sub("^.*/", "", exp_files)
+  contexts = basename(exp_files)
+  contexts = sub("\\..*", "", contexts)
   contexts = sub("*.txt", "", contexts)
   contexts = sub("*.tsv", "", contexts)
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
