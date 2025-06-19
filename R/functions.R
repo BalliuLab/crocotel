@@ -449,6 +449,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
           SNP = regulator,
           gene = target
         ) 
+    }
     fwrite(sub_df, outfile, sep = "\t")
   }
   
