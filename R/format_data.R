@@ -8,7 +8,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
   dir.create(out_dir, showWarnings = F)
   print("inferring context names from input expression files...")
   
-  contexts = sub("\\..*$", "", exp_files)
+  contexts = sub("\\..*$", "", basename(exp_files))
   print(paste0("inferred contexts are: ", paste(contexts, collapse = ", ")))
   
   gene_loc = fread(geneloc_file, sep = "\t", data.table = F)
