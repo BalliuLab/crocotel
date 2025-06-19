@@ -18,6 +18,17 @@ install.packages("http://bioinformatics.org/treeqtl/TreeQTL_2.0.tar.gz", repos =
 devtools::install_github("BalliuLab/crocotel", dependencies = TRUE)
 library(crocotel)
 ```
+### Preliminary step: Format the input data
+#### This step takes in input files formatted exactly as in MatrixEQTL (1 expression files for each context, 1 genotype file, 1 snpsloc file, and 1 geneloc file)
+```
+exp_files=list.files("crocotel_example/input_data/", pattern = ".exp.txt")
+geneloc_file="crocotel_example/input_data/geneloc.txt"
+snpsloc_file="crocotel_example/input_data/snpsloc.txt"
+genotypes_file="crocotel_example/input_data/all_genotypes.txt"
+out_dir="crocotel_example/"
+
+
+```
 
 ### Step 1: Build cis Genetically Regulated eXpression componentS (GReXs)
 #### This step builds cross-validated cis genetic predictors of expression for a gene across all contexts (e.g. cell types and tissues) using elastic net regularized regression.
