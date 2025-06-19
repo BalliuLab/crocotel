@@ -62,7 +62,7 @@ out_dir="crocotel_example/"
 context = "0"
 geneloc_file = "crocotel_example/input_data/geneloc.txt"
 
-crocotel_lite()
+crocotel_lite(context, geneloc_file, out_dir)
 ```
 
 ##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair 

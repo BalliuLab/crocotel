@@ -280,10 +280,14 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
     noFDRsaveMemory = FALSE);
   
   output = me$all$eqtls
-  output = output %>% filter(snps != gene)
-  outfile = paste0(out_dir, context, ".", file_prefix)
-  fwrite(me$all$eqtls, file = outfile, sep = "\t", quote = F)
+  output = output %>% filter(snps != gene) %>% rename(regulator = "snps", target = "gene")
+  outfile = paste0(out_dir_crocotel_lite, context, file_prefix)
+  fwrite(output, file = outfile, sep = "\t", quote = F)
   print(paste0("finished analysis association mapping for context ", context))
+  
+  ## remove uneeded directories
+  unlink(tmp_dir, recursive = T)
+  unlink(tmp_dir_regressed, recursive = T)
 }
 
 
