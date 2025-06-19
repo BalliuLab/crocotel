@@ -313,7 +313,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
     }else{
       stop("No valid input specified for target or regulator as top level.")
     }
-    sub_df %>% fwrite(file = paste0(tmp_dir, "all_pairs.", context, ".txt"), sep = "\t", na = NA)
+    sub_df %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", na = NA)
   }
   
   sub_df = fread(file, sep = "\t", data.table = F)
@@ -334,9 +334,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
   sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
     select(family, fam_p) %>% distinct() %>%
     fwrite(file = paste0(outdir, "n_tests_per_gene.", context, ".txt"), sep = ",")
-  
-  
-  
+
 }
 
 # Modified treeQTL function to get eGenes in a multi-context experiment
@@ -350,7 +348,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   tmp_dir = paste0(treeQTL_dir, "/treeQTL_tmp/")
   dir.create(tmp_dir, showWarnings = F)
   
-  
+  format_treeQTL(crocotel_dir, top_level, tmp_dir)
   
   crocotel_outfiles = list.files(tmp_dir, pattern = "all_gene_pairs", full.names = T)
   n_SNPs_per_gene_files = list.files(tmp_dir, pattern = "n_tests_per_gene", full.names = T)
@@ -371,7 +369,6 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
     gene_simes_cur_tissue <- merge(gene_simes_cur_tissue, n_SNPs_per_gene_this_tissue, by = "family", all = TRUE)
     gene_simes_cur_tissue$fam_p[which(is.na(gene_simes_cur_tissue$fam_p))] <- 1
     
-    #print("here")
     if (i == 1) {
       eGene_pvals <- gene_simes_cur_tissue[, c("family", "fam_p")]
       n_SNPs_per_gene_xT <- n_SNPs_per_gene_this_tissue
@@ -419,7 +416,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
                                                                    level3 = level3)
     
     print(paste("Total number of associations for context", cur_tissue_name, "=", sum(n_sel_per_gene$n_sel_snp)))
-    out_file_name <- paste0(outdir,"/eAssoc_by_gene.", cur_tissue_name, ".", exp_suffix,".txt")
+    out_file_name <- paste0(tmp_dir,"/eAssoc_by_gene.", cur_tissue_name, ".", exp_suffix,".txt")
     print(paste("Writing output file", out_file_name))
     if(nrow(n_sel_per_gene) == 0){
       input_df <- n_sel_per_gene
@@ -432,7 +429,28 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   eGene_xT_sel <- data.frame(gene = sel_eGenes_simes$gene, check.names = F)
   eGene_xT_sel <- cbind(eGene_xT_sel, rej_simes)
   names(eGene_xT_sel)[2:(n_tissue + 1)] <- contexts_vec
-  eGene_xT_sel
+  
+  
+  ## reformat eAssoc files and save to output directory
+  eAssoc_files = list.files(tmp_dir, pattern = "eAssoc_by_gene.", full.names = T)
+  for(file in eAssoc_files){
+    outfile_name = basename(file)
+    outfile = paste0(treeQTL_dir, "/", outfile_name)
+    sub_df = fread(file, sep = "\t", header = T, data.table = F)
+    if (top_level == "R"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = target,
+          gene = regulator
+        ) 
+    }else if(top_level == "T"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = regulator,
+          gene = target
+        ) 
+    fwrite(sub_df, outfile, sep = "\t")
+  }
   
   ### remove tmp directory
   unlink(tmp_dir, recursive = TRUE)
