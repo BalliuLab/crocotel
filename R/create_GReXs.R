@@ -80,8 +80,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   message("Reading in files...") 
   suppressWarnings(expr = {X<-fread(file = genotype_file, sep='\t', data.table=F, check.names = F)})
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))
-  
-  message("here")
+
   ###### read in expression and decompose - files are written out to decomposed exp directory
   decompose_expression(exp_files, gene_name, context_thresh, decomposition_dir)
   ## this assumes that the file name of decomposition dir is saved as "gene.context.etc" and shared is called "Average Context" (output of decompose function)
