@@ -19,12 +19,15 @@ devtools::install_github("BalliuLab/crocotel", dependencies = TRUE)
 library(crocotel)
 ```
 ### Preliminary step: Format the input data
-#### This step takes in input files formatted exactly as in MatrixEQTL (1 expression files for each context, 1 genotype file, 1 snpsloc file, and 1 geneloc file)
+#### This step takes in input files formatted exactly as in MatrixEQTL (1 expression file for each context, 1 genotype file, 1 snpsloc file, and 1 geneloc file)
+#### The output creates a directory called "crocotel_formatted_data/" inside the specified output directory with a subdirectory for the expression of each gene in each context. 
 ```
-exp_files=list.files("crocotel_example/input_data/", pattern = ".exp.txt")
+exp_files=list.files("crocotel_example/input_data/", pattern = ".exp.txt", full.names = T)
 geneloc_file="crocotel_example/input_data/geneloc.txt"
 snpsloc_file="crocotel_example/input_data/snpsloc.txt"
 genotypes_file="crocotel_example/input_data/all_genotypes.txt"
+
+# output directory where all crocotel final and intermediate output will be stored. Only set this directory once.
 out_dir="crocotel_example/"
 
 format_data(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir)
@@ -32,22 +35,17 @@ format_data(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir)
 
 ### Step 1: Build cis Genetically Regulated eXpression componentS (GReXs)
 #### This step builds cross-validated cis genetic predictors of expression for a gene across all contexts (e.g. cell types and tissues) using elastic net regularized regression.
+#### If the preliminary format data step was run, only the gene name and the crocotel "out_dir" set above is a required parameter. 
+#### Filenames can also be passed in for all parameters if they were not created by the above function. 
 
 #### example code for one gene:
 ```
-gene_name="gene1"
-expression_directory=paste0("crocotile_example/input_data/",gene_name,"/")
-exp_files = paste0(expression_directory, list.files(expression_directory))
-genotype_file = paste0("crocotile_example/input_data/",gene_name,"_genotypes.txt") # maybe change this one
-
-out_dir = "crocotile_example/"
-
 context_thresh = 3 # minimum # of contexts a gene has to have expression on 
 alpha = 0.5 # elastic net mixture parameter 
 num_folds = 10 # number of folds for cross-validation 
 method = "crocotel"
 
-create_GReXs(genotype_file, exp_files, out_dir, gene_name, context_thresh, alpha, num_folds, method)
+create_GReXs(gene_name, out_dir, context_thresh, alpha, num_folds, method)
 ```
 
 ### Step 2: Run regulator-target associations 

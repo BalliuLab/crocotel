@@ -5,6 +5,7 @@
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
 format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir, cis_window = 1e6){
+  out_dir = paste0(out_dir, "/crocotel_formatted_data/") 
   dir.create(out_dir, showWarnings = F)
   print("inferring context names from input expression files...")
   
@@ -28,7 +29,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
     file = exp_files[i]
     df = fread(file, sep = "\t", data.table = F)
     genes = df$gene_id
-    context = contexts[i]
+    context = sub("\\..*$", "", basename(file))
     for(gene in genes){
       #### get gene TSS position (start position of gene)
       names(gene_loc) = c("geneid", "chr", "s1", "s2")

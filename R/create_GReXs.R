@@ -41,24 +41,39 @@ regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
 
 #' Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
 #'
+#' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
+#' @param out_dir - output directory for GReXs
 #' @param genotype_file - a genotype file with the set of individuals in all Y_files and their corresponding cis-SNPs. Individuals are row names, no column names
 #' @param exp_files - vector with list of all expression files per context. The individuals (row names) must be a subset of genotype (genotype_file). Contains an unnamed
-#' @param out_dir - output directory for GReXs
-#' @param gene_name - identifier for current gene being run. Add this prefix to all the saved results files... necessary to distinguish results where more than one gene-analysis is run.
 #' @param context_thresh - minimum number of contexts to run crocotel on. 
 #' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
 #' @param num_folds - Number of folds for cross-validation
-#' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will buil GReXs in a context by context manner.
+#' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
+create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
-  dir.create(paste0(out_dir, "GReXs/"), showWarnings = F)
-  decomposition_dir = paste0(out_dir, "GReXs/", gene_name, "_decomposed/")
+  GReX_outdir = paste0(out_dir, "GReXs/")
+  dir.create(GReX_outdir, showWarnings = F)
+  decomposition_dir = paste0(GReX_outdir, gene_name, "_decomposed/")
   dir.create(decomposition_dir, showWarnings = F)
   message("Saving decomposed expression in ",  decomposition_dir)
-  message("Saving cross-validated predictors and performance metrics in ", paste0(out_dir, "GReXs/"))
+  message("Saving cross-validated predictors and performance metrics in ", GReX_outdir)
+  
+  if(is.null(genotype_file)){
+    genotype_file = paste0(out_dir, "/crocotel_formatted_data/",gene_name,"_genotypes.txt")
+    if(!file.exists(genotype_file)){
+      stop(paste0("genotype file not specified and inferred genotype file: ", genotype_file ," does not exit. exiting."))
+    }
+  }
+  if(is.null(exp_files)){
+    expression_directory=paste0(out_dir, "/crocotel_formatted_data/",gene_name,"/")
+    exp_files = list.files(expression_directory, full.names = T)
+    if(!file.exists(exp_files[1])){
+      stop(paste0("expression files not specified and inferred expression file: ", exp_files[1] ," does not exit. exiting."))
+    }
+  }
   
   message("Reading in files...") 
   suppressWarnings(expr = {X<-fread(file = genotype_file, sep='\t', data.table=F, check.names = F)})
@@ -91,7 +106,7 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
   }
   
   unlink(decomposition_dir, recursive = TRUE)
-  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, paste0(out_dir, "GReXs/"), gene_name, num_folds, alpha)
+  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
   ### residualise GReXs from target expression
@@ -111,7 +126,7 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
   }
   Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
   #fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
-  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, paste0(out_dir, "GReXs/"), gene_name)
+  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, GReX_outdir, gene_name)
   
   ### read in expression for gbat
   if(method == "cxc"){
@@ -131,7 +146,7 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
       }
     }
     gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
-    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, paste0(out_dir, "GReXs/"), gene_name, num_folds, alpha)
+    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
     Yhats_gbat = output_gbat[["Yhats_tiss"]]
     hom_expr_mat_gbat = output_gbat[["hom_expr_mat"]]
     
@@ -145,9 +160,9 @@ create_GReXs = function(genotype_file, exp_files, out_dir, gene_name, context_th
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
     Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
-    fwrite(Yhat_gbat_mat, file = paste0(out_dir, "GReXs/", gene_name,".cxc.predictors.txt"), sep = "\t")
+    fwrite(Yhat_gbat_mat, file = paste0(GReX_outdir, gene_name,".cxc.predictors.txt"), sep = "\t")
     
-    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, paste0(out_dir, "GReXs/"), gene_name)
+    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, GReX_outdir, gene_name)
   }
   message("Finished computing GReXs and evalutation metrics")
   
