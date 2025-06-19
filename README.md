@@ -27,7 +27,7 @@ snpsloc_file="crocotel_example/input_data/snpsloc.txt"
 genotypes_file="crocotel_example/input_data/all_genotypes.txt"
 out_dir="crocotel_example/"
 
-
+format_data(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir)
 ```
 
 ### Step 1: Build cis Genetically Regulated eXpression componentS (GReXs)

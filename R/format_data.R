@@ -41,7 +41,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       # get cis-SNP genotypes for this gene
       gene_genotypes = get_gene_genotypes(chrom, upstream_pos, downstream_pos, snps_loc, genotypes)
       
-      dir.create(paste0(outdir, gene), showWarnings = F)
+      dir.create(paste0(out_dir, gene), showWarnings = F)
       gene_df = df %>% filter(gene_id == gene)
       gene_df = gene_df[,-1]
       gene_df = data.frame(t(gene_df))
