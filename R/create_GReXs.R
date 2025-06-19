@@ -1,6 +1,6 @@
 
 
-regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
+regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
   dir.create(paste0(outdir, "exp_residualized_GReX/"))
   all_residuals = NULL
   for(file in exp_files){
@@ -32,10 +32,9 @@ regress_target_GReX = function(exp_files, Yhats_tiss, outdir){
     } else {
       all_residuals = merge(all_residuals, sub_df, by = "id", all = TRUE)
     }
-    outfile = paste0(outdir, "exp_residualized_GReX/", context, ".crocotel.GReX_residuals.txt")
-    fwrite(all_residuals, outfile, sep = "\t", quote = F)
   }
-  
+  outfile = paste0(outdir, "exp_residualized_GReX/", gene_name, ".crocotel.GReX_residuals.txt")
+  fwrite(all_residuals, outfile, sep = "\t", quote = F)
 }
 
 
@@ -112,7 +111,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
   ### residualise GReXs from target expression
-  regress_target_GReX(exp_files, Yhats_tiss, out_dir)
+  regress_target_GReX(gene_name, exp_files, Yhats_tiss, out_dir)
   
   ## combine Yhats_tiss into large dataframe with individuals as rows and contexts as columns:
   Yhat_tiss_mat<-matrix(NA, nrow = nrow(X), ncol=length(contexts_vec))
