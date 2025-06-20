@@ -379,7 +379,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   for(file in eAssoc_files){
     outfile_name = basename(file)
     outfile = paste0(out_dir, "/", outfile_name)
-    sub_df = fread(file, sep = "\t", header = T, data.table = F)
+    sub_df = fread(file, sep = " ", header = T, data.table = F)
     if (top_level == "R"){
       sub_df = sub_df %>%
         rename(
