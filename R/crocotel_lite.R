@@ -105,7 +105,7 @@ get_trans_genes = function(gene, geneloc_file, trans_threshold){
 }
 
 format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
-  plan(multisession, workers = parallel::detectCores() - 1)
+  plan(multisession, workers = 1)
   
   ### change this after changing other functions
   files = list.files(GReX_dir, pattern = "GReX")

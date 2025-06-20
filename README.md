@@ -67,7 +67,7 @@ crocotel_lite(context, geneloc_file, out_dir)
 
 ##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair 
 ```
-regulator_pred_exp_file = "crocotile_example/GReXs/gene1.cstem.full_predictors.txt"
+regulator_pred_exp_file = "crocotile_example/GReXs/gene1.crocotel.full_predictors.txt"
 target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
 target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
 contexts_vec = as.character(seq(0,9))
@@ -80,13 +80,10 @@ crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_
 ```
 
 ### Step 3: Multiple testing correction
-#### example using crocotel lmm output
+#### example using crocotel lite output
 ```
-crocotel_sum_stats = "crocotile_example/all_gene_pairs.crocotel_lmm.txt"
-contexts_vec = as.character(seq(0,9))
-fdr_thresh = 0.05
-outdir = "crocotile_example/treeQTL_output/"
-method = "mashr"
+crocotel_dir = "crocotel_example/crocotel_lite_output/"
+out_dir = "crocotel_example"
 
 multiple_testing_correction(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir, method)
 

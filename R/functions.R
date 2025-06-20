@@ -314,26 +314,26 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
       stop("No valid input specified for target or regulator as top level.")
     }
     sub_df %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", na = NA)
+    
+    sub_df = fread(file, sep = "\t", data.table = F)
+    if (top_level == "R"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = target,
+          gene = regulator
+        ) 
+    }else if(top_level == "T"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = regulator,
+          gene = target
+        ) 
+    }
+    
+    sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
+      select(family, fam_p) %>% distinct() %>%
+      fwrite(file = paste0(outdir, "n_tests_per_gene.", context, ".txt"), sep = ",")
   }
-  
-  sub_df = fread(file, sep = "\t", data.table = F)
-  if (top_level == "R"){
-    sub_df = sub_df %>%
-      rename(
-        SNP = target,
-        gene = regulator
-      ) 
-  }else if(top_level == "T"){
-    sub_df = sub_df %>%
-      rename(
-        SNP = regulator,
-        gene = target
-      ) 
-  }
-  
-  sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
-    select(family, fam_p) %>% distinct() %>%
-    fwrite(file = paste0(outdir, "n_tests_per_gene.", context, ".txt"), sep = ",")
 
 }
 
