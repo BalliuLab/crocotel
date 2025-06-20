@@ -383,14 +383,14 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
     if (top_level == "R"){
       sub_df = sub_df %>%
         rename(
-          SNP = target,
-          gene = regulator
+          target = SNP,
+          regulator = gene
         ) 
     }else if(top_level == "T"){
       sub_df = sub_df %>%
         rename(
-          SNP = regulator,
-          gene = target
+          regulator = SNP,
+          target = gene
         ) 
     }
     fwrite(sub_df, outfile, sep = "\t")
