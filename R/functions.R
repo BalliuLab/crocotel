@@ -253,7 +253,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
     }else{
       stop("No valid input specified for target or regulator as top level.")
     }
-    sub_df %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", na = NA)
+    sub_df %>% select(SNP, gene, statistic, pvalue, FDR, beta) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", na = NA)
     
     sub_df = fread(file, sep = "\t", data.table = F)
     if (top_level == "R"){
