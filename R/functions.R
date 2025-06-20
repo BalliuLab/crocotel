@@ -255,7 +255,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
     }else{
       stop("No valid input specified for target or regulator as top level.")
     }
-    sub_df %>% select(SNP, gene, beta, tstat, pvalue, FDR) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", na = NA)
+    sub_df %>% select(SNP, gene, beta, tstat, pvalue, FDR) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", quote = F, na = NA)
     
     sub_df = fread(file, sep = "\t", data.table = F)
     if (top_level == "R"){
@@ -274,7 +274,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
     
     sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
       select(family, fam_p) %>% distinct() %>%
-      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",")
+      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
   }
 
 }
@@ -296,7 +296,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   sprintf("Proceeding with %i tests per gene files", length(n_SNPs_per_gene_files))
   
   contexts_vec = sub("\\..*", "", basename(list.files(crocotel_dir)))
-  print(paste0("inferred contexts: ", paste(contexts_vec, sep = ",")))
+  print(paste("inferred contexts:", paste(contexts_vec, collapse = ",")))
   n_tissue <- length(contexts_vec)
   for (i in 1:n_tissue) {
     cur_tissue_name <- contexts_vec[i]
