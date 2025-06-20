@@ -233,66 +233,6 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
   
 }
 
-# function to format Crocotel summary stat ouput file into a format that can be input into treeQTL
-format_treeQTL_old = function(input_file, outdir, top_level){
-  df = fread(input_file, sep = "\t", data.table = F)
-  
-  df %>%
-    group_by(context) %>%
-    arrange(pvalue) %>%
-    group_split() %>%
-    purrr::walk(function(sub_df) {
-      group_name <- unique(sub_df$context)
-      if (top_level == "R"){
-        sub_df = sub_df %>%
-          rename(
-            SNP = target,
-            gene = regulator,
-            t.stat = se,
-            p.value = pvalue
-          ) 
-      }else if(top_level == "T"){
-        sub_df = sub_df %>%
-          rename(
-            SNP = regulator,
-            gene = target,
-            t.stat = se,
-            p.value = pvalue
-          ) 
-      }else{
-        stop("No valid input specified for target or regulator as top level.")
-        }
-      
-      sub_df%>% mutate(FDR = NA) %>% select(SNP, gene, beta, t.stat, p.value, FDR) %>% filter(p.value <= 0.05) %>%
-        fwrite(file = paste0(outdir, "all_gene_pairs.", group_name, ".txt"), sep = "\t", na = NA)
-    })
-  
-  df %>%
-    group_by(context) %>%
-    group_split() %>%
-    purrr::walk(function(sub_df) {
-      group_name <- unique(sub_df$context)
-      
-      if (top_level == "R"){
-        sub_df = sub_df %>%
-          rename(
-            SNP = target,
-            gene = regulator
-          ) 
-      }else if(top_level == "T"){
-        sub_df = sub_df %>%
-          rename(
-            SNP = regulator,
-            gene = target
-          ) 
-      }
-      
-      sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
-        select(family, fam_p) %>% distinct() %>%
-        fwrite(file = paste0(outdir, "n_tests_per_gene.", group_name, ".txt"), sep = ",")
-    })
-}
-
 format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
   files = list.files(crocotel_dir, full.names = T)
   for(file in files){
@@ -332,7 +272,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
     
     sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
       select(family, fam_p) %>% distinct() %>%
-      fwrite(file = paste0(outdir, "n_tests_per_gene.", context, ".txt"), sep = ",")
+      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",")
   }
 
 }
