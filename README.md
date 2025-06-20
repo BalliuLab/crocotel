@@ -57,6 +57,7 @@ create_GReXs(gene_name, out_dir,
 
 ### Step 2: Run regulator-target associations 
 ##### Option 1 (faster but less powerful): Lite version which tests all regulator-target pairs simultaneously in each context using ultra-fast linear regression 
+##### The p-value output threshold 
 ```
 out_dir="crocotel_example/"
 context = "0"
@@ -81,11 +82,12 @@ crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_
 
 ### Step 3: Multiple testing correction
 #### example using crocotel lite output
+
 ```
 crocotel_dir = "crocotel_example/crocotel_lite_output/"
-out_dir = "crocotel_example"
+out_dir = "crocotel_example/"
 
-multiple_testing_correction(crocotel_sum_stats, contexts_vec, fdr_thresh, outdir, method)
+multiple_testing_correction(crocotel_dir, out_dir)
 
 ```
 
