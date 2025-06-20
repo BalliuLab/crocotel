@@ -283,9 +283,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   print(paste("Step 0.1: Computing summary statistics for each context"))
   
   ### set up summary stats per context and number of tests per context
-  treeQTL_dir = paste0(out_dir, "/treeQTL_output/")
-  dir.create(treeQTL_dir, showWarnings = F)
-  tmp_dir = paste0(treeQTL_dir, "/treeQTL_tmp/")
+  tmp_dir = paste0(out_dir, "/treeQTL_tmp/")
   dir.create(tmp_dir, showWarnings = F)
   
   format_treeQTL(crocotel_dir, top_level, tmp_dir)
@@ -376,7 +374,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   eAssoc_files = list.files(tmp_dir, pattern = "eAssoc_by_gene.", full.names = T)
   for(file in eAssoc_files){
     outfile_name = basename(file)
-    outfile = paste0(treeQTL_dir, "/", outfile_name)
+    outfile = paste0(out_dir, "/", outfile_name)
     sub_df = fread(file, sep = "\t", header = T, data.table = F)
     if (top_level == "R"){
       sub_df = sub_df %>%
