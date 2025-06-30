@@ -81,13 +81,25 @@ crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_
 ```
 
 ### Step 3: Multiple testing correction
-#### example using crocotel lite output
+#### example using crocotel lite output with treeQTL:
+
 
 ```
+method = "treeQTL"
 crocotel_dir = "crocotel_example/crocotel_lite_output/"
 out_dir = "crocotel_example/"
 
-multiple_testing_correction(crocotel_dir, out_dir)
+multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method)
+
+```
+
+#### example using crocotel lite output with mashr:
+```
+method = "mashr"
+crocotel_dir = "crocotel_example/crocotel_lite_output/"
+out_dir = "crocotel_example/"
+
+multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method)
 
 ```
 

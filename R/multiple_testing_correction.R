@@ -159,6 +159,6 @@ multiple_testing_correction = function(crocotel_dir, out_dir, fdr_thresh = 0.05,
       filter(p.value <= 0.05) %>% select(regulator, target, beta, se, p.value) %>%
       arrange(p.value)
     
-    fwrite(sig_results, file = paste0(outdir, output_prefix, ".", exp_suffix, ".txt"))
+    fwrite(sig_results, file = paste0(method_outdir, output_prefix, ".", exp_suffix, ".txt"))
   }
 }
