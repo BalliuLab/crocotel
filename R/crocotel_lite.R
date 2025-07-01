@@ -75,12 +75,6 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   tmp_dir = paste0(out_dir_crocotel_lite, "/MEQTL_input/")
   dir.create(tmp_dir, showWarnings = F)
   
-  if(!is.null(r2_thresh)){
-    r2_genes = get_genes_passing_r2(GReX_dir, r2_thresh)
-  }else{
-    r2_genes = NULL
-  }
-  
   #### write out formatted GReX files in MatrixEQTL format
   if(is.null(GReX_dir)){
     message("inferring GReX directory...")
@@ -96,6 +90,13 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
       stop("You are running crocotel lite without regressing out GReX for each target. Please specify a vector of expression files in the `exp_files` parameter.")
     }
   }
+  
+  if(!is.null(r2_thresh)){
+    r2_genes = get_genes_passing_r2(GReX_dir, r2_thresh)
+  }else{
+    r2_genes = NULL
+  }
+  
   format_GReX_for_association(GReX_dir, context, r2_genes, tmp_dir)
     
   

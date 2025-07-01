@@ -19,36 +19,55 @@ get_target_exp = function(target_exp_files, contexts_vec){
 }
 
 #' @export
-crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred = F, target_pred_exp_file, r2_thresh = NULL, regulator_r2_file = NULL, context_dependence = F){
-  dir.create(outdir, showWarnings = F)
+crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_exp_file = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, context_dependence = F){
+  out_dir_crocotel_lmm = paste0(out_dir, "/crocotel_lmm_output/")
+  dir.create(out_dir_crocotel_lmm, showWarnings = F)
+  
+  if(is.null(GReX_dir)){
+    message("inferring GReX directory and regulator GReX file...")
+    GReX_dir = paste0(out_dir, "/GReXs/")
+    regulator_pred_exp_file = list.files(GReX_dir, pattern = paste0(regulator_gene_name, ".crocotel.GReX_predictors.txt"), full.names = T)
+  }
+  if(is.null(target_exp_file)){
+    if(regress_target_GReX == T){
+      message("inferring expression files with residualized target GReX and formatting.")
+      target_exp_file = list.files(paste0(out_dir, "/exp_residualized_GReX/"), pattern = paste0(target_gene_name, ".crocotel.GReX_residuals.txt"), full.names = T)
+    }else{
+      stop("You are running crocotel lmm without regressing out GReX for each target. Cannot infer expression of the target. Please specify an expression file for the target_exp_file parameter.")
+    }
+  }
+  
   ## get target expression across all contexts
-  target_output = get_target_exp(target_exp_files, contexts_vec)
-  target_exp_mat = target_output[[1]]
+  target_output = fread(target_exp_file, sep = "\t", data.table = F, header = T)
+  target_exp_mat = pivot_longer(target_output, cols = -id, names_to = "context", values_to = "target_exp")
+  
   regulator_exp_mat = fread(regulator_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
   ###### get contexts present for regulator and for target
   regulator_contexts = names(regulator_exp_mat)
-  target_contexts = target_output[[2]]
+  target_contexts = unique(target_exp_mat$context)
   intersected_contexts = intersect(regulator_contexts, target_contexts)
   
   ###### subset regulator and target expression matrices to only include intersected contexts
   regulator_exp_mat = regulator_exp_mat %>% pivot_longer(cols = intersected_contexts,
                                                          names_to = "context",
                                                          values_to = "regulator_pred" )
-  
-  ################################################################################
-  ##### TAKE THIS OUT AFTER FIXING AVERAGE CONTEXT IN PREDICTOR FILE #############
-  ################################################################################
-  regulator_exp_mat = regulator_exp_mat %>% select(id, context, regulator_pred)
   target_exp_mat = target_exp_mat %>% filter(context %in% intersected_contexts)
   
   if(!is.null(r2_thresh)){
+    regulator_r2_file = list.files(paste0(out_dir, "/GReXs/"), pattern = paste0(regulator_gene_name, ".crocotel.crossval_r2.txt"), full.names = T)
     regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F, header = T)
     ### checks that at least one contexts has r2 > threshold
     r2 = max(regulator_r2$full_cv_r2s, na.rm = T) < r2_thresh
     if(r2){
-      print("Regulator GReX did not pass specified R2 threshold in any context. Not running Crocotel for this target regulator pair.")
+      print("Regulator GReX did not pass specified R2 threshold in any context. Not running Crocotel for this regulator-target pair.")
       return(NULL)
     }
+  }
+  
+  if(regress_target_GReX){
+    file_prefix = ".crocotel_lmm_regress.txt"
+  }else{
+    file_prefix = ".crocotel_lmm.txt"
   }
   
   if(length(intersected_contexts) < 3){
@@ -62,98 +81,60 @@ crocotel_lmm = function(regulator_pred_exp_file, target_exp_files, contexts_vec,
       regulator_exp_vec = regulator_exp_mat %>% filter(context == context_name) %>% select(id, regulator_pred)
       names(regulator_exp_vec) = c("id", "regulator_pred")
       
-      if (target_cis_pred) {
-        target_cis_pred_vec = target_cis_pred_mat %>% filter(context == context_name) %>% select(id, target_cis_pred)
-        names(target_cis_pred_vec) = c("id", "target_pred")
-        lm_df = target_exp_vec %>%
-          full_join(regulator_exp_vec, by = "id") %>%
-          full_join(target_cis_pred_vec, by = "id")
-        trans_model <- lm(lm_df[,"target_exp"] ~ lm_df[,"regulator_pred"] + lm_df[,"target_pred"])
-        summary_model <- summary(trans_model)
-        regulator_pvalue <- summary_model$coefficients[2, 4]
-        regulator_beta = summary_model$coefficients[2, 1]
-        regulator_se = summary_model$coefficients[2,2]
-        regulator_tstat = summary_model$coefficients[2,3]
-        #target_pvalue <- summary_model$coefficients[3, 4]
-        #df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)#, target_pvalue))
-        df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, context = context_name)#, target_pvalue))
-      } else {
-        lm_df = target_exp_vec %>%
-          full_join(regulator_exp_vec, by = "id")
-        trans_model <- lm(lm_df[,"target_exp"] ~ lm_df[,"regulator_pred"])
-        summary_model <- summary(trans_model)
-        regulator_pvalue <- summary_model$coefficients[2, 4]
-        regulator_beta = summary_model$coefficients[2, 1]
-        regulator_se = summary_model$coefficients[2,2]
-        #df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)
-        df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, context = context_name)
-      }
+      lm_df = target_exp_vec %>%
+        full_join(regulator_exp_vec, by = "id")
+      trans_model <- lm(lm_df$target_exp ~ lm_df$regulator_pred)
+      summary_model <- summary(trans_model)
+      regulator_pvalue <- summary_model$coefficients[2, 4]
+      regulator_beta = summary_model$coefficients[2, 1]
+      regulator_se = summary_model$coefficients[2,2]
+      #df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)
+      df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, context = context_name)
     }))
-  }else{
-    print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name))
-    # get target cis predicted expression across all contexts
-    target_cis_pred_mat = fread(target_pred_exp_file, sep = "\t", data.table = F, check.names = F, header = T)
-    target_cis_pred_mat = target_cis_pred_mat %>% pivot_longer(cols = -id,
-                                                               names_to = "context",
-                                                               values_to = "target_cis_pred")
     
+    for(cur_context in intersected_contexts){
+      context_df = output_df %>% filter(context == cur_context) %>% select(-context)
+      fwrite(context_df, file = paste0(out_dir_crocotel_lmm, cur_context, ".", regulator_gene_name, "_", target_gene_name, file_prefix),
+             sep = "\t", quote = F)
+    }
+  }else{
+    print(paste("Running Crocotel lmm for gene pair ", regulator_gene_name, " and ", target_gene_name, " in contexts ", paste0(intersected_contexts, collapse = ",")))
     #### build dataframe to run trans model - makes sure that all IDs are in the same order across vectors.
     trans_model_df = target_exp_mat %>%
-      full_join(regulator_exp_mat, by = c("id", "context")) %>%
-      full_join(target_cis_pred_mat, by = c("id", "context"))
+      full_join(regulator_exp_mat, by = c("id", "context"))
     trans_model_df$id = factor(trans_model_df$id)
     trans_model_df$context = factor(trans_model_df$context)
-    
-    # setup pvalue matricies for target and regulator cis-predicted expression
-    # pvalue matrix for cis-genetic predicted target associations with simulated trans expression
-    target_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(intersected_contexts)+1), check.names = F)
-    names(target_assoc_pvalues) = c("target_gene", intersected_contexts)
-    # pvalue matrix for cis-genetic predicted regulator associations with simulated trans expression
-    regulator_assoc_pvalues = data.frame(matrix(0, nrow = 1, ncol = length(intersected_contexts)+2), check.names = F)
-    names(regulator_assoc_pvalues) = c("target_gene", "regulator_gene", intersected_contexts)
-    
     ref_context = intersected_contexts[1]
     trans_model_df$context <- relevel(factor(trans_model_df$context), ref = ref_context)
-    if(target_cis_pred){
-      trans_model <- suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + target_cis_pred + context + 
-                            regulator_pred:context + target_cis_pred:context + (1 | id), data = trans_model_df)))
-      if(context_dependence){
-        print(paste("Assessing r2 of regulator GReX by context interaction for gene pair ", regulator_gene_name, " and ", target_gene_name, " in context ", context_name))
-        null_model = suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + target_cis_pred + context + target_cis_pred:context + (1 | id), data = trans_model_df)))
-        context_dependence_pval = anova(trans_model, null_model, test = "LRT")[2,"Pr(>Chisq)"]
-        r2_null = r.squaredGLMM(null_model)[,"R2m"]
-        r2_full = r.squaredGLMM(trans_model)[,"R2m"]
-        
-        # Calculate how much variance the interaction explains:
-        delta_r2 <- r2_full - r2_null
-        context_dependence_df = data.frame(r2 = delta_r2, pvalue = context_dependence_pval)
-        fwrite(context_dependence_df, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, ".reg_GReX_by_context_interaction_r2.txt"),  sep = "\t")
-      }
-      # extract marginal trends for each predicted exp
-      #reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% mutate(FDR = NA) %>% select(regulator_pred.trend, std.error, p.value, FDR, context)
-      #names(reg_marginal_trends) = c("beta", "se", "pvalue", "FDR", "context")
-      reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% select(regulator_pred.trend, std.error, p.value, context)
-      names(reg_marginal_trends) = c("beta", "se", "pvalue", "context")
-      target_marginal_trends <- suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "target_cis_pred"))) %>% tidy()
-      output_df = cbind(target = target_gene_name, regulator = regulator_gene_name, reg_marginal_trends)
-    } else {
-      trans_model <- suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + context + 
-                            regulator_pred:context + (1 | id), data = trans_model_df)))
-      # extract marginal trends for each predicted exp
-      reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% select(regulator_pred.trend, std.error, p.value, context)
-      names(reg_marginal_trends) = c("beta", "se", "pvalue", "context")
-      output_df = cbind(target = target_gene_name, regulator = regulator_gene_name, reg_marginal_trends)
+
+    trans_model <- suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + context + 
+                          regulator_pred:context + (1 | id), data = trans_model_df)))
+    if(context_dependence){
+      print(paste("Assessing r2 of regulator GReX by context interaction for gene pair ", regulator_gene_name, " and ", target_gene_name))
+      null_model = suppressMessages(suppressWarnings(lmer(target_exp ~ regulator_pred + context + (1 | id), data = trans_model_df)))
+      context_dependence_pval = anova(trans_model, null_model, test = "LRT")[2,"Pr(>Chisq)"]
+      r2_null = r.squaredGLMM(null_model)[,"R2m"]
+      r2_full = r.squaredGLMM(trans_model)[,"R2m"]
+      
+      # Calculate how much variance the interaction explains:
+      delta_r2 <- r2_full - r2_null
+      context_dependence_df = data.frame(r2 = delta_r2, pvalue = context_dependence_pval)
+      fwrite(context_dependence_df, file = paste0(out_dir_crocotel_lmm, regulator_gene_name, "_", target_gene_name, ".reg_GReX_by_context_interaction_r2.", file_prefix),  sep = "\t")
+    }
+    # extract marginal trends for each predicted exp
+    #reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% mutate(FDR = NA) %>% select(regulator_pred.trend, std.error, p.value, FDR, context)
+    #names(reg_marginal_trends) = c("beta", "se", "pvalue", "FDR", "context")
+    reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% select(regulator_pred.trend, std.error, p.value, context)
+    names(reg_marginal_trends) = c("beta", "se", "pvalue", "context")
+    output_df = cbind(regulator = regulator_gene_name, target = target_gene_name, reg_marginal_trends)
+    contexts = unique(output_df$context)
+    for(cur_context in contexts){
+      context_df = output_df %>% filter(context == cur_context) %>% select(-context)
+      fwrite(context_df, file = paste0(out_dir_crocotel_lmm, cur_context, ".", regulator_gene_name, "_", target_gene_name, file_prefix),
+             sep = "\t", quote = F)
     }
   }
-  
-  if(target_cis_pred){
-    file_prefix = ".cis_crocotel_lmm.txt"
-  }else{
-    file_prefix = ".crocotel_lmm.txt"
-  }
-  
-  fwrite(output_df, file = paste0(outdir, regulator_gene_name, "_", target_gene_name, file_prefix),  sep = "\t")
-  return(output_df)
+  print("Finished running crocotel lmm for this pair.")
 }
 
 
