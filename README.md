@@ -66,19 +66,22 @@ geneloc_file = "crocotel_example/input_data/geneloc.txt"
 crocotel_lite(context, geneloc_file, out_dir)
 ```
 
-##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair 
+##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair
 ```
-regulator_pred_exp_file = "crocotile_example/GReXs/gene1.crocotel.full_predictors.txt"
-target_pred_exp_file = "crocotile_example/GReXs/gene2.cstem.full_predictors.txt"
-target_exp_files = list.files("crocotile_example/input_data/gene2/", full.names = T)
-contexts_vec = as.character(seq(0,9))
+
 regulator_gene_name = "gene1"
 target_gene_name = "gene2"
-target_cis_pred = TRUE
-outdir = "crocotile_example/trans_output/"
+out_dir = "crocotel_example/"
 
-crocotel_lmm(regulator_pred_exp_file, target_exp_files, contexts_vec, regulator_gene_name, target_gene_name, outdir, target_cis_pred, target_pred_exp_file)
+crocotel_lmm(regulator_gene_name = regulator_gene_name, target_gene_name = target_gene_name, out_dir = out_dir)
 ```
+
+##### The implementation of crocotel lmm requires user parallelization to run across all regulator-target pairs. Once association for all pairs is run, use the shell command below to format the output for multiple testing correction.
+
+```
+
+```
+
 
 ### Step 3: Multiple testing correction
 #### example using crocotel lite output with treeQTL:

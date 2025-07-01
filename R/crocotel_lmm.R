@@ -1,23 +1,4 @@
 
-get_target_exp = function(target_exp_files, contexts_vec){
-  contexts = c()
-  for(cur_context in contexts_vec){
-    cur_file = target_exp_files[grepl(paste0("/",cur_context), target_exp_files)]
-    if(length(cur_file) !=0){
-      contexts = c(contexts, cur_context)
-    }
-  }
-  targ_exp = bind_rows(lapply(contexts_vec, function(cur_context){
-    cur_file = target_exp_files[grepl(paste0("/",cur_context), target_exp_files)]
-    if(length(cur_file) !=0){
-      df = fread(cur_file, sep = "\t", data.table = F, check.names = F)
-      names(df) = c("id", "target_exp")
-      df = df %>% mutate(context = cur_context) %>% select(id, context, target_exp)
-    }
-  }))
-  return(list(targ_exp, contexts))
-}
-
 #' @export
 crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_exp_file = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, context_dependence = F){
   out_dir_crocotel_lmm = paste0(out_dir, "/crocotel_lmm_output/")
