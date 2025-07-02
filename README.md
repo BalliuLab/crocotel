@@ -76,10 +76,12 @@ out_dir = "crocotel_example/"
 crocotel_lmm(regulator_gene_name = regulator_gene_name, target_gene_name = target_gene_name, out_dir = out_dir)
 ```
 
-##### The implementation of crocotel lmm requires user parallelization to run across all regulator-target pairs. Once association for all pairs is run, use the shell command below to format the output for multiple testing correction.
+##### The implementation of crocotel lmm requires user parallelization to run across all regulator-target pairs. Once association for all pairs is run, use this function to concatenate output files for multiple testing correction
 
 ```
-
+out_dir = "crocotel_example/"
+regress_target_GReX = T
+concat_crocotel_lmm_files <- function(directory = out_dir, regress_target_GReX = regress_target_GReX)
 ```
 
 

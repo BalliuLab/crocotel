@@ -401,6 +401,37 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   return(eGene_xT_sel)
 }
 
+concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = T) {
+  bash_script <- sprintf('
+    cd "%s"
+    cd "crocotel_lmm_output/"
+    tmp_outdir="tmp_files/"
+    mkdir $tmp_outdir
+    file_suffix="crocotel_lmm.txt"
+    if ([ $regress_target_GReX == true ]); then
+      file_suffix=".crocotel_lmm_regress.txt"
+    fi
+    for prefix in $(ls *${file_suffix} | cut -d. -f1 | sort -u); do
+      out_file="${prefix}${file_suffix}"
+      first=1
+      for file in ${prefix}.*${file_prefix}; do
+        if [ $first -eq 1 ]; then
+          cat "$file" > "$tmp_outdir$out_file"
+          first=0
+        else
+          tail -n +2 "$file" >> "$tmp_outdir$out_file"
+        fi
+      rm $file
+      done
+      mv $tmp_outdir/* .
+      echo "Wrote $out_file"
+    done
+    rmdir $tmp_outdir
+  ', normalizePath(directory, mustWork = TRUE))
+  
+  system(bash_script)
+}
+
 
   
   
