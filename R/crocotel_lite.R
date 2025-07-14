@@ -195,7 +195,9 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   
   ## remove uneeded directories
   unlink(tmp_dir, recursive = T)
-  unlink(tmp_dir_regressed, recursive = T)
+  if (dir.exists(tmp_dir)) {
+    unlink(tmp_dir_regressed, recursive = TRUE)
+  }
 }
 
 
