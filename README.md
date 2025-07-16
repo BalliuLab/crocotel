@@ -81,7 +81,7 @@ crocotel_lmm(regulator_gene_name = regulator_gene_name, target_gene_name = targe
 ```
 out_dir = "crocotel_example/"
 regress_target_GReX = T
-concat_crocotel_lmm_files <- function(directory = out_dir, regress_target_GReX = regress_target_GReX)
+concat_crocotel_lmm_files(directory = out_dir, regress_target_GReX = regress_target_GReX)
 ```
 
 
@@ -93,8 +93,9 @@ concat_crocotel_lmm_files <- function(directory = out_dir, regress_target_GReX =
 method = "treeQTL"
 crocotel_dir = "crocotel_example/crocotel_lite_output/"
 out_dir = "crocotel_example/"
+top_level = "R"
 
-multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method)
+multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method, top_level = top_level)
 
 ```
 

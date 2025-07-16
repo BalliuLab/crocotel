@@ -118,6 +118,31 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
   print("Finished running crocotel lmm for this pair.")
 }
 
+#' @export
+format_original_expression_crocotel_lmm = function(workdir, out_dir){
+  gene_dirs = list.dirs(path = workdir, full.names = T, recursive = F)
+  
+  for (gene_dir in gene_dirs) {
+    gene_id = basename(gene_dir)
+    contexts = list.files(path = gene_dir, full.names = T)
+    context_dfs = list()
+    
+    for (context_file in contexts) {
+      context_id = basename(context_file)
+      context_id = sub("\\..*", "", context_id)
+      df = fread(context_file, header = FALSE, sep = "\t", stringsAsFactors = FALSE, data.table = F, check.names = F)
+      colnames(df) = c("id", context_id)
+      context_dfs[[context_id]] = df
+    }
+    
+    # Merge all context data.frames by sample ID
+    merged_df <- Reduce(function(x, y) merge(x, y, by = "id", all = TRUE), context_dfs)
+    
+    out_file = paste0(out_dir, paste0(gene_id, "_expression.txt"))
+    fwrite(merged_df, file = out_file, sep = "\t", row.names = FALSE, quote = FALSE)
+  }
+}
+
 
 
 #regulator_pred_exp_file = "/u/scratch/l/lkrocken/crocotile_example/GReXs/gene1.cstem.full_predictors.txt"

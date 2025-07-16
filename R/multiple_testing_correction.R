@@ -175,7 +175,7 @@ concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = T) 
       file_suffix=".crocotel_lmm_regress.txt"
     fi
     for prefix in $(ls *${file_suffix} | cut -d. -f1 | sort -u); do
-      out_file="${prefix}${file_suffix}"
+      out_file="${prefix}.${file_suffix}"
       first=1
       for file in ${prefix}.*${file_prefix}; do
         if [ $first -eq 1 ]; then
