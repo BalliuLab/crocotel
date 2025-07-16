@@ -164,45 +164,46 @@ multiple_testing_correction = function(crocotel_dir, out_dir, fdr_thresh = 0.05,
 }
 
 #' @export
-concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = T) {
+concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = TRUE) {
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
     tmp_outdir="tmp_files/"
-    mkdir $tmp_outdir
+    mkdir -p "$tmp_outdir"
     file_suffix="crocotel_lmm.txt"
-    if ([ $regress_target_GReX == true ]); then
+    if [ "$regress_target_GReX" = true ]; then
       file_suffix=".crocotel_lmm_regress.txt"
     fi
+
     for prefix in $(ls *${file_suffix} | cut -d. -f1 | sort -u); do
       out_file="${prefix}.${file_suffix}"
+      tmp_merged="${tmp_outdir}${out_file}"
       first=1
-      for file in ${prefix}.*${file_prefix}; do
+      for file in ${prefix}.*${file_suffix}; do
         if [ $first -eq 1 ]; then
-          cat "$file" > "$tmp_outdir$out_file"
+          cat "$file" > "$tmp_merged"
           first=0
         else
-          tail -n +2 "$file" >> "$tmp_outdir$out_file"
+          tail -n +2 "$file" >> "$tmp_merged"
         fi
-      rm $file
+        rm "$file"
       done
-      mv $tmp_outdir/* .
-      echo "Wrote $out_file"
-      
-      # Sort the file by p-value (assumes `p.value` is the column header)
+
+      # Sort by 6th column (p-value) ascending, keeping header
       header=$(head -n 1 "$tmp_merged")
-      tail -n +2 "$tmp_merged" | sort -k5,5g > "${tmp_merged}.sorted"
-      echo "$header" | cat - "${tmp_merged}.sorted" > "${tmp_outdir}${out_file}"
-    
-      rm "${tmp_merged}" "${tmp_merged}.sorted"
-      mv "${tmp_outdir}${out_file}" .
+      tail -n +2 "$tmp_merged" | sort -k6,6g > "${tmp_merged}.sorted"
+      echo "$header" | cat - "${tmp_merged}.sorted" > "${out_file}"
+
+      rm "$tmp_merged" "${tmp_merged}.sorted"
       echo "Wrote $out_file"
     done
-    rmdir $tmp_outdir
+
+    rmdir "$tmp_outdir"
   ', normalizePath(directory, mustWork = TRUE))
   
   system(bash_script)
 }
+
 
 
 
