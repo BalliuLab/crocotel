@@ -70,8 +70,9 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
       regulator_beta = summary_model$coefficients[2, 1]
       regulator_se = summary_model$coefficients[2,2]
       regulator_statistic = regulator_beta/regulator_se
+      regulator_FDR = NA
       #df = data.frame(SNP = target_gene_name, gene = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'pvalue' = regulator_pvalue, FDR = NA, context = context_name)
-      df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'statistic' = regulator_statistic, 'pvalue' = regulator_pvalue, context = context_name)
+      df = data.frame(target = target_gene_name, regulator = regulator_gene_name, beta = regulator_beta, 'se' = regulator_se, 'statistic' = regulator_statistic, 'pvalue' = regulator_pvalue, 'FDR' = regulator_FDR, context = context_name)
     }))
     
     for(cur_context in intersected_contexts){
@@ -109,7 +110,8 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
     reg_marginal_trends = suppressMessages(suppressWarnings(emtrends(trans_model, ~ context, var = "regulator_pred", data = trans_model_df))) %>% tidy() %>% select(regulator_pred.trend, std.error, p.value, context)
     names(reg_marginal_trends) = c("beta", "se", "pvalue", "context")
     reg_marginal_trends$statistic = reg_marginal_trends$beta/reg_marginal_trends$se
-    reg_marginal_trends = reg_marginal_trends %>% select(beta, se, statistic, pvalue, context)
+    reg_marginal_trends$FDR = NA
+    reg_marginal_trends = reg_marginal_trends %>% select(beta, se, statistic, pvalue, FDR, context)
     output_df = cbind(regulator = regulator_gene_name, target = target_gene_name, reg_marginal_trends)
     contexts = unique(output_df$context)
     for(cur_context in contexts){
