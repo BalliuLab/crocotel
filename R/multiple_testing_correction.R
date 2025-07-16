@@ -188,6 +188,15 @@ concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = T) 
       done
       mv $tmp_outdir/* .
       echo "Wrote $out_file"
+      
+      # Sort the file by p-value (assumes `p.value` is the column header)
+      header=$(head -n 1 "$tmp_merged")
+      tail -n +2 "$tmp_merged" | sort -k5,5g > "${tmp_merged}.sorted"
+      echo "$header" | cat - "${tmp_merged}.sorted" > "${tmp_outdir}${out_file}"
+    
+      rm "${tmp_merged}" "${tmp_merged}.sorted"
+      mv "${tmp_outdir}${out_file}" .
+      echo "Wrote $out_file"
     done
     rmdir $tmp_outdir
   ', normalizePath(directory, mustWork = TRUE))
