@@ -167,6 +167,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   output_file_name_cis = tempfile();
   output_file_name_tra = tempfile();
   
+  print(snps)
   ## make sure individual IDS are the same
   snps$ColumnSubsample(match(colnames(gene), colnames(snps)))
   
