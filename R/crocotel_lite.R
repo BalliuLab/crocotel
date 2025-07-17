@@ -145,6 +145,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   snps$LoadFile(SNP_file_name);
   
   print(colnames(snps))
+  print(mode(snps))
   
   ## Load gene expression data
   
