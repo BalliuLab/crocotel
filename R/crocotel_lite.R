@@ -169,8 +169,9 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   
  
   ## make sure individual IDS are the same
-  snps$ColumnSubsample(match(colnames(gene), colnames(snps)))
+  #snps$ColumnSubsample(match(colnames(gene), colnames(snps)))
   print(snps)
+  print(gene)
   
   ## Run the analysis
   me = Matrix_eQTL_main(
