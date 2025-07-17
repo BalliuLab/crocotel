@@ -144,6 +144,8 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
   snps$LoadFile(SNP_file_name);
   
+  print(colnames(snps))
+  
   ## Load gene expression data
   
   gene = SlicedData$new();
@@ -153,6 +155,8 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   gene$fileSkipColumns = 1;       # one column of row labels
   gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
   gene$LoadFile(expression_file_name);
+  
+  print(colnames(gene))
   
   cvrt = SlicedData$new();
   cvrt$fileDelimiter = "\t";      # the TAB character
