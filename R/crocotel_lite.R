@@ -20,7 +20,7 @@ format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
   # Function to process one file
   process_file <- function(f, GReX_dir, context) {
     gene_id <- sub("\\.crocotel.*", "", basename(f))
-    dt <- fread(paste0(GReX_dir, f), sep = "\t", header = T)
+    dt <- fread(paste0(GReX_dir, f), sep = "\t", header = T, check.names = F)
     
     result <- list()
     ct = context
@@ -48,7 +48,7 @@ format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
     }
   }
   
-  fwrite(data.frame(ct_combined), paste0(tmp_dir, context, ".txt"), sep = "\t", na = "NA", quote = F)
+  fwrite(data.frame(ct_combined, check.names = F), paste0(tmp_dir, context, ".txt"), sep = "\t", na = "NA", quote = F)
 
 }
 
@@ -68,7 +68,7 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
 }
 
 #' @export
-crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL){
+crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, cisDist = 1e6){
   out_dir_crocotel_lite = paste0(out_dir, "/crocotel_lite_output/")
   dir.create(out_dir_crocotel_lite, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
@@ -107,7 +107,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   # Only associations significant at this level will be saved
   pvOutputThreshold_tra = pval_thresh;
   # Distance for local gene-SNP pairs
-  cisDist = 1e6; ## hard coded cis distance of 1MB
+  #cisDist = 1e6; ## hard coded cis distance of 1MB
   file_prefix = ".crocotel_lite.txt"
   # Covariates file name
   # Set to character() for no covariates
@@ -133,8 +133,6 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   }else{
     expression_file_name = paste0(tmp_dir_regressed, context, ".txt");
   }
-  
-  
   
   ## Load genotype data
   
@@ -169,6 +167,8 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   output_file_name_cis = tempfile();
   output_file_name_tra = tempfile();
   
+  ## make sure individual IDS are the same
+  snps$ColumnSubsample(match(colnames(gene), colnames(snps)))
   
   ## Run the analysis
   me = Matrix_eQTL_main(
@@ -177,17 +177,21 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
     cvrt = cvrt,
     output_file_name     = output_file_name_tra,
     pvOutputThreshold     = pvOutputThreshold_tra,
-    pvOutputThreshold.cis = 0,
     useModel = useModel,
     errorCovariance = errorCovariance,
     verbose = TRUE,
+    output_file_name.cis = output_file_name_cis,
+    pvOutputThreshold.cis = 1,
     snpspos = snpsloc,
     genepos = geneloc,
     cisDist = cisDist,
     min.pv.by.genesnp = FALSE,
     noFDRsaveMemory = FALSE);
   
-  output = me$all$eqtls
+  unlink(output_file_name_tra);
+  unlink(output_file_name_cis);
+  
+  output = me$trans$eqtls
   output = output %>% filter(snps != gene) %>% rename(regulator = "snps", target = "gene")
   outfile = paste0(out_dir_crocotel_lite, context, file_prefix)
   fwrite(output, file = outfile, sep = "\t", quote = F)
