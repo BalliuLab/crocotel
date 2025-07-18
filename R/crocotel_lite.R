@@ -199,10 +199,10 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   print(paste0("finished analysis association mapping for context ", context))
   
   ## remove uneeded directories
-  unlink(tmp_dir, recursive = T)
-  if (dir.exists(tmp_dir)) {
-    unlink(tmp_dir_regressed, recursive = TRUE)
-  }
+  #unlink(tmp_dir, recursive = T)
+  #if (dir.exists(tmp_dir_regressed)) {
+  #  unlink(tmp_dir_regressed, recursive = TRUE)
+  #}
 }
 
 
