@@ -107,7 +107,8 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   }
   
   unlink(decomposition_dir, recursive = TRUE)
-  crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+  crossval_output = crossval_helper_parallel(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+  #crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
   hom_expr_mat = crossval_output[["hom_expr_mat"]]
   ### residualise GReXs from target expression
