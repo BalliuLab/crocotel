@@ -148,7 +148,8 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
       }
     }
     gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
-    output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+    #output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+    output_gbat = crossval_helper_parallel(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
     Yhats_gbat = output_gbat[["Yhats_tiss"]]
     hom_expr_mat_gbat = output_gbat[["hom_expr_mat"]]
     
