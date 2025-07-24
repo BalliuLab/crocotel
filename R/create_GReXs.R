@@ -161,7 +161,9 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
     }
     all_missing<-names(rowMeans(Yhat_gbat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_gbat_mat, na.rm = T)))])
     remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
-    Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
+    if(length(remove_inds) != 0){
+      Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
+    }
     Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
     fwrite(Yhat_gbat_mat, file = paste0(GReX_outdir, gene_name,".cxc.predictors.txt"), sep = "\t")
     
