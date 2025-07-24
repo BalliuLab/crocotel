@@ -134,6 +134,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   if(method == "cxc"){
     Ys_gbat<-vector("list", length = length(exp_files))
     names(Ys_gbat)<-sapply(strsplit(exp_files, "/"), tail, 1)
+    names(Ys_gbat)<-gsub("\\..*", "", names(Ys_gbat))
     lengths_y_gbat = c()
     rownames_y_gbat = list()
     for(i in 1:length(Ys_gbat)){
