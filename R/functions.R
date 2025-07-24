@@ -437,7 +437,12 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   
   print("Step 2: Selecting contexts in which eGenes are active")
   if(R_G == 0){
-    stop("no significant eGenes. Not writing output.")
+    print("no significant eGenes. writing empty eGene file.")
+    empty_df <- as.data.frame(matrix("", nrow = 1, ncol = length(contexts_vec)))
+    colnames(empty_df) <- contexts_vec
+    empty_df$gene <- ""
+    empty_df <- empty_df[, c("gene", contexts_vec)] 
+    return(empty_df)
   }
   q2_adj <- R_G * level2/nrow(eGene_pvals)
   ind_sel_simes <- which(eGene_xT_qvals <= level1)

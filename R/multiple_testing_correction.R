@@ -187,7 +187,7 @@ concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = TRU
         else
           tail -n +2 "$file" >> "$tmp_merged"
         fi
-        #rm "$file"
+        rm "$file"
       done
 
       # Sort by 6th column (p-value) ascending, keeping header
