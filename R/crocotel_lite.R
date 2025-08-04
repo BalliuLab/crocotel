@@ -72,7 +72,8 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   out_dir_crocotel_lite = paste0(out_dir, "/crocotel_lite_output/")
   dir.create(out_dir_crocotel_lite, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
-  tmp_dir = paste0(out_dir_crocotel_lite, "/MEQTL_input/")
+  #tmp_dir = paste0(out_dir_crocotel_lite, "/MEQTL_input/")
+  tmp_dir = paste0(tempfile(tmpdir = out_dir_crocotel_lite), "/")
   dir.create(tmp_dir, showWarnings = F)
   
   #### write out formatted GReX files in MatrixEQTL format
@@ -83,7 +84,8 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   if(is.null(exp_files)){
     if(regress_target_GReX == T){
       message("inferring expression files with residualized target GReX and formatting.")
-      tmp_dir_regressed = paste0(out_dir_crocotel_lite, "/MEQTL_input/regressed_exp/")
+      #tmp_dir_regressed = paste0(out_dir_crocotel_lite, "/MEQTL_input/regressed_exp/")
+      tmp_dir_regressed = paste0(tmp_dir, "/regressed_exp/")
       dir.create(tmp_dir_regressed, showWarnings = F)
       format_GReX_for_association(paste0(out_dir, "/exp_residualized_GReX/"), context, NULL, tmp_dir_regressed)
     }else{
@@ -199,10 +201,10 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   print(paste0("finished analysis association mapping for context ", context))
   
   ## remove uneeded directories
-  #unlink(tmp_dir, recursive = T)
-  #if (dir.exists(tmp_dir_regressed)) {
-  #  unlink(tmp_dir_regressed, recursive = TRUE)
-  #}
+  unlink(tmp_dir, recursive = T)
+  if (dir.exists(tmp_dir_regressed)) {
+    unlink(tmp_dir_regressed, recursive = TRUE)
+  }
 }
 
 

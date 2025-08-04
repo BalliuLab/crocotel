@@ -388,7 +388,8 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   print(paste("Step 0.1: Computing summary statistics for each context"))
   
   ### set up summary stats per context and number of tests per context
-  tmp_dir = paste0(out_dir, "/treeQTL_tmp/")
+  #tmp_dir = paste0(out_dir, "/treeQTL_tmp/")
+  tmp_dir = paste0(tempfile(tmpdir = out_dir), "/")
   dir.create(tmp_dir, showWarnings = F)
   
   format_treeQTL(crocotel_dir, top_level, tmp_dir)
