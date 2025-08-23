@@ -221,7 +221,6 @@ concat_crocotel_lmm_files <- function(directory = ".", contexts, regress_target_
     for prefix in $contexts; do
       out_file="${prefix}.${file_suffix}"
       tmp_merged="${tmp_outdir}${out_file}"
-      first=1
       find . -maxdepth 1 -type f -name "${prefix}.*${file_suffix}" -print > "${tmp_outdir}${prefix}_to_concatenate.txt"
       xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${prefix}_to_concatenate.txt" > $tmp_merged
 
