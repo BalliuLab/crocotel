@@ -223,16 +223,7 @@ concat_crocotel_lmm_files <- function(directory = ".", contexts, regress_target_
       tmp_merged="${tmp_outdir}${out_file}"
       first=1
       find . -maxdepth 1 -type f -name "${prefix}.*${file_suffix}" -print > "${tmp_outdir}${prefix}_to_concatenate.txt"
-      first=1
-      while IFS= read -r file; do
-          if [ $first -eq 1 ]; then
-              cat "$file" > "$tmp_merged"
-              first=0
-          else
-              tail -n +2 "$file" >> "$tmp_merged"
-          fi
-          rm "$file"
-      done<${tmp_outdir}${prefix}_to_concatenate.txt
+      xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${prefix}_to_concatenate.txt" > $tmp_merged
 
       # Sort by 6th column (p-value) ascending, keeping header
       header=$(head -n 1 "$tmp_merged")
@@ -241,6 +232,7 @@ concat_crocotel_lmm_files <- function(directory = ".", contexts, regress_target_
 
       rm "$tmp_merged" "${tmp_merged}.sorted"
       echo "Wrote $out_file"
+      xargs -a "${tmp_outdir}${prefix}_to_concatenate.txt" rm
       rm "${tmp_outdir}${prefix}_to_concatenate.txt"
     done
     rmdir "$tmp_outdir"
