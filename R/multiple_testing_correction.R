@@ -206,7 +206,6 @@ concat_crocotel_lmm_files_old <- function(directory = ".", regress_target_GReX =
 
 #' @export
 concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F) {
-  contexts = paste(contexts, collapse = " ")
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
