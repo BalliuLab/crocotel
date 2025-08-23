@@ -163,8 +163,7 @@ multiple_testing_correction = function(crocotel_dir, out_dir, fdr_thresh = 0.05,
   }
 }
 
-#' @export
-concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = TRUE) {
+concat_crocotel_lmm_files_old <- function(directory = ".", regress_target_GReX = TRUE) {
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
@@ -205,7 +204,50 @@ concat_crocotel_lmm_files <- function(directory = ".", regress_target_GReX = TRU
   system(bash_script)
 }
 
+#' @export
+concat_crocotel_lmm_files <- function(directory = ".", contexts, regress_target_GReX = F) {
+  contexts = paste(contexts, collapse = " ")
+  bash_script <- sprintf('
+    cd "%s"
+    cd "crocotel_lmm_output/"
+    tmp_outdir="tmp_files/"
+    mkdir -p "$tmp_outdir"
+    file_suffix="crocotel_lmm.txt"
+    if [ "$regress_target_GReX" = true ]; then
+      file_suffix=".crocotel_lmm_regress.txt"
+    fi
+    
+    contexts="%s"
+    for prefix in $contexts; do
+      out_file="${prefix}.${file_suffix}"
+      tmp_merged="${tmp_outdir}${out_file}"
+      first=1
+      find . -maxdepth 1 -type f -name "${prefix}.*${file_suffix}" -print > "${tmp_outdir}${prefix}_to_concatenate.txt"
+      first=1
+      while IFS= read -r file; do
+          if [ $first -eq 1 ]; then
+              cat "$file" > "$tmp_merged"
+              first=0
+          else
+              tail -n +2 "$file" >> "$tmp_merged"
+          fi
+          rm "$file"
+      done<${tmp_outdir}${prefix}_to_concatenate.txt
 
+      # Sort by 6th column (p-value) ascending, keeping header
+      header=$(head -n 1 "$tmp_merged")
+      tail -n +2 "$tmp_merged" | sort -k6,6g > "${tmp_merged}.sorted"
+      echo "$header" | cat - "${tmp_merged}.sorted" > "${out_file}"
+
+      rm "$tmp_merged" "${tmp_merged}.sorted"
+      echo "Wrote $out_file"
+      rm "${tmp_outdir}${prefix}_to_concatenate.txt"
+    done
+    rmdir "$tmp_outdir"
+  ', normalizePath(directory, mustWork = TRUE), contexts)
+  
+  system(bash_script)
+}
 
 
 
