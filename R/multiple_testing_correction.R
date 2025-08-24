@@ -219,6 +219,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     context="%s"
     out_file="${prefix}.${file_suffix}"
     tmp_merged="${tmp_outdir}${out_file}"
+    echo "finding files to concatenate for context $context"
     find . -maxdepth 1 -type f -name "${prefix}.*${file_suffix}" -print > "${tmp_outdir}${prefix}_to_concatenate.txt"
     xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${prefix}_to_concatenate.txt" > $tmp_merged
 
