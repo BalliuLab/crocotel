@@ -233,7 +233,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     xargs -a "${tmp_outdir}${prefix}_to_concatenate.txt" rm
     rm "${tmp_outdir}${prefix}_to_concatenate.txt"
     rmdir "$tmp_outdir"
-  ', normalizePath(directory, mustWork = TRUE), contexts)
+  ', normalizePath(directory, mustWork = TRUE), context)
   
   system(bash_script)
 }
