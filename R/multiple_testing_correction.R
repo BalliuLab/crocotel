@@ -217,11 +217,11 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     fi
     
     context="%s"
-    out_file="${prefix}.${file_suffix}"
+    out_file="${context}.${file_suffix}"
     tmp_merged="${tmp_outdir}${out_file}"
     echo "finding files to concatenate for context $context"
-    find . -maxdepth 1 -type f -name "${prefix}.*${file_suffix}" -printf "%p\n" > "${tmp_outdir}${prefix}_to_concatenate.txt"
-    xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${prefix}_to_concatenate.txt" > $tmp_merged
+    find . -maxdepth 1 -type f -name "${context}.*${file_suffix}" -printf "%p\n" > "${tmp_outdir}${context}_to_concatenate.txt"
+    xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${context}_to_concatenate.txt" > $tmp_merged
 
     # Sort by 6th column (p-value) ascending, keeping header
     header=$(head -n 1 "$tmp_merged")
@@ -230,8 +230,8 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
 
     rm "$tmp_merged" "${tmp_merged}.sorted"
     echo "Wrote $out_file"
-    xargs -a "${tmp_outdir}${prefix}_to_concatenate.txt" rm
-    rm "${tmp_outdir}${prefix}_to_concatenate.txt"
+    xargs -a "${tmp_outdir}${context}_to_concatenate.txt" rm
+    rm "${tmp_outdir}${context}_to_concatenate.txt"
     rmdir "$tmp_outdir"
   ', normalizePath(directory, mustWork = TRUE), context)
   
