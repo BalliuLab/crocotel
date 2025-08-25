@@ -205,23 +205,34 @@ concat_crocotel_lmm_files_old <- function(directory = ".", regress_target_GReX =
 }
 
 #' @export
-concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F) {
+concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F, to_concatenate = NULL) {
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
     tmp_outdir="tmp_files/"
     mkdir -p "$tmp_outdir"
     file_suffix="crocotel_lmm.txt"
+    
+    ##### have to fix this it does not do anything right now ###
     if [ "$regress_target_GReX" = true ]; then
       file_suffix=".crocotel_lmm_regress.txt"
     fi
+    ############################################################
     
     context="%s"
     out_file="${context}.${file_suffix}"
     tmp_merged="${tmp_outdir}${out_file}"
-    echo "finding files to concatenate for context $context"
-    find . -maxdepth 1 -type f -name "${context}.*${file_suffix}" -printf "%%p\n" > "${tmp_outdir}${context}_to_concatenate.txt"
-    xargs awk "FNR==1 && NR!=1 { next } { print }" < "${tmp_outdir}${context}_to_concatenate.txt" > $tmp_merged
+    
+    to_concatenate ="%s"
+    if [ -f "$to_concatenate" ]; then
+      echo "valid input concatenation file. proceeding with concatenation"
+    else
+      echo "finding files to concatenate for context $context"
+      find . -maxdepth 1 -type f -name "${context}.*${file_suffix}" -printf "%%p\n" > "${tmp_outdir}${context}_to_concatenate.txt"
+      to_concatenate="${tmp_outdir}${context}_to_concatenate.txt"
+    fi
+    
+    xargs awk "FNR==1 && NR!=1 { next } { print }" < "$to_concatenate" > $tmp_merged
 
     # Sort by 6th column (p-value) ascending, keeping header
     header=$(head -n 1 "$tmp_merged")
@@ -233,7 +244,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     xargs -a "${tmp_outdir}${context}_to_concatenate.txt" rm
     rm "${tmp_outdir}${context}_to_concatenate.txt"
     rmdir "$tmp_outdir"
-  ', normalizePath(directory, mustWork = TRUE), context)
+  ', normalizePath(directory, mustWork = TRUE), context, to_concatenate)
   
   system(bash_script)
 }
