@@ -223,7 +223,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     out_file="${context}.${file_suffix}"
     tmp_merged="${tmp_outdir}${out_file}"
     
-    to_concatenate ="%s"
+    to_concatenate="%s"
     if [ -f "$to_concatenate" ]; then
       echo "valid input concatenation file. proceeding with concatenation"
     else
