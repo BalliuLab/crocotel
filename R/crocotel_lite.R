@@ -121,6 +121,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   
   # Genotype file name
   SNP_file_name = paste0(tmp_dir, context, ".txt");
+  genos = fread(SNP_file_name, sep = "\t", data.table = F)
   
   # Gene expression file name
   if(!is.null(exp_files)){
@@ -136,25 +137,42 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
     expression_file_name = paste0(tmp_dir_regressed, context, ".txt");
   }
   
+  ## Load gene expression data
+  
+  gene_mat = fread(expression_file_name, sep = "\t", data.table = F)
+  gene_mat_formatted = as.matrix(gene_mat[,-1])
+  rownames(gene_mat_formatted) = gene_mat$id
+  ### remove individuals with all NAs
+  gene_mat_formatted = data.frame(gene_mat_formatted, check.names = F) %>% select_if(~ !any(is.na(.)))
+  ### remove same individuals from genotype matrix
+  genos_formatted = genos[,colnames(gene_mat_formatted)]
+  rownames(geos_formatted) = genos$id
+  
+  gene = SlicedData$new();
+  gene$CreateFromMatrix(as.matrix(gene_mat_formatted))
+  
+  ## Load genotype data
+  snps = SlicedData$new();
+  snps$CreateFromMatrix(as.matrix(genos_formatted))
   ## Load genotype data
   
-  snps = SlicedData$new();
-  snps$fileDelimiter = "\t";      # the TAB character
-  snps$fileOmitCharacters = "NA"; # denote missing values;
-  snps$fileSkipRows = 1;          # one row of column labels
-  snps$fileSkipColumns = 1;       # one column of row labels
-  snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
-  snps$LoadFile(SNP_file_name);
+  #snps = SlicedData$new();
+  #snps$fileDelimiter = "\t";      # the TAB character
+  #snps$fileOmitCharacters = "NA"; # denote missing values;
+  #snps$fileSkipRows = 1;          # one row of column labels
+  #snps$fileSkipColumns = 1;       # one column of row labels
+  #snps$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  #snps$LoadFile(SNP_file_name);
   
   ## Load gene expression data
   
-  gene = SlicedData$new();
-  gene$fileDelimiter = "\t";      # the TAB character
-  gene$fileOmitCharacters = "NA"; # denote missing values;
-  gene$fileSkipRows = 1;          # one row of column labels
-  gene$fileSkipColumns = 1;       # one column of row labels
-  gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
-  gene$LoadFile(expression_file_name);
+  #gene = SlicedData$new();
+  #gene$fileDelimiter = "\t";      # the TAB character
+  #gene$fileOmitCharacters = "NA"; # denote missing values;
+  #gene$fileSkipRows = 1;          # one row of column labels
+  #gene$fileSkipColumns = 1;       # one column of row labels
+  #gene$fileSliceSize = 2000;      # read file in slices of 2,000 rows
+  #gene$LoadFile(expression_file_name);
   
   cvrt = SlicedData$new();
   cvrt$fileDelimiter = "\t";      # the TAB character

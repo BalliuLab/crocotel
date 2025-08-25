@@ -206,10 +206,11 @@ concat_crocotel_lmm_files_old <- function(directory = ".", regress_target_GReX =
 
 #' @export
 concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F, to_concatenate = NULL) {
+  tmp_dir = paste0(tempfile(tmpdir = directory), "/")
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
-    tmp_outdir="tmp_files/"
+    tmp_outdir="%s"
     mkdir -p "$tmp_outdir"
     file_suffix="crocotel_lmm.txt"
     
@@ -236,7 +237,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
 
     # Sort by 6th column (p-value) ascending, keeping header
     header=$(head -n 1 "$tmp_merged")
-    tail -n +2 "$tmp_merged" | sort -k6,6g > "${tmp_merged}.sorted"
+    tail -n +2 "$tmp_merged" | sort -k6,6g | uniq > "${tmp_merged}.sorted"
     echo "$header" | cat - "${tmp_merged}.sorted" > "${out_file}"
 
     rm "$tmp_merged" "${tmp_merged}.sorted"
@@ -244,7 +245,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     xargs -a "${tmp_outdir}${context}_to_concatenate.txt" rm
     rm "${tmp_outdir}${context}_to_concatenate.txt"
     rmdir "$tmp_outdir"
-  ', normalizePath(directory, mustWork = TRUE), context, to_concatenate)
+  ', normalizePath(directory, mustWork = TRUE), , tmp_dir, context, to_concatenate)
   
   system(bash_script)
 }
