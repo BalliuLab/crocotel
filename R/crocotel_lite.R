@@ -146,7 +146,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   gene_mat_formatted = data.frame(gene_mat_formatted, check.names = F) %>% select_if(~ !any(is.na(.)))
   ### remove same individuals from genotype matrix
   genos_formatted = genos[,colnames(gene_mat_formatted)]
-  rownames(genos_formatted) = genos$id
+  rownames(genos_formatted) = genos$gene
   
   gene = SlicedData$new();
   gene$CreateFromMatrix(as.matrix(gene_mat_formatted))
