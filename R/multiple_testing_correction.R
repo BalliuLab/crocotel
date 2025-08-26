@@ -242,8 +242,8 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
 
     rm "$tmp_merged" "${tmp_merged}.sorted"
     echo "Wrote $out_file"
-    xargs -a "${tmp_outdir}${context}_to_concatenate.txt" rm
-    rm "${tmp_outdir}${context}_to_concatenate.txt"
+    xargs rm -f < "$to_concatenate"
+    rm "$to_concatenate"
     rmdir "$tmp_outdir"
   ', normalizePath(directory, mustWork = TRUE), tmp_dir, context, to_concatenate)
   
