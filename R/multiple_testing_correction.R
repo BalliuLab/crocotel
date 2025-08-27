@@ -238,7 +238,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     while IFS= read -r f; do
       if [ -f "$f" ]; then
         cat "$f" >> "$tmp_merged"
-        rm "$f"                     
+        rm -f "$f"                     
       fi  
     done < "$to_concatenate"
 
