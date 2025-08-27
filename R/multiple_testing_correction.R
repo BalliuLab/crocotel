@@ -236,8 +236,10 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     
     #xargs -a "$to_concatenate" awk \'FNR==1 && NR!=1 { next } { print }\' > $tmp_merged
     while IFS= read -r f; do
-      [ -f "$f" ] && cat "$f" >> "$tmp_merged"
-      rm "$f"  
+      if [ -f "$f" ]; then
+        cat "$f" >> "$tmp_merged"
+        rm "$f"                     
+      fi  
     done < "$to_concatenate"
 
     # Sort by 6th column (p-value) ascending, keeping header
