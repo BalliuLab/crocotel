@@ -212,6 +212,7 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
     cd "crocotel_lmm_output/"
     tmp_outdir="%s"
     mkdir -p "$tmp_outdir"
+    echo "tmp directory created: $tmp_outdir"
     file_suffix="crocotel_lmm.txt"
     
     ##### have to fix this it does not do anything right now ###
@@ -242,8 +243,9 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
 
     rm "$tmp_merged" "${tmp_merged}.sorted"
     echo "Wrote $out_file"
+    echo "removing old lmm files"
     xargs rm -f < "$to_concatenate"
-    rm "$to_concatenate"
+    echo "removing tmp directory"
     rmdir "$tmp_outdir"
   ', normalizePath(directory, mustWork = TRUE), tmp_dir, context, to_concatenate)
   
