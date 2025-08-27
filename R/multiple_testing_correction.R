@@ -206,7 +206,7 @@ concat_crocotel_lmm_files_old <- function(directory = ".", regress_target_GReX =
 
 #' @export
 concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F, to_concatenate = NULL) {
-  tmp_dir = paste0(tempfile(tmpdir = directory), "/")
+  tmp_dir = paste0(tempfile(tmpdir = paste0(directory, "crocotel_lmm_output/")), "/")
   bash_script <- sprintf('
     cd "%s"
     cd "crocotel_lmm_output/"
@@ -234,17 +234,18 @@ concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_G
       to_concatenate="${tmp_outdir}${context}_to_concatenate.txt"
     fi
     
-    xargs -a "$to_concatenate" awk \'FNR==1 && NR!=1 { next } { print }\' > $tmp_merged
+    #xargs -a "$to_concatenate" awk \'FNR==1 && NR!=1 { next } { print }\' > $tmp_merged
+    while IFS= read -r f; do
+      [ -f "$f" ] && cat "$f" >> "$tmp_merged"
+      rm "$f"  
+    done < "$to_concatenate"
 
     # Sort by 6th column (p-value) ascending, keeping header
-    header=$(head -n 1 "$tmp_merged")
-    tail -n +2 "$tmp_merged" | sort -k6,6g | uniq > "${tmp_merged}.sorted"
-    echo "$header" | cat - "${tmp_merged}.sorted" > "${out_file}"
+    cat "$tmp_merged" | sort -k6,6g | uniq > "${tmp_merged}.sorted"
+    cat "${tmp_merged}.sorted" > "${out_file}"
 
     rm "$tmp_merged" "${tmp_merged}.sorted"
     echo "Wrote $out_file"
-    echo "removing old lmm files"
-    #xargs -a "$to_concatenate" rm -f
     echo "removing tmp directory"
     rmdir "$tmp_outdir"
   ', normalizePath(directory, mustWork = TRUE), tmp_dir, context, to_concatenate)
