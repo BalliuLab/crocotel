@@ -237,7 +237,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
         # heterogeneous model
         ## if we learned one for this tissue/context
         ## is the het term heritable:
-        hetresponse=hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]
+        hetresponse=hom_expr_mat[,index_exp] #[rownames(Ys[[index_exp]]),index_exp]
         hetbaseline<-lm(hetresponse ~ 1)
         hetfit=lm(hetresponse ~ Yhats_tiss[[index_exp]]) 
         

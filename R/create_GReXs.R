@@ -20,7 +20,7 @@ regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
     
     ## get GReX expression of context
     
-    model <- lm(expr_sub ~ grex_sub)
+    model <- lm(expr_sub ~ grex_sub, na.action = na.exclude)
     residuals_vec <- residuals(model)
     
     sub_df = data.frame(id = ids_sub, residual = residuals_vec)
