@@ -9,7 +9,7 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
   contexts = sub("*.tsv", "", contexts)
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
   names(exp_all) = c("id", gene)
-  exp_all = exp_all %>% mutate(context = contexts[1]) %>% select("id", "context", all_of(gene))
+  exp_all = exp_all %>% mutate(context = contexts[1]) %>% select("id", "context", all_of(gene)) %>% filter(!if_any(everything(), is.na))
   print(paste("Finished merging context",1))
   
   for(i in 2:length(exp_files)){
