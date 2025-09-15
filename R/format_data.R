@@ -36,8 +36,8 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       names(snps_loc) = c("snp", "chr", "pos")
       start_pos = gene_loc %>% filter(geneid == gene) %>% select(s1) %>% unlist() %>% unname()
       chrom = gene_loc %>% filter(geneid == gene) %>% select(chr) %>% unlist() %>% unname()
-      upstream_pos = (start_pos - cis_window)
-      downstream_pos = (start_pos + cis_window)
+      upstream_pos = (start_pos - (cis_window/2))
+      downstream_pos = (start_pos + (cis_window/2))
       
       # get cis-SNP genotypes for this gene
       gene_genotypes = get_gene_genotypes(chrom, upstream_pos, downstream_pos, snps_loc, genotypes)
