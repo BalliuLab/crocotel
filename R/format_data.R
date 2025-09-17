@@ -40,7 +40,10 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       downstream_pos = (start_pos + (cis_window))
       
       # get cis-SNP genotypes for this gene
-      gene_genotypes = get_gene_genotypes(chrom, upstream_pos, downstream_pos, snps_loc, genotypes)
+      if (!file.exists(paste0(out_dir, gene, "_genotypes.txt"))) {
+        gene_genotypes = get_gene_genotypes(chrom, upstream_pos, downstream_pos, snps_loc, genotypes)
+        fwrite(gene_genotypes, file = paste0(out_dir, gene, "_genotypes.txt"), sep = "\t", col.names = F, row.names = F)
+      }
       
       dir.create(paste0(out_dir, gene), showWarnings = F)
       gene_df = df %>% filter(gene_id == gene)
@@ -55,7 +58,6 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       }
       
       fwrite(gene_df, file = paste0(out_dir, gene, "/", context, ".txt"), sep = "\t", col.names = F, row.names = F)
-      fwrite(gene_genotypes, file = paste0(out_dir, gene, "_genotypes.txt"), sep = "\t", col.names = F, row.names = F)
     }
     print(paste0("finished formatting context ", i))
   
