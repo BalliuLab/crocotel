@@ -17,7 +17,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
   genotypes = fread(genotypes_file, sep = "\t", data.table = F)
   
   get_gene_genotypes = function(chrom, upstream_pos, downstream_pos, snps_loc, genotypes){
-    cur_snps = snps_loc %>% filter(chrom == chr) %>% filter(pos >= upstream_pos & pos <= downstream_pos) %>% select(snp) %>% unlist() %>% unname()
+    cur_snps = snps_loc %>% filter(chrom == chr) %>% filter(pos >= upstream_pos & pos <= downstream_pos) %>% dplyr::select(snp) %>% unlist() %>% unname()
     cur_genos = genotypes %>% filter(SNP %in% cur_snps)
     cur_genos = data.frame(t(cur_genos[,-1]))
     cur_genos = cbind(id = rownames(cur_genos), cur_genos)
@@ -34,8 +34,8 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       #### get gene TSS position (start position of gene)
       names(gene_loc) = c("geneid", "chr", "s1", "s2")
       names(snps_loc) = c("snp", "chr", "pos")
-      start_pos = gene_loc %>% filter(geneid == gene) %>% select(s1) %>% unlist() %>% unname()
-      chrom = gene_loc %>% filter(geneid == gene) %>% select(chr) %>% unlist() %>% unname()
+      start_pos = gene_loc %>% filter(geneid == gene) %>% dplyr::select(s1) %>% unlist() %>% unname()
+      chrom = gene_loc %>% filter(geneid == gene) %>% dplyr::select(chr) %>% unlist() %>% unname()
       upstream_pos = (start_pos - (cis_window/2))
       downstream_pos = (start_pos + (cis_window/2))
       
