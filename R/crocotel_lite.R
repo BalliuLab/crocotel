@@ -145,7 +145,9 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   ### remove individuals with all NAs
   gene_mat_formatted = data.frame(gene_mat_formatted, check.names = F) %>% select_if(~ !any(is.na(.)))
   ### remove same individuals from genotype matrix
-  genos_formatted = genos[,colnames(gene_mat_formatted)]
+  intersected_columns = intersect(colnames(gene_mat_formatted), colnames(genos))
+  gene_mat_formatted = gene_mat_formatted[, intersected_columns]
+  genos_formatted = genos[,intersected_columns]
   rownames(genos_formatted) = genos$gene
   
   gene = SlicedData$new();
