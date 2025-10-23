@@ -28,7 +28,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
   for(i in 1:length(exp_files)){
     file = exp_files[i]
     df = fread(file, sep = "\t", data.table = F)
-    genes = df$gene_id
+    genes = df$id
     context = sub("\\..*$", "", basename(file))
     for(gene in genes){
       #### get gene TSS position (start position of gene)
@@ -46,7 +46,7 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       }
       
       dir.create(paste0(out_dir, gene), showWarnings = F)
-      gene_df = df %>% filter(gene_id == gene)
+      gene_df = df %>% filter(id == gene)
       gene_df = gene_df[,-1]
       gene_df = data.frame(t(gene_df))
       gene_df = cbind(id = rownames(gene_df), gene_df)
@@ -60,6 +60,6 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
       fwrite(gene_df, file = paste0(out_dir, gene, "/", context, ".txt"), sep = "\t", col.names = F, row.names = F)
     }
     print(paste0("finished formatting context ", i))
-  
+    
   }
 }
