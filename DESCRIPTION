@@ -27,7 +27,8 @@ Imports:
   MuMIn,
   future.apply,
   MatrixEQTL,
-  doParallel
+  doParallel,
+  matrixStats
 Depends:
   data.table,
   dplyr,
@@ -47,7 +48,8 @@ Depends:
   MuMIn,
   future.apply,
   MatrixEQTL,
-  doParallel
+  doParallel,
+  matrixStats
 License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
     license
 Encoding: UTF-8

@@ -15,6 +15,14 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
   gene_loc = fread(geneloc_file, sep = "\t", data.table = F)
   snps_loc = fread(snpsloc_file, sep = "\t", data.table = F)
   genotypes = fread(genotypes_file, sep = "\t", data.table = F)
+  ## center and scale genotypes
+  geno_mat = as.matrix(genotypes[, -1])
+  row_means = rowMeans2(geno_mat, na.rm = TRUE)
+  row_sds   = rowSds(geno_mat, na.rm = TRUE)
+  geno_scaled = (geno_mat - row_means) / row_sds
+  scaled_genotypes = data.table(SNP = genotypes[,1], geno_scaled)
+  genotypes = scaled_genotypes
+  
   
   get_gene_genotypes = function(chrom, upstream_pos, downstream_pos, snps_loc, genotypes){
     cur_snps = snps_loc %>% filter(chrom == chr) %>% filter(pos >= upstream_pos & pos <= downstream_pos) %>% dplyr::select(snp) %>% unlist() %>% unname()
