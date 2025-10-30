@@ -249,7 +249,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
         m3<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         #het_scales[[index_exp]]=coef(m3)[2]
         # full model
-        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp] + 
+        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]][rownames(Ys[[index_avg_exp]]),] + 
                 Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         full_values <- predict(m4)
         full_values = data.frame(full_values, check.names = F)
