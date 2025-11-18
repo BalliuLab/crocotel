@@ -44,7 +44,7 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
     fold_hom_expr_mat <- hom_expr_mat[train_inds_id, , drop = FALSE]
     
     # Per-fold FBM (avoid file collisions)
-    fold_bkfile <- paste0(out_dir, gene_name, "_content_tmp_fold", cur_fold)
+    fold_bkfile <- paste0(out_dir, gene_name, "_crocotel_tmp_fold", cur_fold)
     explanatory <- as_FBM(X, backingfile = fold_bkfile)
     
     fold_Yhats <- vector("list", q)
@@ -149,11 +149,11 @@ crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, 
     }
   }
   message("Starting cross-validation")
-  message("CONTENT temporary file is ", paste0(out_dir,gene_name, "_content_tmp.bk"))
-  if(file.exists(paste0(out_dir,gene_name, "_content_tmp.bk"))){
-    system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
+  message("CONTENT temporary file is ", paste0(out_dir,gene_name, "_crocotel_tmp.bk"))
+  if(file.exists(paste0(out_dir,gene_name, "_crocotel_tmp.bk"))){
+    system(paste0("rm ", paste0(out_dir,gene_name, "_crocotel_tmp.bk")))
   }
-  explanatory=as_FBM(X, backingfile=paste0(out_dir,gene_name, "_content_tmp"))
+  explanatory=as_FBM(X, backingfile=paste0(out_dir,gene_name, "_crocotel_tmp"))
   
 
   # start cross-validation
@@ -249,7 +249,7 @@ evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT
         m3<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         #het_scales[[index_exp]]=coef(m3)[2]
         # full model
-        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]][rownames(Ys[[index_avg_exp]]),] + 
+        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]][rownames(Ys[[index_exp]]),] + 
                 Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
         full_values <- predict(m4)
         full_values = data.frame(full_values, check.names = F)
