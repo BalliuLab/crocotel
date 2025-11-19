@@ -50,7 +50,7 @@ regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
 #' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 3, alpha = 0.5, num_folds = 10, method = "crocotel"){
+create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10, method = "crocotel"){
   seed = 9000
   set.seed(seed)
   GReX_outdir = paste0(out_dir, "GReXs/")
