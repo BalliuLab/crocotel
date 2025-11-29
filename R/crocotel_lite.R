@@ -15,7 +15,7 @@ format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
   plan(multisession, workers = 1)
   
   ### change this after changing other functions
-  files = list.files(GReX_dir, pattern = "GReX")
+  files = list.files(GReX_dir, pattern = "crocotel.GReX")
   
   # Function to process one file
   process_file <- function(f, GReX_dir, context) {
