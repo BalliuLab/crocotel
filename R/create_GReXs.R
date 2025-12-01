@@ -50,7 +50,7 @@ regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
 #' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10){
+create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10, imputed = F){
   seed = 9000
   set.seed(seed)
   GReX_outdir = paste0(out_dir, "GReXs/")
@@ -135,28 +135,30 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   Yhats_gbat = output_gbat[["Yhats_tiss"]]
   
   #### combine crocotel and GBAT predictors
-  Yhats_full_imputed = Yhats_full
-  for(context in names(Yhats_full)){
-    intersecting_ids = intersect(rownames(Yhats_full[[context]]), rownames(Yhats_gbat[[context]]))
-    Yhats_full_imputed[[context]] = Yhats_gbat[[context]]
-    Yhats_full_imputed[[context]][intersecting_ids,] = Yhats_full[[context]][intersecting_ids,]
+  if(imputed){
+    Yhats_full_imputed = Yhats_full
+    for(context in names(Yhats_full)){
+      intersecting_ids = intersect(rownames(Yhats_full[[context]]), rownames(Yhats_gbat[[context]]))
+      Yhats_full_imputed[[context]] = Yhats_gbat[[context]]
+      Yhats_full_imputed[[context]][intersecting_ids,] = Yhats_full[[context]][intersecting_ids,]
+    }
+    Yhat_full_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=length(gbat_contexts_vec)))
+    rownames(Yhat_full_mat)<-rownames(X)
+    colnames(Yhat_full_mat)<-gbat_contexts_vec
+    for(context in gbat_contexts_vec){
+      Yhat_full_mat[names(Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]]),]),context]<-Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]])]
+    }
+    all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
+    remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
+    if(length(remove_inds) != 0){
+      Yhat_full_mat = data.frame(Yhat_full_mat[-remove_inds,], check.names = F)
+    }
+    Yhat_full_mat = cbind(id = rownames(Yhat_full_mat), Yhat_full_mat)
+    fwrite(Yhat_full_mat, file = paste0(out_dir, gene_name,".crocotel_imputed.GReX_predictors.txt"), sep = "\t")
+    evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_full_imputed, GReX_outdir, gene_name, "crocotel_imputed")
   }
-  Yhat_full_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=length(gbat_contexts_vec)))
-  rownames(Yhat_full_mat)<-rownames(X)
-  colnames(Yhat_full_mat)<-gbat_contexts_vec
-  for(context in gbat_contexts_vec){
-    Yhat_full_mat[names(Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]]),]),context]<-Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]])]
-  }
-  all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
-  remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
-  if(length(remove_inds) != 0){
-    Yhat_full_mat = data.frame(Yhat_full_mat[-remove_inds,], check.names = F)
-  }
-  Yhat_full_mat = cbind(id = rownames(Yhat_full_mat), Yhat_full_mat)
-  fwrite(Yhat_full_mat, file = paste0(out_dir, gene_name,".crocotel_imputed.GReX_predictors.txt"), sep = "\t")
   
   evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_full, GReX_outdir, gene_name, "crocotel")
-  evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_full_imputed, GReX_outdir, gene_name, "crocotel_imputed")
   evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_gbat, GReX_outdir, gene_name, "cxc")
   
   
