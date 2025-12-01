@@ -50,7 +50,7 @@ regress_target_GReX = function(gene_name, exp_files, Yhats_tiss, outdir){
 #' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
 #' @return writes out a file of predicted expression across individuals and contexts 
 #' @export
-create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10, method = "crocotel"){
+create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10){
   seed = 9000
   set.seed(seed)
   GReX_outdir = paste0(out_dir, "GReXs/")
@@ -76,12 +76,12 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
     }
   }
   
-  message("Reading in files...") 
+  message("Reading in files...")
   suppressWarnings(expr = {X<-fread(file = genotype_file, sep='\t', data.table=F, check.names = F)})
   X<-as.matrix(data.frame(X, row.names=1, check.names = F))
-
+  
   ###### read in expression and decompose - files are written out to decomposed exp directory
-  decompose_expression(exp_files, gene_name, context_thresh, decomposition_dir)
+  hom_expr_mat = decompose_expression(exp_files, gene_name, context_thresh, decomposition_dir)
   ## this assumes that the file name of decomposition dir is saved as "gene.context.etc" and shared is called "Average Context" (output of decompose function)
   contexts_vec = sapply(strsplit(list.files(decomposition_dir), "\\."), "[[", 2)
   
@@ -90,9 +90,9 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   names(Ys)<-contexts_vec
   lengths_y = c()
   rownames_y = list()
-  Yhats_full<-vector("list", length(Ys))
+  Yhats_full<-vector("list", ncol(hom_expr_mat))
   for(i in 1:length(Ys)){
-    suppressWarnings(expr={ Ys[[i]]<-fread(file = 
+    suppressWarnings(expr={ Ys[[i]]<-fread(file =
                                              paste0(decomposition_dir,list.files(decomposition_dir)[i]), sep='\t', data.table=F, check.names = F)})
     Ys[[i]]<-as.matrix(data.frame(Ys[[i]], row.names=1, check.names = F))
     lengths_y = c(lengths_y, nrow(Ys[[i]]))
@@ -102,74 +102,64 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
       Ys[[i]]=Ys[[i]][-remove,,drop=F]
     }
     
-    Yhats_full[[i]]<-matrix(NA, ncol=1, nrow=lengths_y[i], 
-                            dimnames = list(rownames_y[[i]], "pred"))
+    Yhats_full[[i]]<-matrix(NA, ncol=1, nrow=nrow(hom_expr_mat),
+                            dimnames = list(rownames(hom_expr_mat), "pred"))
   }
   
   unlink(decomposition_dir, recursive = TRUE)
-  crossval_output = crossval_helper_parallel(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+  crossval_output = crossval_helper_parallel(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, FALSE, num_folds, Yhats_full, alpha)
   #crossval_output = crossval_helper(Ys, X, lengths_y, rownames_y, contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
   Yhats_tiss = crossval_output[["Yhats_tiss"]]
-  hom_expr_mat = crossval_output[["hom_expr_mat"]]
+  Yhats_full = crossval_output[["Yhats_full"]]
   ### residualise GReXs from target expression
   regress_target_GReX(gene_name, exp_files, Yhats_tiss, out_dir)
-  
-  ## combine Yhats_tiss into large dataframe with individuals as rows and contexts as columns:
-  Yhat_tiss_mat<-matrix(NA, nrow = nrow(X), ncol=length(contexts_vec))
-  rownames(Yhat_tiss_mat)<-rownames(X)
-  colnames(Yhat_tiss_mat)<-contexts_vec
-  for(context in contexts_vec){
-    Yhat_tiss_mat[rownames(Yhats_tiss[[context]]),context]<-Yhats_tiss[[context]]
-  }
-  all_missing<-names(rowMeans(Yhat_tiss_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_tiss_mat, na.rm = T)))])
-  remove_inds<-which(rownames(Yhat_tiss_mat) %in% all_missing)
-  if(length(remove_inds) != 0){
-    Yhat_tiss_mat = data.frame(Yhat_tiss_mat[-remove_inds,], check.names = F)
-  }
-  Yhat_tiss_mat = data.frame(cbind(id = rownames(Yhat_tiss_mat), Yhat_tiss_mat))
-  #fwrite(Yhat_tiss_mat, file = paste0(out_dir,gene_name,".crocotel_predictors.txt"), sep = "\t")
-  evaluation_helper(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, FALSE, Yhats_full, GReX_outdir, gene_name)
-  
   ### read in expression for gbat
-  if(method == "cxc"){
-    Ys_gbat<-vector("list", length = length(exp_files))
-    names(Ys_gbat)<-sapply(strsplit(exp_files, "/"), tail, 1)
-    names(Ys_gbat)<-gsub("\\..*", "", names(Ys_gbat))
-    lengths_y_gbat = c()
-    rownames_y_gbat = list()
-    for(i in 1:length(Ys_gbat)){
-      suppressWarnings(expr={ Ys_gbat[[i]]<-fread(file = 
-                                                   exp_files[i], sep='\t', data.table=F, check.names = F)})
-      Ys_gbat[[i]]<-as.matrix(data.frame(Ys_gbat[[i]], row.names=1, check.names = F))
-      lengths_y_gbat = c(lengths_y_gbat, nrow(Ys_gbat[[i]]))
-      rownames_y_gbat[[i]] = rownames(Ys_gbat[[i]])
-      if(any(is.na(Ys_gbat[[i]])) | any(is.nan(Ys_gbat[[i]]))){
-        remove=unique(c( which(is.na(Ys_gbat[[i]])), which(is.nan(Ys_gbat[[i]])) ))
-        Ys_gbat[[i]]=Ys_gbat[[i]][-remove,,drop=F]
-      }
+  Ys_gbat<-vector("list", length = length(exp_files))
+  names(Ys_gbat)<-sapply(strsplit(exp_files, "/"), tail, 1)
+  names(Ys_gbat)<-gsub("\\..*", "", names(Ys_gbat))
+  lengths_y_gbat = c()
+  rownames_y_gbat = list()
+  for(i in 1:length(Ys_gbat)){
+    suppressWarnings(expr={ Ys_gbat[[i]]<-hom_expr_mat[,i, drop = F]})
+    Ys_gbat[[i]]<-as.matrix(data.frame(Ys_gbat[[i]], check.names = F))
+    lengths_y_gbat = c(lengths_y_gbat, nrow(Ys_gbat[[i]]))
+    rownames_y_gbat[[i]] = rownames(Ys_gbat[[i]])
+    if(any(is.na(Ys_gbat[[i]])) | any(is.nan(Ys_gbat[[i]]))){
+      remove=unique(c( which(is.na(Ys_gbat[[i]])), which(is.nan(Ys_gbat[[i]])) ))
+      Ys_gbat[[i]]=Ys_gbat[[i]][-remove,,drop=F]
     }
-    gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
-    #output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
-    output_gbat = crossval_helper_parallel(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
-    Yhats_gbat = output_gbat[["Yhats_tiss"]]
-    hom_expr_mat_gbat = output_gbat[["hom_expr_mat"]]
-    
-    Yhat_gbat_mat<-matrix(NA, nrow = nrow(X), ncol=length(gbat_contexts_vec))
-    rownames(Yhat_gbat_mat)<-rownames(X)
-    colnames(Yhat_gbat_mat)<-gbat_contexts_vec
-    for(context in gbat_contexts_vec){
-      Yhat_gbat_mat[rownames(Yhats_gbat[[context]]),context]<-Yhats_gbat[[context]]
-    }
-    all_missing<-names(rowMeans(Yhat_gbat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_gbat_mat, na.rm = T)))])
-    remove_inds<-which(rownames(Yhat_gbat_mat) %in% all_missing)
-    if(length(remove_inds) != 0){
-      Yhat_gbat_mat = data.frame(Yhat_gbat_mat[-remove_inds,], check.names = F)
-    }
-    Yhat_gbat_mat = cbind(id = rownames(Yhat_gbat_mat), Yhat_gbat_mat)
-    fwrite(Yhat_gbat_mat, file = paste0(GReX_outdir, gene_name,".cxc.predictors.txt"), sep = "\t")
-    
-    evaluation_helper(Ys_gbat, hom_expr_mat_gbat, Yhats_gbat, gbat_contexts_vec, TRUE, NULL, GReX_outdir, gene_name)
   }
+  gbat_contexts_vec = contexts_vec[!grepl("AverageContext", contexts_vec)]
+  #output_gbat = crossval_helper(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, num_folds, alpha)
+  output_gbat = crossval_helper_parallel(Ys_gbat, X, lengths_y_gbat, rownames_y_gbat, gbat_contexts_vec, GReX_outdir, gene_name, TRUE, num_folds, Yhats_full = NULL, alpha)
+  Yhats_gbat = output_gbat[["Yhats_tiss"]]
+  
+  #### combine crocotel and GBAT predictors
+  Yhats_full_imputed = Yhats_full
+  for(context in names(Yhats_full)){
+    intersecting_ids = intersect(rownames(Yhats_full[[context]]), rownames(Yhats_gbat[[context]]))
+    Yhats_full_imputed[[context]] = Yhats_gbat[[context]]
+    Yhats_full_imputed[[context]][intersecting_ids,] = Yhats_full[[context]][intersecting_ids,]
+  }
+  Yhat_full_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=length(gbat_contexts_vec)))
+  rownames(Yhat_full_mat)<-rownames(X)
+  colnames(Yhat_full_mat)<-gbat_contexts_vec
+  for(context in gbat_contexts_vec){
+    Yhat_full_mat[names(Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]]),]),context]<-Yhats_full_imputed[[context]][!is.na(Yhats_full_imputed[[context]])]
+  }
+  all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
+  remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
+  if(length(remove_inds) != 0){
+    Yhat_full_mat = data.frame(Yhat_full_mat[-remove_inds,], check.names = F)
+  }
+  Yhat_full_mat = cbind(id = rownames(Yhat_full_mat), Yhat_full_mat)
+  fwrite(Yhat_full_mat, file = paste0(out_dir, gene_name,".crocotel_imputed.GReX_predictors.txt"), sep = "\t")
+  
+  evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_full, GReX_outdir, gene_name, "crocotel")
+  evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_full_imputed, GReX_outdir, gene_name, "crocotel_imputed")
+  evaluation_helper(hom_expr_mat, gbat_contexts_vec, Yhats_gbat, GReX_outdir, gene_name, "cxc")
+  
+  
   message("Finished computing GReXs and evalutation metrics")
   
 }

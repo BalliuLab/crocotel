@@ -8,7 +8,9 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
   contexts = sub("*.txt", "", contexts)
   contexts = sub("*.tsv", "", contexts)
   exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
+  hom_expr_mat = exp_all
   names(exp_all) = c("id", gene)
+  names(hom_expr_mat) = c("id", contexts[1])
   exp_all = exp_all %>% mutate(context = contexts[1]) %>% select("id", "context", all_of(gene)) %>% filter(!if_any(everything(), is.na))
   print(paste("Finished merging context",1))
   
@@ -16,9 +18,12 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
     
     # Read expression matrix for Context t
     exp_t=data.frame(fread(input = exp_files[i], header = F), check.names = F,stringsAsFactors = F)
+    names(exp_t) = c("id", contexts[i])
+    hom_expr_mat = merge(hom_expr_mat, exp_t, by = "id")
+    names(exp_t) = c("id", gene)
     #### remove NA rows
     exp_t = na.omit(exp_t)
-    names(exp_t) = c("id", gene)
+    
     exp_t = exp_t %>% mutate(context = contexts[i]) %>% select("id", "context", all_of(gene))
     
     # Merge with other Contexts
@@ -49,6 +54,11 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
                   mutate(
                     scaled = scale(!!sym(gene))
                   ) %>% ungroup() %>% select(scaled))
+  ## center and scale hom_expr_mat
+  rownames(hom_expr_mat) = hom_expr_mat$id
+  hom_expr_mat = hom_expr_mat[,-1]
+  hom_expr_mat = hom_expr_mat %>%
+    mutate(across(everything(), ~ scale(.x)[,1]))
   
   indiv.names = expression$id
   rownames(X) = expression$id
@@ -84,6 +94,7 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
     
   }
   
+  return(hom_expr_mat)
 }
 
 
