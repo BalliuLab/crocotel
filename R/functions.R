@@ -51,7 +51,7 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
   Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
-
+   
     fold_hom_expr_mat <- hom_expr_mat[train_inds_id, , drop = FALSE]
     
     # Per-fold FBM (avoid file collisions)
@@ -104,6 +104,9 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
         beta_vec <- full_beta
       }
   
+      ## get test indices that have data for this tissue
+      safe_test_inds = intersect(list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
+      
       ## get test indices that have data for this tissue
       safe_test_inds = intersect(list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
       
