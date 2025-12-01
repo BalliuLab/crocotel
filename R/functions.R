@@ -1,13 +1,22 @@
 crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
-                                    out_dir, gene_name, num_folds, alpha = 0.5,
+                                    out_dir, gene_name, is_cxc, num_folds, Yhats_full = NULL, alpha = 0.5,
                                     n_cores = 4) {
   
   q <- length(Ys)
   m <- ncol(X)
   N <- nrow(X)
   
+  method = "cxc"
+  tiss_indices = q
+  if(!is_cxc){
+    method = "crocotel"
+    tiss_indices = q-1
+    Yhats_full_final = lapply(1:tiss_indices, function(i)
+      matrix(NA, ncol = 1, nrow = lengths_y[i],
+             dimnames = list(rownames_y[[i]], "pred")))
+  }
   # Initialize predictions
-  Yhats_tiss <- lapply(1:q, function(i)
+  Yhats_tiss = lapply(1:q, function(i)
     matrix(NA, ncol = 1, nrow = lengths_y[i],
            dimnames = list(rownames_y[[i]], "pred")))
   
@@ -16,6 +25,7 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
   for (i in 1:q) {
     hom_expr_mat[rownames(Ys[[i]]), i] <- Ys[[i]]
   }
+  colnames(hom_expr_mat) = names(Ys)
   
   # Drop samples missing in all tissues
   all_missing <- rownames(hom_expr_mat)[rowSums(!is.na(hom_expr_mat)) == 0]
@@ -41,6 +51,10 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
   Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
+    ## split train into 70% train and 30% validate
+    #train_inds_id_snps = sample(train_inds_id, size = floor(0.7 * length(train_inds_id)))
+    #train_inds_id_valiation = setdiff(train_inds_id, train_inds_id_snps)
+    
     fold_hom_expr_mat <- hom_expr_mat[train_inds_id, , drop = FALSE]
     
     # Per-fold FBM (avoid file collisions)
@@ -49,7 +63,8 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
     
     fold_Yhats <- vector("list", q)
     
-    for (j in 1:q) {
+    for (j in 1:tiss_indices) {
+      ## shared has to have the same tiss_inds 
       tiss_inds <- rownames(fold_hom_expr_mat)[!is.na(fold_hom_expr_mat[, j])]
       if (length(tiss_inds) < 2) next
       
@@ -57,6 +72,26 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
                                ind.train = match(tiss_inds, rownames(X)),
                                y.train = fold_hom_expr_mat[tiss_inds, j],
                                K = 10, alphas = alpha, warn = FALSE)
+      
+      ### fit shared component if not cxc
+      if(!is_cxc){
+        shared_fit = big_spLinReg(X = explanatory,
+                                  ind.train = match(tiss_inds, rownames(X)),
+                                  y.train = fold_hom_expr_mat[tiss_inds, "AverageContext"],
+                                  K = 10, alphas = alpha, warn = FALSE)
+        
+        best_idx_shared <- which.min(summary(shared_fit)$validation_loss)
+        beta_vec_shared <- unlist(summary(shared_fit)$beta[best_idx_shared])[1:m]
+        intercept_shared <- summary(shared_fit)$intercept[[best_idx_shared]]
+        
+        # Handle NA beta
+        beta_vec_shared[is.na(beta_vec_shared)] <- 0
+        if (length(beta_vec_shared) < ncol(X)) {
+          full_beta <- rep(0, ncol(X))
+          full_beta[attr(shared_fit, "ind.col")] <- beta_vec
+          beta_vec <- full_beta
+        }
+      }
       
       best_idx <- which.min(summary(tiss_fit)$validation_loss)
       beta_vec <- unlist(summary(tiss_fit)$beta[best_idx])[1:m]
@@ -70,149 +105,91 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
         beta_vec <- full_beta
       }
       
-      safe_test_inds <- intersect(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]],
-                                  rownames(X))
+      if(!is_cxc){
+        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X),
+                                                rownames(Ys[[q]])[test_inds[[q]][[cur_fold]]]))
+      }else{
+        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
+      }
+      
       if (length(safe_test_inds) > 0) {
+        preds_val <- X[train_inds_id,]%*% beta_vec + intercept
+        
+        if(!is_cxc){
+          preds_shared_val = X[train_inds_id, ] %*% beta_vec_shared + intercept_shared
+          ## predict beta shared and specific
+          full_model = lm((hom_expr_mat[,j]+hom_expr_mat[,"AverageContext"])[train_inds_id] ~ preds_val[train_inds_id,] + preds_shared_val[train_inds_id,])
+          specific_beta = summary(full_model)$coefficients[2,1]
+          shared_beta = summary(full_model)$coefficients[3,1]
+          intercept_full = summary(full_model)$coefficients[1,1]
+        }
+        
         preds <- X[safe_test_inds, ] %*% beta_vec + intercept
         fold_Yhats[[j]] <- matrix(NA, nrow = lengths_y[j], ncol = 1,
                                   dimnames = list(rownames_y[[j]], "pred"))
         fold_Yhats[[j]][safe_test_inds, 1] <- preds
+        
+        if(!is_cxc){
+          preds_shared = X[safe_test_inds, ] %*% beta_vec_shared + intercept_shared
+          fold_Yhats[[q]] = matrix(NA, nrow = lengths_y[q], ncol = 1,
+                                   dimnames = list(rownames_y[[q]], "pred"))
+          fold_Yhats[[q]][safe_test_inds, 1] <- preds_shared
+          ## compute full for this fold
+          Yhats_full[[j]][safe_test_inds,] = preds*specific_beta + preds_shared*shared_beta + intercept_full
+        }
       }
     }
     
     file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
-    return(fold_Yhats)
+    return_list = list(fold_Yhats, Yhats_full)
+    return(return_list)
   }
-  
   stopCluster(cl)
   
   # Combine predictions
-  for (fold_Yhats in Yhats_list) {
-    for (j in 1:q) {
+  for (fold in 1:length(Yhats_list)) {
+    fold_Yhats = Yhats_list[[fold]][[1]]  # tissue preds
+    fold_Yhats_full = Yhats_list[[fold]][[2]] # full preds
+    for (j in 1:tiss_indices) {
+      ## tissue-specific predictions
       if (!is.null(fold_Yhats[[j]])) {
         non_na_rows <- rownames(fold_Yhats[[j]])[!is.na(fold_Yhats[[j]][,1])]
         Yhats_tiss[[j]][non_na_rows, 1] <- fold_Yhats[[j]][non_na_rows, 1]
       }
+      ## full model predictions
+      if(!is_cxc){
+        if (!is.null(fold_Yhats_full[[j]])) {
+          non_na_rows <- rownames(fold_Yhats_full[[j]])[!is.na(fold_Yhats_full[[j]][,1])]
+          Yhats_full_final[[j]][non_na_rows, 1] <- fold_Yhats_full[[j]][non_na_rows, 1]
+        }
+      }
     }
   }
   
-  names(Yhats_tiss) <- names(Ys)
-  return(list(Yhats_tiss = Yhats_tiss, hom_expr_mat = hom_expr_mat))
+  names(Yhats_tiss) = names(Ys)
+  if(!is_cxc){
+    names(Yhats_full_final) = names(Ys)[1:tiss_indices]
+  }else{
+    Yhats_full_final = Yhats_tiss
+  }
+  
+  Yhat_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=tiss_indices))
+  rownames(Yhat_mat)<-rownames(X)
+  colnames(Yhat_mat)<-contexts_vec[1:tiss_indices]
+  for(context in contexts_vec[1:tiss_indices]){
+    Yhat_mat[names(Yhats_full_final[[context]][!is.na(Yhats_full_final[[context]]),]),context]<-Yhats_full_final[[context]][!is.na(Yhats_full_final[[context]])]
+  }
+  all_missing<-names(rowMeans(Yhat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_mat, na.rm = T)))])
+  remove_inds<-which(rownames(Yhat_mat) %in% all_missing)
+  if(length(remove_inds) != 0){
+    Yhat_mat = data.frame(Yhat_mat[-remove_inds,], check.names = F)
+  }
+  Yhat_mat = cbind(id = rownames(Yhat_mat), Yhat_mat)
+  fwrite(Yhat_mat, file = paste0(out_dir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
+  
+  return(list(Yhats_tiss = Yhats_tiss, Yhats_full = Yhats_full_final))
 }
 
-crossval_helper = function(Ys, X, lengths_y, rownames_y, contexts_vec, out_dir, gene_name, num_folds, alpha = 0.5){
-    
-  # define some commonly-used variables
-  q<-length(Ys)
-  m<-ncol(X)
-  N<-nrow(X)
-  Yhats_tiss<-vector("list", q)
-  
-  for(i in 1:q){
-    Yhats_tiss[[i]]<-matrix(NA, ncol=1, nrow=lengths_y[i], 
-                           dimnames = list(rownames_y[[i]], "pred"))
-  }
-  
-  hom_expr_mat<-matrix(NA, nrow = nrow(X), ncol=q)
-  rownames(hom_expr_mat)<-rownames(X)
-  
-  for(i in 1:q){
-    hom_expr_mat[rownames(Ys[[i]]),i]<-Ys[[i]]
-  }
-  
-  all_missing<-names(rowMeans(hom_expr_mat, na.rm = T)[which(is.nan(rowMeans(hom_expr_mat, na.rm = T)))])
-  remove_inds<-which(rownames(hom_expr_mat) %in% all_missing)
-  # These people are not in any tissues, we can just remove them from the data
-  if(length(remove_inds)>0){
-    #message("These individuals have NA in all Ys: ")
-    #message(paste0(all_missing, collapse = ","))
-    hom_expr_mat<-hom_expr_mat[-remove_inds,,drop=F]
-    X<-X[-remove_inds,]
-    message(paste0("Proceeding with ", nrow(X), " individuals after preliminary filtering."))
-  }
-  
-  # prepare for 10-fold cross-validation
-  test_inds_idx<-caret::createFolds(y=rowMeans(hom_expr_mat,na.rm=T), k = num_folds)
-  if(length(test_inds_idx)<num_folds){
-    while(length(test_inds_idx)<num_folds){
-      test_inds_idx<-caret::createFolds(y=rowMeans(hom_expr_mat,na.rm=T), k = num_folds)
-    }
-  }
-  test_inds_ids<-lapply(test_inds_idx, function(x) {rownames(X)[x]})
-  test_inds<-list()
-  for(fold in 1:num_folds){
-    for(i in 1:q){
-      if(fold ==1){
-        test_inds[[i]]<-list()
-      }
-      test_inds[[i]][[fold]]<-which(rownames(Ys[[i]]) %in% test_inds_ids[[fold]])
-    }
-  }
-  message("Starting cross-validation")
-  message("CONTENT temporary file is ", paste0(out_dir,gene_name, "_crocotel_tmp.bk"))
-  if(file.exists(paste0(out_dir,gene_name, "_crocotel_tmp.bk"))){
-    system(paste0("rm ", paste0(out_dir,gene_name, "_crocotel_tmp.bk")))
-  }
-  explanatory=as_FBM(X, backingfile=paste0(out_dir,gene_name, "_crocotel_tmp"))
-  
-
-  # start cross-validation
-  for(cur_fold in 1:num_folds){
-    
-    train_inds_id<-setdiff(rownames(X), test_inds_ids[[cur_fold]])
-    train_inds_id<-intersect(train_inds_id, rownames(hom_expr_mat))
-    fold_hom_expr_mat<-hom_expr_mat[train_inds_id,,drop=F]
-    
-    ## Fit the heterogeneous components
-    tiss_betas<-vector("list", q)
-    tiss_ints<-vector("list", q)
-    
-    for(j in 1:q){
-      
-      tiss_inds=rownames(fold_hom_expr_mat)[which(!is.na(fold_hom_expr_mat[,j]))]
-      tiss_response=fold_hom_expr_mat[tiss_inds,j]
-      
-      tiss_fit<-big_spLinReg(X = explanatory, ind.train = match(tiss_inds, rownames(X)),
-                             y.train = tiss_response,K=10, alphas = c(alpha),warn=F)
-      
-      tiss_beta_vals<-unlist(summary(tiss_fit)$beta[
-        which.min(summary(tiss_fit)$validation_loss)])[1:m]
-      tiss_tiss_int<-unlist(summary(tiss_fit)$intercept[
-        which.min(summary(tiss_fit)$validation_loss)])
-      idx_remove<-c()
-      if(any(is.na(tiss_beta_vals))){
-        idx_remove<-which(is.na(tiss_beta_vals))
-        tiss_beta_vals[idx_remove]<-0
-      }
-      if(length(tiss_beta_vals)<dim(explanatory)[2]){
-        new_betas<-rep(0, dim(explanatory)[2])
-        new_betas[attr(tiss_fit, "ind.col")]<-tiss_beta_vals
-        tiss_beta_vals<-new_betas
-      }
-      tiss_betas[[j]]<-tiss_beta_vals
-      tiss_ints[[j]]<-tiss_tiss_int
-      
-      
-      safe_test_inds<-intersect(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(Ys[[j]]))
-      if(length(safe_test_inds) < 1){
-        next
-      }
-      Yhats_tiss[[j]][rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]],]<-X[rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], ] %*% tiss_betas[[j]] + tiss_ints[[j]]
-    }
-    
-
-    if(cur_fold < num_folds){
-      message("Finished fold: ", cur_fold, " of ", num_folds)
-    }
-  }
-  
-  names(Yhats_tiss)<-names(Ys)
-  message("removing temporary files")
-  system(paste0("rm ", paste0(out_dir,gene_name, "_content_tmp.bk")))
-  
-  return(list(Yhats_tiss = Yhats_tiss, hom_expr_mat = hom_expr_mat))
-  
-}
 
 evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT, Yhats_full, out_dir, gene_name){
   message("Calculating r2 performance metrics")
