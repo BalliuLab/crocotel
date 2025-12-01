@@ -51,10 +51,7 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
   Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
-    ## split train into 70% train and 30% validate
-    #train_inds_id_snps = sample(train_inds_id, size = floor(0.7 * length(train_inds_id)))
-    #train_inds_id_valiation = setdiff(train_inds_id, train_inds_id_snps)
-    
+
     fold_hom_expr_mat <- hom_expr_mat[train_inds_id, , drop = FALSE]
     
     # Per-fold FBM (avoid file collisions)
@@ -63,6 +60,10 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
     
     fold_Yhats <- vector("list", q)
     
+    if(!is_cxc){
+      tiss_indices = c(tiss_indices, "AverageContext")
+    } 
+      
     for (j in 1:tiss_indices) {
       ## shared has to have the same tiss_inds 
       tiss_inds <- rownames(fold_hom_expr_mat)[!is.na(fold_hom_expr_mat[, j])]
@@ -73,31 +74,11 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
                                y.train = fold_hom_expr_mat[tiss_inds, j],
                                K = 10, alphas = alpha, warn = FALSE)
       
-      ### fit shared component if not cxc
-      if(!is_cxc){
-        shared_fit = big_spLinReg(X = explanatory,
-                                  ind.train = match(tiss_inds, rownames(X)),
-                                  y.train = fold_hom_expr_mat[tiss_inds, "AverageContext"],
-                                  K = 10, alphas = alpha, warn = FALSE)
-        
-        best_idx_shared <- which.min(summary(shared_fit)$validation_loss)
-        beta_vec_shared <- unlist(summary(shared_fit)$beta[best_idx_shared])[1:m]
-        intercept_shared <- summary(shared_fit)$intercept[[best_idx_shared]]
-        
-        # Handle NA beta
-        beta_vec_shared[is.na(beta_vec_shared)] <- 0
-        if (length(beta_vec_shared) < ncol(X)) {
-          full_beta <- rep(0, ncol(X))
-          full_beta[attr(shared_fit, "ind.col")] <- beta_vec
-          beta_vec <- full_beta
-        }
-      }
-      
       best_idx <- which.min(summary(tiss_fit)$validation_loss)
       beta_vec <- unlist(summary(tiss_fit)$beta[best_idx])[1:m]
       intercept <- summary(tiss_fit)$intercept[[best_idx]]
       
-      # Handle NA beta
+      # Handle NA beta : LENA maybe 
       beta_vec[is.na(beta_vec)] <- 0
       if (length(beta_vec) < ncol(X)) {
         full_beta <- rep(0, ncol(X))
@@ -105,8 +86,8 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
         beta_vec <- full_beta
       }
       
-      if(!is_cxc){
-        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X),
+      if(!is_cxc){ ### CHANGE TO REMOVE CONDITION
+        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X), ### CHANGE TO REMOVE SHARED
                                                 rownames(Ys[[q]])[test_inds[[q]][[cur_fold]]]))
       }else{
         safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
