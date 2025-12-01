@@ -60,10 +60,28 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
     
     fold_Yhats <- vector("list", q)
     
+    ### if we are running crocotel, fit the shared first so that we only fit this once
     if(!is_cxc){
-      tiss_indices = c(tiss_indices, "AverageContext")
-    } 
+      shared_fit = big_spLinReg(X = explanatory,
+                                ind.train = match(tiss_inds, rownames(X)),
+                                y.train = fold_hom_expr_mat[tiss_inds, "AverageContext"],
+                                K = 10, alphas = alpha, warn = FALSE)
       
+      best_idx_shared <- which.min(summary(shared_fit)$validation_loss)
+      beta_vec_shared <- unlist(summary(shared_fit)$beta[best_idx_shared])[1:m]
+      intercept_shared <- summary(shared_fit)$intercept[[best_idx_shared]]
+      
+      # Handle NA beta
+      beta_vec_shared[is.na(beta_vec_shared)] <- 0
+      ## make the sure beta vector is the correct dimensions
+      if (length(beta_vec_shared) < ncol(X)) {
+        full_beta <- rep(0, ncol(X))
+        full_beta[attr(shared_fit, "ind.col")] <- beta_vec
+        beta_vec <- full_beta
+      }
+    }
+    
+    ## fit each specific component per fissue
     for (j in 1:tiss_indices) {
       ## shared has to have the same tiss_inds 
       tiss_inds <- rownames(fold_hom_expr_mat)[!is.na(fold_hom_expr_mat[, j])]
@@ -85,39 +103,39 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
         full_beta[attr(tiss_fit, "ind.col")] <- beta_vec
         beta_vec <- full_beta
       }
+  
+      ## get test indices that have data for this tissue
+      safe_test_inds = intersect(list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
       
-      if(!is_cxc){ ### CHANGE TO REMOVE CONDITION
-        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X), ### CHANGE TO REMOVE SHARED
-                                                rownames(Ys[[q]])[test_inds[[q]][[cur_fold]]]))
-      }else{
-        safe_test_inds = Reduce(intersect, list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
+      ## get Yhat specific for this context
+      preds_val <- X[train_inds_id,]%*% beta_vec + intercept
+      
+      ### if we are running crocote, get Yhat shared for this context
+      if(!is_cxc){
+        preds_shared_val = X[train_inds_id, ] %*% beta_vec_shared + intercept_shared
+        
+        ## fit gamma shared and specific using the training data
+        full_model = lm((hom_expr_mat[,j]+hom_expr_mat[,"AverageContext"])[train_inds_id] ~ preds_val[train_inds_id,] + preds_shared_val[train_inds_id,])
+        specific_beta = summary(full_model)$coefficients[2,1]
+        shared_beta = summary(full_model)$coefficients[3,1]
+        intercept_full = summary(full_model)$coefficients[1,1]
       }
       
-      if (length(safe_test_inds) > 0) {
-        preds_val <- X[train_inds_id,]%*% beta_vec + intercept
+      ### get Yhat specific on the test set
+      preds <- X[safe_test_inds, ] %*% beta_vec + intercept
+      fold_Yhats[[j]] <- matrix(NA, nrow = lengths_y[j], ncol = 1,
+                                dimnames = list(rownames_y[[j]], "pred"))
+      fold_Yhats[[j]][safe_test_inds, 1] <- preds
+      
+      ### if running crocotel, get Yhat shared on the test set
+      if(!is_cxc){
+        preds_shared = X[safe_test_inds, ] %*% beta_vec_shared + intercept_shared
+        fold_Yhats[[q]] = matrix(NA, nrow = lengths_y[q], ncol = 1,
+                                 dimnames = list(rownames_y[[q]], "pred"))
+        fold_Yhats[[q]][safe_test_inds, 1] <- preds_shared
         
-        if(!is_cxc){
-          preds_shared_val = X[train_inds_id, ] %*% beta_vec_shared + intercept_shared
-          ## predict beta shared and specific
-          full_model = lm((hom_expr_mat[,j]+hom_expr_mat[,"AverageContext"])[train_inds_id] ~ preds_val[train_inds_id,] + preds_shared_val[train_inds_id,])
-          specific_beta = summary(full_model)$coefficients[2,1]
-          shared_beta = summary(full_model)$coefficients[3,1]
-          intercept_full = summary(full_model)$coefficients[1,1]
-        }
-        
-        preds <- X[safe_test_inds, ] %*% beta_vec + intercept
-        fold_Yhats[[j]] <- matrix(NA, nrow = lengths_y[j], ncol = 1,
-                                  dimnames = list(rownames_y[[j]], "pred"))
-        fold_Yhats[[j]][safe_test_inds, 1] <- preds
-        
-        if(!is_cxc){
-          preds_shared = X[safe_test_inds, ] %*% beta_vec_shared + intercept_shared
-          fold_Yhats[[q]] = matrix(NA, nrow = lengths_y[q], ncol = 1,
-                                   dimnames = list(rownames_y[[q]], "pred"))
-          fold_Yhats[[q]][safe_test_inds, 1] <- preds_shared
-          ## compute full for this fold
-          Yhats_full[[j]][safe_test_inds,] = preds*specific_beta + preds_shared*shared_beta + intercept_full
-        }
+        ## compute full using estimated gammas for this fold
+        Yhats_full[[j]][safe_test_inds,] = preds*specific_beta + preds_shared*shared_beta + intercept_full
       }
     }
     
@@ -154,6 +172,7 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
     Yhats_full_final = Yhats_tiss
   }
   
+  ## format full predictions into a matrix to write out
   Yhat_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=tiss_indices))
   rownames(Yhat_mat)<-rownames(X)
   colnames(Yhat_mat)<-contexts_vec[1:tiss_indices]
