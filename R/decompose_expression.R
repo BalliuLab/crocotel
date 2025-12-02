@@ -1,8 +1,7 @@
 
-## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
 #' @export
 decompose_expression = function(total_exp, gene_name, context_thresh, data_dir = NULL){
-  #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
+  #%%%%%%%%%%%%%%% Decompose expression into shared and specific context expression
   print("Decomposing data")
   if(context_thresh < 2){
     print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
@@ -49,15 +48,3 @@ decompose_expression = function(total_exp, gene_name, context_thresh, data_dir =
   
   return(decomp_exp_mat)
 }
-
-
-
-#### test functions:
-#exp_files = list.files("/Users/lkrockenberger/C-STEM/example_data/expression/")
-#contexts = exp_files
-#exp_files = paste0("/Users/lkrockenberger/C-STEM/example_data/expression/", exp_files)
-#data_dir = "/Users/lkrockenberger/C-STEM/example_data/decomposed_expression/"
-#context_thresh = 3
-#gene = "gene1"
-
-#decompose_expression(exp_files, gene, contexts, context_thresh, data_dir)
