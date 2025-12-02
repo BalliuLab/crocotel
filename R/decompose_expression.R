@@ -1,68 +1,25 @@
 
 ## this implementation requires that the order of contexts is the same order as the list of files provided - will try to optimize this such that this does not have to be the case.
 #' @export
-decompose_expression = function(exp_files, gene, context_thresh, data_dir){
-  # Read expression matrix for Context t and merge with other Contexts 
-  contexts = basename(exp_files)
-  contexts = sub("\\..*", "", contexts)
-  contexts = sub("*.txt", "", contexts)
-  contexts = sub("*.tsv", "", contexts)
-  exp_all=data.frame(fread(input = exp_files[1], header = F), check.names = F,stringsAsFactors = F)
-  hom_expr_mat = exp_all
-  names(exp_all) = c("id", gene)
-  names(hom_expr_mat) = c("id", contexts[1])
-  exp_all = exp_all %>% mutate(context = contexts[1]) %>% select("id", "context", all_of(gene)) %>% filter(!if_any(everything(), is.na))
-  print(paste("Finished merging context",1))
-  
-  for(i in 2:length(exp_files)){
-    
-    # Read expression matrix for Context t
-    exp_t=data.frame(fread(input = exp_files[i], header = F), check.names = F,stringsAsFactors = F)
-    names(exp_t) = c("id", contexts[i])
-    hom_expr_mat = merge(hom_expr_mat, exp_t, by = "id")
-    names(exp_t) = c("id", gene)
-    #### remove NA rows
-    exp_t = na.omit(exp_t)
-    
-    exp_t = exp_t %>% mutate(context = contexts[i]) %>% select("id", "context", all_of(gene))
-    
-    # Merge with other Contexts
-    exp_all = rbind(exp_all, exp_t)
-    
-    print(paste("Finished merging context",i))
-  }
-  
-  
+decompose_expression = function(total_exp, gene_name, context_thresh, data_dir = NULL){
   #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
-  #if(context_thresh < 2){
-  #  print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
-  #  context_thresh = 2
-  #}
-  shared_exp_file_name= paste0(data_dir, gene, ".AverageContext.decomposed_expression.txt")
-  spec_exp_file_name= paste0(data_dir, gene, ".", contexts,".decomposed_expression.txt")
+  if(context_thresh < 2){
+    print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
+    context_thresh = 2
+  }
   
   ### keep only samples that have repeats across number of contexts specified by threshold
-  ids_to_keep = names(which(table(exp_all$id) >= context_thresh))
+  ids_to_keep = names(which(table(total_exp$id) >= context_thresh))
   
-  expression = exp_all %>% filter(id %in% ids_to_keep)
+  expression = total_exp %>% filter(id %in% ids_to_keep)
   design = factor(expression$id)
   contexts=as.character(unique(expression$context))
-  #X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
-  X = as.matrix(expression %>%
-                  group_by(context) %>%
-                  mutate(
-                    scaled = scale(!!sym(gene))
-                  ) %>% ungroup() %>% select(scaled))
-  ## center and scale hom_expr_mat
-  rownames(hom_expr_mat) = hom_expr_mat$id
-  hom_expr_mat = hom_expr_mat[,-1]
-  hom_expr_mat = hom_expr_mat %>%
-    mutate(across(everything(), ~ scale(.x)[,1]))
+  X = scale(x = as.matrix(expression[,-c(1:2)]), center = T, scale = F)
   
   indiv.names = expression$id
   rownames(X) = expression$id
-  colnames(X) = gene
+  colnames(X) = gene_name
   
   ## calculate shared
   X.mean.indiv = matrix(apply(X, 2, tapply, design, mean, na.rm = TRUE),
@@ -73,28 +30,24 @@ decompose_expression = function(exp_files, gene, context_thresh, data_dir){
   Xw = X - Xb
   dimnames(Xw) = list(indiv.names, colnames(X))
   
-  
-  fwrite(x = data.table(X.mean.indiv,keep.rownames = T) %>% rename("id" = rn),
-         file = shared_exp_file_name, quote = F, row.names = F,
-         col.names = T, append = F, sep = '\t')
-  print("Saved shared expression matrix")
-  
-  
   Xw = data.frame(id=expression$id,context=expression$context, Xw)
+  X.mean.indiv_df = cbind(data.frame(X.mean.indiv), id = rownames(X.mean.indiv)) %>% rename("shared" = gene_name)
   
-  for(j in 1:length(contexts)){
+  ### reformat shared and specific into a matrix
+  decomp_exp_mat_sp = Xw %>% pivot_wider(names_from = "context", values_from = gene_name) %>% as.data.frame()
+  decomp_exp_mat = merge(decomp_exp_mat_sp, X.mean.indiv_df, by = "id")
+  
+  ## if output directory is provided, write out decoposed files
+  if(!is.null(data_dir)){
+    decomp_exp_file_name= paste0(data_dir, gene_name, ".decomposed_expression.txt")
     
-    wexp_t = data.frame(Xw[Xw$context == contexts[j],-2],row.names = 1)
-    
-    fwrite(x = data.table(wexp_t,keep.rownames = T) %>% rename("id" = rn),
-           file = spec_exp_file_name[j],quote = F, row.names = F,
+    fwrite(decomp_exp_mat,
+           file = decomp_exp_file_name, quote = F, row.names = F,
            col.names = T, append = F, sep = '\t')
-    
-    print(paste0("Saving (specific) expression matrix for context: ",contexts[j]))
-    
+    print("Saved decomposition matrix")
   }
   
-  return(hom_expr_mat)
+  return(decomp_exp_mat)
 }
 
 
