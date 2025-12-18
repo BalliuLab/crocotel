@@ -1,7 +1,7 @@
 
 #' @export
 decompose_expression = function(total_exp, gene_name, context_thresh, data_dir = NULL){
-  #%%%%%%%%%%%%%%% Decompose expression into shared and specific context expression
+  #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
   print("Decomposing data")
   if(context_thresh < 2){
     print("Context threshold is too low. Filtering for individuals that are present in at least 2 contexts.")
@@ -29,8 +29,8 @@ decompose_expression = function(total_exp, gene_name, context_thresh, data_dir =
   Xw = X - Xb
   dimnames(Xw) = list(indiv.names, colnames(X))
   
-  Xw = data.frame(id=expression$id,context=expression$context, Xw)
-  X.mean.indiv_df = cbind(data.frame(X.mean.indiv), id = rownames(X.mean.indiv)) %>% rename("shared" = gene_name)
+  Xw = data.frame(id=expression$id,context=expression$context, Xw, check.names = F)
+  X.mean.indiv_df = cbind(data.frame(X.mean.indiv, check.names = F), id = rownames(X.mean.indiv)) %>% rename("shared" = gene_name)
   
   ### reformat shared and specific into a matrix
   decomp_exp_mat_sp = Xw %>% pivot_wider(names_from = "context", values_from = gene_name) %>% as.data.frame()

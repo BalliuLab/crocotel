@@ -1,48 +1,34 @@
-crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
-                                    out_dir, gene_name, is_cxc, num_folds, Yhats_full = NULL, alpha = 0.5,
+crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
+                                    GReX_outdir, gene_name, is_cxc, num_folds, alpha = 0.5,
                                     n_cores = 4) {
   
-  q <- length(Ys)
-  m <- ncol(X)
-  N <- nrow(X)
+  ### create a working matrix based on the decomposed (regular expression if cxc) to use in this function
+  context_exp_mat = decomp_exp_mat
+  rownames(context_exp_mat) = decomp_exp_mat$id
+  context_exp_mat = context_exp_mat %>% dplyr::select(-id)
+  ## set up some needed data frames
   
-  method = "cxc"
-  tiss_indices = q
-  if(!is_cxc){
-    method = "crocotel"
-    tiss_indices = q-1
-    Yhats_full_final = lapply(1:tiss_indices, function(i)
-      matrix(NA, ncol = 1, nrow = lengths_y[i],
-             dimnames = list(rownames_y[[i]], "pred")))
-  }
-  # Initialize predictions
-  Yhats_tiss = lapply(1:q, function(i)
-    matrix(NA, ncol = 1, nrow = lengths_y[i],
-           dimnames = list(rownames_y[[i]], "pred")))
-  
-  # Homogenize expression matrix
-  hom_expr_mat <- matrix(NA, nrow = N, ncol = q, dimnames = list(rownames(X), NULL))
-  for (i in 1:q) {
-    hom_expr_mat[rownames(Ys[[i]]), i] <- Ys[[i]]
-  }
-  colnames(hom_expr_mat) = names(Ys)
+  rownames(total_exp_mat) = total_exp_mat$id
   
   # Drop samples missing in all tissues
-  all_missing <- rownames(hom_expr_mat)[rowSums(!is.na(hom_expr_mat)) == 0]
+  all_missing <- rownames(context_exp_mat)[rowSums(!is.na(context_exp_mat)) == 0]
   if (length(all_missing) > 0) {
-    hom_expr_mat <- hom_expr_mat[!rownames(hom_expr_mat) %in% all_missing, , drop = FALSE]
-    X <- X[rownames(X) %in% rownames(hom_expr_mat), , drop = FALSE]
-    message("Proceeding with ", nrow(X), " individuals after filtering.")
+    context_exp_mat <- context_exp_mat[!rownames(context_exp_mat) %in% all_missing, , drop = FALSE]
   }
+  X <- X[rownames(X) %in% rownames(context_exp_mat), , drop = FALSE]
+  message("Proceeding with ", nrow(X), " individuals after filtering.")
   
   # Cross-validation setup
   set.seed(123)  # for reproducibility
-  test_inds_idx <- caret::createFolds(rowMeans(hom_expr_mat, na.rm = TRUE), k = num_folds)
+  test_inds_idx <- caret::createFolds(rowMeans(context_exp_mat, na.rm = TRUE), k = num_folds)
   test_inds_ids <- lapply(test_inds_idx, function(x) rownames(X)[x])
   
-  test_inds <- lapply(1:q, function(i) {
-    lapply(test_inds_ids, function(fold_ids) which(rownames(Ys[[i]]) %in% fold_ids))
-  })
+  ## get person IDs that are not NA for the test set in each context
+  test_ids <- setNames(lapply(colnames(context_exp_mat), function(context) {
+    lapply(test_inds_ids, function(fold_ids) rownames(context_exp_mat)[
+      !is.na(context_exp_mat[, context]) & rownames(context_exp_mat) %in% fold_ids
+    ])
+  }), colnames(context_exp_mat))
   
   # Prepare parallel
   cl <- makeCluster(n_cores)
@@ -51,315 +37,217 @@ crossval_helper_parallel = function(Ys, X, lengths_y, rownames_y, contexts_vec,
   Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
-   
-    fold_hom_expr_mat <- hom_expr_mat[train_inds_id, , drop = FALSE]
+    
+    fold_exp_mat <- context_exp_mat[train_inds_id, , drop = FALSE]
+    
+    ### create a matrix of mxc to store estimated betas for this fold
+    beta_hat_mat = data.frame(matrix(NA, ncol = ncol(context_exp_mat), nrow = ncol(X)))
+    colnames(beta_hat_mat) = colnames(context_exp_mat)
+    intercept_mat = data.frame(matrix(NA, ncol = ncol(context_exp_mat), nrow = 1))
+    colnames(intercept_mat) = colnames(context_exp_mat)
     
     # Per-fold FBM (avoid file collisions)
-    fold_bkfile <- paste0(out_dir, gene_name, "_crocotel_tmp_fold", cur_fold)
+    fold_bkfile <- paste0(GReX_outdir, gene_name, "_crocotel_tmp_fold", cur_fold)
+    if(file.exists(paste0(fold_bkfile, ".bk"))){
+      file.remove(paste0(fold_bkfile, ".bk"))
+    }
     explanatory <- as_FBM(X, backingfile = fold_bkfile)
     
-    fold_Yhats <- vector("list", q)
+    fold_Yhats <- data.frame(matrix(NA,nrow = nrow(context_exp_mat), ncol = ncol(context_exp_mat),
+                                    dimnames = list(rownames(context_exp_mat), colnames(context_exp_mat))), check.names = F)
     
-    ### if we are running crocotel, fit the shared first so that we only fit this once
-    if(!is_cxc){
-      shared_fit = big_spLinReg(X = explanatory,
-                                ind.train = match(tiss_inds, rownames(X)),
-                                y.train = fold_hom_expr_mat[tiss_inds, "AverageContext"],
-                                K = 10, alphas = alpha, warn = FALSE)
+    ## fit each specific component per context
+    for (context in colnames(context_exp_mat)) {
+      context_ids <- rownames(fold_exp_mat)[!is.na(fold_exp_mat[,context])]
+      context_fit <- big_spLinReg(X = explanatory,
+                                  ind.train = match(context_ids, rownames(X)),
+                                  y.train = fold_exp_mat[context_ids, context],
+                                  K = 10, alphas = alpha, warn = FALSE)
       
-      best_idx_shared <- which.min(summary(shared_fit)$validation_loss)
-      beta_vec_shared <- unlist(summary(shared_fit)$beta[best_idx_shared])[1:m]
-      intercept_shared <- summary(shared_fit)$intercept[[best_idx_shared]]
+      best_idx <- which.min(summary(context_fit)$validation_loss)
+      beta_vec <- unlist(summary(context_fit)$beta[best_idx])
+      intercept <- summary(context_fit)$intercept[[best_idx]]
       
-      # Handle NA beta
-      beta_vec_shared[is.na(beta_vec_shared)] <- 0
-      ## make the sure beta vector is the correct dimensions
-      if (length(beta_vec_shared) < ncol(X)) {
-        full_beta <- rep(0, ncol(X))
-        full_beta[attr(shared_fit, "ind.col")] <- beta_vec
-        beta_vec <- full_beta
-      }
-    }
-    
-    ## fit each specific component per fissue
-    for (j in 1:tiss_indices) {
-      ## shared has to have the same tiss_inds 
-      tiss_inds <- rownames(fold_hom_expr_mat)[!is.na(fold_hom_expr_mat[, j])]
-      if (length(tiss_inds) < 2) next
-      
-      tiss_fit <- big_spLinReg(X = explanatory,
-                               ind.train = match(tiss_inds, rownames(X)),
-                               y.train = fold_hom_expr_mat[tiss_inds, j],
-                               K = 10, alphas = alpha, warn = FALSE)
-      
-      best_idx <- which.min(summary(tiss_fit)$validation_loss)
-      beta_vec <- unlist(summary(tiss_fit)$beta[best_idx])[1:m]
-      intercept <- summary(tiss_fit)$intercept[[best_idx]]
-      
-      # Handle NA beta : LENA maybe 
+      # Handle NA beta 
       beta_vec[is.na(beta_vec)] <- 0
       if (length(beta_vec) < ncol(X)) {
         full_beta <- rep(0, ncol(X))
         full_beta[attr(tiss_fit, "ind.col")] <- beta_vec
         beta_vec <- full_beta
       }
-  
-      ## get test indices that have data for this tissue
-      safe_test_inds = intersect(list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
       
-      ## get test indices that have data for this tissue
-      safe_test_inds = intersect(list(rownames(Ys[[j]])[test_inds[[j]][[cur_fold]]], rownames(X)))
       
-      ## get Yhat specific for this context
-      preds_val <- X[train_inds_id,]%*% beta_vec + intercept
+      beta_hat_mat[,context] = beta_vec
+      intercept_mat[1,context] = intercept
+    }
+    
+    ### predict on the train for each context
+    if(is_cxc){
+      contexts_prediction = colnames(context_exp_mat)
+    }else{
+      contexts_prediction = setdiff(colnames(context_exp_mat), "shared")
+    }
+    for(context in contexts_prediction){
+      ## get yhat specific 
+      specific_preds = X[train_inds_id,]%*% beta_hat_mat[,context] + intercept_mat[1,context]
       
-      ### if we are running crocote, get Yhat shared for this context
+      ### if we are running crocotel, get yhat shared for this context
       if(!is_cxc){
-        preds_shared_val = X[train_inds_id, ] %*% beta_vec_shared + intercept_shared
-        
-        ## fit gamma shared and specific using the training data
-        full_model = lm((hom_expr_mat[,j]+hom_expr_mat[,"AverageContext"])[train_inds_id] ~ preds_val[train_inds_id,] + preds_shared_val[train_inds_id,])
-        specific_beta = summary(full_model)$coefficients[2,1]
-        shared_beta = summary(full_model)$coefficients[3,1]
-        intercept_full = summary(full_model)$coefficients[1,1]
+        shared_preds = X[train_inds_id, ] %*% beta_hat_mat[,"shared"] + intercept_mat[1,"shared"]
       }
       
-      ### get Yhat specific on the test set
-      preds <- X[safe_test_inds, ] %*% beta_vec + intercept
-      fold_Yhats[[j]] <- matrix(NA, nrow = lengths_y[j], ncol = 1,
-                                dimnames = list(rownames_y[[j]], "pred"))
-      fold_Yhats[[j]][safe_test_inds, 1] <- preds
+      ## get test indices that have data for this context
+      safe_test_ids = intersect(test_ids[[context]][[cur_fold]], rownames(X))
       
-      ### if running crocotel, get Yhat shared on the test set
+      ### get Yhat specific on the test set
+      specific_preds_test = X[safe_test_ids, ] %*% beta_hat_mat[,context] + intercept_mat[1,context]
+      fold_Yhats[safe_test_ids, context] <- specific_preds_test
+      
+      ### if running crocotel, get Yhat shared on the test set and Yhat full
       if(!is_cxc){
-        preds_shared = X[safe_test_inds, ] %*% beta_vec_shared + intercept_shared
-        fold_Yhats[[q]] = matrix(NA, nrow = lengths_y[q], ncol = 1,
-                                 dimnames = list(rownames_y[[q]], "pred"))
-        fold_Yhats[[q]][safe_test_inds, 1] <- preds_shared
-        
-        ## compute full using estimated gammas for this fold
-        Yhats_full[[j]][safe_test_inds,] = preds*specific_beta + preds_shared*shared_beta + intercept_full
+        shared_preds_test = X[safe_test_ids, ] %*% beta_hat_mat[,"shared"] + intercept_mat[1,"shared"]
+        fold_Yhats[safe_test_ids, "shared"] = shared_preds_test
       }
     }
     
     file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
-    return_list = list(fold_Yhats, Yhats_full)
+    return_list = list(fold_Yhats)
     return(return_list)
   }
   stopCluster(cl)
   
-  # Combine predictions
-  for (fold in 1:length(Yhats_list)) {
-    fold_Yhats = Yhats_list[[fold]][[1]]  # tissue preds
-    fold_Yhats_full = Yhats_list[[fold]][[2]] # full preds
-    for (j in 1:tiss_indices) {
-      ## tissue-specific predictions
-      if (!is.null(fold_Yhats[[j]])) {
-        non_na_rows <- rownames(fold_Yhats[[j]])[!is.na(fold_Yhats[[j]][,1])]
-        Yhats_tiss[[j]][non_na_rows, 1] <- fold_Yhats[[j]][non_na_rows, 1]
-      }
-      ## full model predictions
-      if(!is_cxc){
-        if (!is.null(fold_Yhats_full[[j]])) {
-          non_na_rows <- rownames(fold_Yhats_full[[j]])[!is.na(fold_Yhats_full[[j]][,1])]
-          Yhats_full_final[[j]][non_na_rows, 1] <- fold_Yhats_full[[j]][non_na_rows, 1]
-        }
-      }
-    }
-  }
+  # Combine predictions across parallelized folds
+  context_predictions_list = lapply(Yhats_list, `[[`, 1) 
+  combined_context_preds = Reduce(function(a, b) dplyr::coalesce(a, b), context_predictions_list)
+  combined_context_preds = cbind(id = rownames(combined_context_preds), combined_context_preds)
   
-  names(Yhats_tiss) = names(Ys)
-  if(!is_cxc){
-    names(Yhats_full_final) = names(Ys)[1:tiss_indices]
+  if(is_cxc){
+    fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
+    full = NA
+    ## get r2
+    method = "cxc"
+    evaluation_helper(total_exp_mat, combined_context_preds, GReX_outdir, gene_name, method = method)
   }else{
-    Yhats_full_final = Yhats_tiss
+    shared_col = combined_context_preds[,"shared"]
+    ## get crocotel_added
+    added = as.data.frame(
+      lapply(combined_context_preds[,(2:(ncol(combined_context_preds)-1))], function(col) col + shared_col), 
+      check.names = F)
+    added = cbind(id = rownames(combined_context_preds), added)
+    ## get added r2
+    method = "crocotel_added"
+    evaluation_helper(total_exp_mat, added, GReX_outdir, gene_name, method = method, combined_context_preds)
+    ## get crocotel_full
+    full = as.data.frame(lapply(colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))]), function(col){
+      model = lm(total_exp_mat[rownames(combined_context_preds),col]~combined_context_preds[,col] + shared_col)
+      predict(model)
+    }), 
+    check.names = F)
+    names(full) = colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))])
+    full = cbind(id = rownames(combined_context_preds), full)
+    ## get full r2
+    method = "crocotel"
+    evaluation_helper(total_exp_mat, full, GReX_outdir, gene_name, method = method, combined_context_preds)
+    fwrite(added, file = paste0(GReX_outdir, gene_name,".", method, "_added", ".GReX_predictors.txt"), sep = "\t")
+    fwrite(full, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
+    fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, "_context.GReX_predictors.txt"), sep = "\t")
   }
   
-  ## format full predictions into a matrix to write out
-  Yhat_mat<-data.frame(matrix(NA, nrow = nrow(X), ncol=tiss_indices))
-  rownames(Yhat_mat)<-rownames(X)
-  colnames(Yhat_mat)<-contexts_vec[1:tiss_indices]
-  for(context in contexts_vec[1:tiss_indices]){
-    Yhat_mat[names(Yhats_full_final[[context]][!is.na(Yhats_full_final[[context]]),]),context]<-Yhats_full_final[[context]][!is.na(Yhats_full_final[[context]])]
-  }
-  all_missing<-names(rowMeans(Yhat_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_mat, na.rm = T)))])
-  remove_inds<-which(rownames(Yhat_mat) %in% all_missing)
-  if(length(remove_inds) != 0){
-    Yhat_mat = data.frame(Yhat_mat[-remove_inds,], check.names = F)
-  }
-  Yhat_mat = cbind(id = rownames(Yhat_mat), Yhat_mat)
-  fwrite(Yhat_mat, file = paste0(out_dir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
-  
-  return(list(Yhats_tiss = Yhats_tiss, Yhats_full = Yhats_full_final))
+  return(list(full = full, context = combined_context_preds))
 }
 
 
-evaluation_helper = function(Ys, hom_expr_mat, Yhats_tiss, contexts_vec, is_GBAT, Yhats_full, out_dir, gene_name){
+evaluation_helper = function(total_exp_mat, combined_full_preds, out_dir, gene_name, method, combined_context_preds=NULL){
   message("Calculating r2 performance metrics")
-  ## Score each method
-  het_cv_pvals<-vector("list", length(contexts_vec)); het_cv_r2s<-vector("list", length(contexts_vec))
-  hom_cv_pvals<-vector("list", length(contexts_vec)); hom_cv_r2s<-vector("list", length(contexts_vec))
-  het_cv_pvals.herit<-vector("list", length(contexts_vec)); het_cv_r2s.herit<-vector("list", length(contexts_vec))
+  
+  contexts_vec = setdiff(colnames(total_exp_mat), "id")
   full_cv_pvals<-vector("list", length(contexts_vec)); full_cv_r2s<-vector("list", length(contexts_vec))
-  tiss_cv_pvals<-vector("list", length(contexts_vec)); tiss_cv_r2s<-vector("list", length(contexts_vec))
-  full_weights<-vector("list", length(contexts_vec)); het_scales=vector("list", length(contexts_vec))
+  names(full_cv_pvals) = contexts_vec; names(full_cv_r2s) = contexts_vec
+  shared_cv_pvals<-vector("list", length(contexts_vec)); shared_cv_r2s<-vector("list", length(contexts_vec))
+  names(shared_cv_pvals) = contexts_vec; names(shared_cv_r2s) = contexts_vec
+  specific_cv_pvals<-vector("list", length(contexts_vec)); specific_cv_r2s<-vector("list", length(contexts_vec))
+  names(specific_cv_pvals) = contexts_vec; names(specific_cv_r2s) = contexts_vec
   
   for(context in contexts_vec){
-    if(context != "AverageContext"){
-      if(!is_GBAT){
-        index_exp = which(contexts_vec == context)
-        index_avg_exp = which(contexts_vec == "AverageContext")
-        hom.tmp=Yhats_tiss[[index_exp]]
-        # baseline model
-        m1<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp])~1) ### tests how much an intercept explains total expresison
-        # homogeneous model
-        m2<-lm((hom_expr_mat[,index_exp]+hom_expr_mat[,index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]]) ### tests how much predicted shared expression of this context explains total expression
-        # heterogeneous model
-        ## if we learned one for this tissue/context
-        ## is the het term heritable:
-        hetresponse=hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]
-        hetbaseline<-lm(hetresponse ~ 1)
-        hetfit=lm(hetresponse ~ Yhats_tiss[[index_exp]]) 
-        
-        het_test_stat.herit<--2*(logLik(hetbaseline))+2*logLik(hetfit)
-        het_cv_pvals.herit[[index_exp]]<-pchisq(het_test_stat.herit,1,lower.tail=F) ## pvalue of the observed specific component of expression to the predicted specific expression
-        het_cv_r2s.herit[[index_exp]]<-summary(hetfit)$adj.r.squared
-        
-        
-        m3<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
-        #het_scales[[index_exp]]=coef(m3)[2]
-        # full model
-        m4=lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp]+hom_expr_mat[rownames(Ys[[index_exp]]),index_avg_exp]) ~ Yhats_tiss[[index_avg_exp]][rownames(Ys[[index_exp]]),] + 
-                Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
-        full_values <- predict(m4)
-        full_values = data.frame(full_values, check.names = F)
-        names(full_values) = "pred"
-        Yhats_full[[index_exp]][rownames(full_values), ]<- full_values$pred
-        
-        # test for signif of full model
-        full_test_stat<--2*(logLik(m1))+2*logLik(m4)
-        full_cv_pvals[[index_exp]]<-pchisq(full_test_stat,2,lower.tail=F) ## pvalue of the total expression for this context with shared and specific expression
-        full_cv_r2s[[index_exp]]<-summary(m4)$adj.r.squared
-        full_weights[[index_exp]]<-coef(m4)[2:3]
-        # test for signif of het | hom
-        het_test_stat<--2*(logLik(m2))+2*logLik(m4) ## pvalue of total against just shared with total against full
-        het_cv_pvals[[index_exp]]<-pchisq(het_test_stat,1,lower.tail=F)
-        het_cv_r2s[[index_exp]]<-summary(m3)$adj.r.squared
-        # test for signif of hom | het
-        hom_test_stat<--2*(logLik(m3))+2*logLik(m4) ## pvalue of total against specific and total against shared and specific
-        hom_cv_pvals[[index_exp]]=pchisq(hom_test_stat,1,lower.tail=F)
-        hom_cv_r2s[[index_exp]]=summary(m2)$adj.r.squared
-      }
-      # tissue by tissue approach
-      if(is_GBAT){
-        index_exp = which(contexts_vec == context)
-        t1<-lm(hom_expr_mat[rownames(Ys[[index_exp]]),index_exp] ~ Yhats_tiss[[index_exp]][rownames(Ys[[index_exp]]),])
-        m1<-lm((hom_expr_mat[rownames(Ys[[index_exp]]),index_exp])~1) ### tests how much an intercept explains total expresison
-        tiss_test_stat<--2*(logLik(m1))+2*logLik(t1)
-        tiss_cv_pvals[[index_exp]]<-pchisq(tiss_test_stat,1,lower.tail=F)
-        tiss_cv_r2s[[index_exp]]<-summary(t1)$adj.r.squared
-      }
-    }else{
-      if(!is_GBAT){
-        ## first is the hom term heritable:
-        index_exp = which(contexts_vec == context)
-        index_avg_exp = which(contexts_vec == "AverageContext")
-        hom.tmp=Yhats_tiss[[context]]
-        baseline=lm(hom_expr_mat[,index_avg_exp] ~ 1)
-        homfit=lm(hom_expr_mat[,index_avg_exp] ~ hom.tmp)
-        hom_test_stat.herit<--2*(logLik(baseline))+2*logLik(homfit)
-        het_cv_pvals.herit[[index_exp]]=pchisq(hom_test_stat.herit,1,lower.tail=F)
-        het_cv_r2s.herit[[index_exp]]=summary(homfit)$adj.r.squared
-      }
+    m1<-lm(total_exp_mat[,context]~1) ### tests how much an intercept explains total expresison
+    
+    # full model
+    m4=lm(total_exp_mat[combined_full_preds$id,context] ~ combined_full_preds[,context])
+    
+    if(method != "cxc"){
+      #shared model
+      m2 = lm(total_exp_mat[combined_context_preds$id, context] ~ combined_context_preds[,"shared"])
+      #specific model
+      m3 = lm(total_exp_mat[combined_context_preds$id, context] ~ combined_context_preds[, context])
+
+      # test for signif of both models
+      shared_test_stat<--2*(logLik(m1))+2*logLik(m2)
+      shared_cv_pvals[[context]]<-pchisq(shared_test_stat,2,lower.tail=F) ## pvalue of the total expression for this context with shared  expression
+      shared_cv_r2s[[context]]<-summary(m2)$adj.r.squared
+      
+      specific_test_stat<--2*(logLik(m1))+2*logLik(m3)
+      specific_cv_pvals[[context]]<-pchisq(specific_test_stat,2,lower.tail=F) ## pvalue of the total expression for this context with specific expression
+      specific_cv_r2s[[context]]<-summary(m3)$adj.r.squared
     }
+    
+    # test for signif of full model
+    full_test_stat<--2*(logLik(m1))+2*logLik(m4)
+    full_cv_pvals[[context]]<-pchisq(full_test_stat,2,lower.tail=F) ## pvalue of the total expression for this context with shared and specific expression
+    full_cv_r2s[[context]]<-summary(m4)$adj.r.squared
+    
   }
-  if(is_GBAT){
-    pvaldf=cbind(tiss_cv_pvals)
-    rownames(pvaldf)=names(Ys)
-    pvaldf = data.frame(context = rownames(pvaldf), pvaldf, check.names = F)
-    r2df=cbind(tiss_cv_r2s)
-    rownames(r2df)=names(Ys)
-    r2df = data.frame(context = rownames(r2df), r2df, check.names = F)
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".GBAT.crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, ".GBAT.crossval_r2.txt"), sep = "\t")
+  
+  full_cv_pvals     <- unlist(full_cv_pvals)
+  specific_cv_pvals <- unlist(specific_cv_pvals)
+  shared_cv_pvals   <- unlist(shared_cv_pvals)
+  
+  full_cv_r2s       <- unlist(full_cv_r2s)
+  specific_cv_r2s   <- unlist(specific_cv_r2s)
+  shared_cv_r2s     <- unlist(shared_cv_r2s)
+  
+  pvaldf=cbind(full_cv_pvals, specific_cv_pvals, shared_cv_pvals)
+  r2df=cbind(full_cv_r2s, specific_cv_r2s, shared_cv_r2s)
+  
+  
+  if(method != "cxc"){
+    pvaldf <- data.frame(
+      context = contexts_vec,
+      full = full_cv_pvals,
+      specific = specific_cv_pvals,
+      shared = shared_cv_pvals,
+      check.names = FALSE
+    )
+    
+    r2df <- data.frame(
+      context = contexts_vec,
+      full = full_cv_r2s,
+      specific = specific_cv_r2s,
+      shared = shared_cv_r2s,
+      check.names = FALSE
+    )
   }else{
-    pvaldf=cbind(het_cv_pvals, het_cv_pvals.herit, hom_cv_pvals, full_cv_pvals)
-    rownames(pvaldf)=names(Ys)
-    r2df=cbind(het_cv_r2s, het_cv_r2s.herit, hom_cv_r2s, full_cv_r2s)
-    rownames(r2df)=names(Ys)
-    pvaldf = data.frame(cbind(context = rownames(pvaldf), pvaldf), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
-    r2df = data.frame(cbind(context = rownames(r2df), r2df), check.names = F) %>% mutate(across(everything(), ~ map(.x, ~ if (is.null(.x)) NA else .x)))
+    pvaldf <- data.frame(
+      context = contexts_vec,
+      full = full_cv_pvals,
+      specific = NA,
+      shared = NA,
+      check.names = FALSE
+    )
     
-    fwrite(pvaldf, file = paste0(out_dir, gene_name, ".crocotel.crossval_pvalues.txt"), sep = "\t")
-    fwrite(r2df, file = paste0(out_dir, gene_name, ".crocotel.crossval_r2.txt"), sep = "\t")
-    
-    Yhat_full_mat<-matrix(NA, nrow = nrow(hom_expr_mat), ncol=length(contexts_vec))
-    rownames(Yhat_full_mat)<-rownames(hom_expr_mat)
-    colnames(Yhat_full_mat)<-contexts_vec
-    for(i in 1:length(contexts_vec)){
-      context = contexts_vec[i]
-      Yhat_full_mat[rownames(Yhats_full[[i]]),i]<-Yhats_full[[i]]
-    }
-    all_missing<-names(rowMeans(Yhat_full_mat, na.rm = T)[which(is.nan(rowMeans(Yhat_full_mat, na.rm = T)))])
-    remove_inds<-which(rownames(Yhat_full_mat) %in% all_missing)
-    Yhat_full_mat = data.frame(cbind(id = rownames(Yhat_full_mat), Yhat_full_mat), check.names = F)
-    if(length(remove_inds) != 0){
-      print("here")
-      Yhat_full_mat = Yhat_full_mat[-remove_inds,]
-    }
-    fwrite(Yhat_full_mat[,!names(Yhat_full_mat) %in% "AverageContext"], file = paste0(out_dir,gene_name,".crocotel.GReX_predictors.txt"), sep = "\t")
+    r2df <- data.frame(
+      context = contexts_vec,
+      full = full_cv_r2s,
+      specific = NA,
+      shared = NA,
+      check.names = FALSE
+    )
   }
+
+  fwrite(pvaldf, file = paste0(out_dir, gene_name, ".", method, ".crossval_pvalues.txt"), sep = "\t")
+  fwrite(r2df, file = paste0(out_dir, gene_name, ".", method, ".crossval_r2.txt"), sep = "\t")
   
   message("Done computing evaluation metrics.")
   
-}
-
-format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
-  files = list.files(crocotel_dir, full.names = T)
-  for(file in files){
-    context = sub("\\..*", "", basename(file))
-    sub_df = fread(file, sep = "\t", data.table = F)
-    if (top_level == "R"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = target,
-          gene = regulator,
-          tstat = statistic,
-          p.value = pvalue
-        ) 
-    }else if(top_level == "T"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = regulator,
-          gene = target,
-          tstat = statistic,
-          p.value = pvalue
-        ) 
-    }else{
-      stop("No valid input specified for target or regulator as top level.")
-    }
-    sub_df %>% select(SNP, gene, beta, tstat, p.value, FDR) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", quote = F, na = NA)
-    
-    sub_df = fread(file, sep = "\t", data.table = F)
-    if (top_level == "R"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = target,
-          gene = regulator
-        ) 
-    }else if(top_level == "T"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = regulator,
-          gene = target
-        ) 
-    }
-    
-    sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
-      select(family, fam_p) %>% distinct() %>%
-      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
-  }
-
 }
 
 # Modified treeQTL function to get eGenes in a multi-context experiment
