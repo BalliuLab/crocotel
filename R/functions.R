@@ -122,11 +122,11 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
   combined_context_preds = cbind(id = rownames(combined_context_preds), combined_context_preds)
   
   if(is_cxc){
+    method = "cxc"
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     full = NA
     ## get r2
-    method = "cxc"
-    evaluation_helper(total_exp_mat, combined_context_preds, GReX_outdir, gene_name, method = method)
+    #evaluation_helper(total_exp_mat, combined_context_preds, GReX_outdir, gene_name, method = method)
   }else{
     shared_col = combined_context_preds[,"shared"]
     ## get crocotel_added
@@ -137,18 +137,26 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
     ## get added r2
     method = "crocotel_added"
     evaluation_helper(total_exp_mat, added, GReX_outdir, gene_name, method = method, combined_context_preds)
+    fwrite(added, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     ## get crocotel_full
-    full = as.data.frame(lapply(colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))]), function(col){
-      model = lm(total_exp_mat[rownames(combined_context_preds),col]~combined_context_preds[,col] + shared_col)
-      predict(model)
-    }), 
-    check.names = F)
+    full = Reduce(
+      function(x, y) merge(x, y, by = "rownames", all = TRUE),
+        lapply(colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))]), function(col){
+        model = lm(total_exp_mat[rownames(combined_context_preds),col]~combined_context_preds[,col] + shared_col)
+        preds = predict(model)
+        df = data.frame(
+          rownames = combined_context_preds[!is.na(combined_context_preds[,col]), "id"],
+          col = preds,
+          check.names = FALSE
+        )
+        names(df) = c("rownames", col)
+        df
+      }))
     names(full) = colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))])
     full = cbind(id = rownames(combined_context_preds), full)
     ## get full r2
     method = "crocotel"
     evaluation_helper(total_exp_mat, full, GReX_outdir, gene_name, method = method, combined_context_preds)
-    fwrite(added, file = paste0(GReX_outdir, gene_name,".", method, "_added", ".GReX_predictors.txt"), sep = "\t")
     fwrite(full, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, "_context.GReX_predictors.txt"), sep = "\t")
   }
@@ -375,3 +383,67 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   unlink(tmp_dir, recursive = TRUE)
   return(eGene_xT_sel)
 }
+
+
+
+###### fastgxc functions
+#' Decomposition Step
+#'
+#' Function to decompose expression into one shared component and specific components per context
+#'
+#' @param  exp_mat_filename - full input filepath where expression matrix is stored. This file should be in the same format as the expression data file outputted by FastGxC's simulate_data function
+#' @param  data_dir - full filepath where decomposed output files will be written out to
+#' @return outputs one file with the shared component of expression per individual and C files for each specific expression component for each of the C contexts
+#'
+decomposition_step = function(exp_mat_filename, data_dir){
+  if(!dir.exists(data_dir)) dir.create(data_dir)
+  #%%%%%%%%%%%%%%% Read expression matrix, genes in columns, samples in rows.
+  #exp_mat=read.table(file = paste0(data_dir,exp_mat_filename), sep = '\t')
+  exp_mat=data.table::fread(file = exp_mat_filename, sep = '\t', data.table = F)
+  
+  #%%%%%%%%%%%%%%% Sample and context names
+  design=sapply(1:nrow(exp_mat), function(i) unlist(strsplit(exp_mat[,1][i], split = " - "))[1])
+  context_names=sapply(1:nrow(exp_mat), function(i) unlist(strsplit(exp_mat[,1][i], split = " - "))[2])
+  contexts=unique(context_names)
+  
+  #%%%%%%%%%%%%%%% Decompose expression into homogeneous and heterogeneous context expression
+  print("Decomposing data")
+  rownames(exp_mat) = exp_mat[,1]
+  exp_mat = exp_mat[,-1]
+  
+  #%%%%%%%%%%%%%%% Print number of genes and samples
+  string1 = sprintf("There are %s samples and %s genes. The max number of missing samples for a gene is  %s. The max number of missing genes for a sample is  %s. \n", nrow(exp_mat), ncol(exp_mat),max(colSums(is.na(exp_mat))),max(rowSums(is.na(exp_mat))))
+  cat(string1)
+  
+  dec_exp_all=decompose(X = exp_mat, design = design)
+  bexp_all=dec_exp_all$Xb
+  wexp_all=dec_exp_all$Xw
+  bexp_all[is.nan(bexp_all)]=NA
+  wexp_all[is.nan(wexp_all)]=NA
+  
+  string2 = sprintf("Between individual matrix: There are %s individuals and %s genes. The max number of missing samples for a gene is  %s. The max number of missing genes for a sample is  %s. \n", nrow(bexp_all), ncol(bexp_all),max(colSums(is.na(bexp_all))),max(rowSums(is.na(bexp_all))))
+  cat(string2)
+  
+  string3 = sprintf("Within individual matrix: There are %s samples and %s genes. The max number of missing samples for a gene is  %s. The max number of missing genes for a sample is  %s. \n", nrow(wexp_all), ncol(wexp_all),max(colSums(is.na(wexp_all))),max(rowSums(is.na(wexp_all))))
+  cat(string3)
+  
+  #%%%%%%%%%%%%%%% Save decomposed expression files 
+  print("Finished decomposition")
+  
+  print("Saving between-individuals variation matrix")
+  
+  fwrite(x = data.table::data.table(t(bexp_all),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]},
+         file = paste0(data_dir,"context_shared_expression.txt"), quote = F, row.names = F,
+         col.names = T, append = F, sep = '\t')
+  
+  print("Saving within-individuals variation matrix for context: ")
+  for(i in 1:length(contexts)){
+    print(contexts[i])
+    wexp_t = wexp_all[grep(pattern = paste0(contexts[i],"$"), rownames(wexp_all)),]
+    rownames(wexp_t)=gsub(pattern = paste0(" - ",contexts[i]), replacement = "", x = rownames(wexp_t))
+    fwrite(x = data.table::data.table(t(wexp_t),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]},
+           file = paste0(data_dir,contexts[i],"_specific_expression.txt"),quote = F, row.names = F,
+           col.names = T, append = F, sep = '\t')
+  }
+}
+
