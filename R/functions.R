@@ -126,7 +126,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     full = NA
     ## get r2
-    #evaluation_helper(total_exp_mat, combined_context_preds, GReX_outdir, gene_name, method = method)
+    evaluation_helper(total_exp_mat, combined_context_preds, GReX_outdir, gene_name, method = method)
   }else{
     shared_col = combined_context_preds[,"shared"]
     ## get crocotel_added
@@ -389,7 +389,7 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
 ###### fastgxc functions
 #' Decomposition Step
 #'
-#' Function to decompose expression into one shared component and specific components per context
+#' Function to decompose expression into one shared component and specific components per context to run crocotel direct
 #'
 #' @param  exp_mat_filename - full input filepath where expression matrix is stored. This file should be in the same format as the expression data file outputted by FastGxC's simulate_data function
 #' @param  data_dir - full filepath where decomposed output files will be written out to

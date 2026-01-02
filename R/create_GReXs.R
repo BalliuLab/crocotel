@@ -94,6 +94,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   # check if imputation is needed
   if(impute){
     if(sum(is.na(total_exp_mat) == 0)){
+      message("imputation not needed")
       impute = F
     }else{
       run_cxc = T
@@ -114,6 +115,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   
   #### impute using cxc if flag is set
   if(impute){
+    message("imputing crocotel GReX")
     crocotel_grex = crossval_output$full
     cxc_grex = crossval_output_cxc$context
     crocotel_grex[is.na(crocotel_grex)] = cxc_grex[is.na(crocotel_grex)]
