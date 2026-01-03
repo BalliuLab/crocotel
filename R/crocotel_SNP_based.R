@@ -34,6 +34,9 @@ crocotel_SNP_based = function(genotype_file,
                              pv_threshold_tra = 0.05,
                              error_covariance = numeric()){
   
+  out_dir = paste0(out_dir, "/crocotel_SNP_based_output/")
+  dir.create(out_dir, showWarnings = F)
+  
   ###### decompose expression here
   decomp_exp = decomposition_step(exp_files)
   
