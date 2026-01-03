@@ -9,10 +9,12 @@ create_GReXs(
   out_dir,
   genotype_file = NULL,
   exp_files = NULL,
-  context_thresh = 3,
+  context_thresh = 2,
   alpha = 0.5,
   num_folds = 10,
-  method = "crocotel"
+  impute = F,
+  run_cxc = F,
+  save_decomposition = F
 )
 }
 \arguments{

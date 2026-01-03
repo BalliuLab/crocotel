@@ -2,6 +2,7 @@
 
 export(concat_crocotel_lmm_files)
 export(create_GReXs)
+export(crocotel_SNP_based)
 export(crocotel_lite)
 export(crocotel_lmm)
 export(decompose_expression)

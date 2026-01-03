@@ -1,6 +1,6 @@
-#' eQTL Mapping Step
+#' crocotel SNP based
 #'
-#' Function to map cis eQTLs - cis window is defined as 1Mb
+#' Function to map SNP-based trans eQTLs - cis window is defined as 1Mb
 #'
 #' @param  SNP_file_name Full path to SNP genotype matrix.
 #' @param  snps_location_file_name Full path to SNP location file.
