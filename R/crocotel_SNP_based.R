@@ -2,10 +2,10 @@
 #'
 #' Function to map SNP-based trans eQTLs - cis window is defined as 1Mb
 #'
-#' @param  SNP_file_name Full path to SNP genotype matrix.
-#' @param  snps_location_file_name Full path to SNP location file.
+#' @param  genotype_file Full path to SNP genotype matrix.
+#' @param  snpsloc_file Full path to SNP location file.
 #' @param  expression_file_name Full path to expression matrix.
-#' @param  gene_location_file_name Full path to gene location file.
+#' @param  geneloc_file Full path to gene location file.
 #' @param  context Context name for labeling output.
 #' @param  out_dir Output directory.
 #' @param  output_file_name_cis Path to write cis-eQTL output.
@@ -56,7 +56,7 @@ crocotel_SNP_based = function(genotype_file,
     expression_mat = expression_mat[,-1]
     genos = data.frame(fread(file = genotype_file, sep = '\t'),row.names = 1)
     
-    genepos <- data.table::fread(gene_location_file_name, sep = "\t", header = TRUE, data.table = FALSE)
+    genepos <- data.table::fread(geneloc_file, sep = "\t", header = TRUE, data.table = FALSE)
     names(genepos) <- tolower(names(genepos)) 
     
     genepos <- genepos |>
@@ -67,7 +67,7 @@ crocotel_SNP_based = function(genotype_file,
       ) |>
       dplyr::select(geneid, chr, s1, s2)
     
-    snpspos <- read.table(snps_location_file_name, header = TRUE)[, c("snpid", "chr", "pos")]
+    snpspos <- read.table(snpsloc_file, header = TRUE)[, c("snpid", "chr", "pos")]
     
     # Filter individuals with all NAs
     expression_mat = data.frame(expression_mat) %>% select_if(~ !all(is.na(.)))
