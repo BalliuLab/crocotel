@@ -387,19 +387,61 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
 
 
 ###### fastgxc functions
+
+decompose=function(X,design){
+  X = as.matrix(X)
+  rep.measures = factor(design)
+  if (any(summary(as.factor(rep.measures)) == 1)) 
+    stop("A multilevel analysis can not be performed when at least one some sample is not repeated.")
+  indiv.names = rownames(X)
+  rownames(X) = as.character(rep.measures)
+  X.mean.indiv = matrix(apply(X, 2, tapply, rep.measures, mean, na.rm = TRUE), 
+                        nrow = length(unique(rep.measures)), 
+                        ncol = dim(X)[2], 
+                        dimnames = list(levels(as.factor(rep.measures)), colnames(X)))
+  Xb = X.mean.indiv[as.character(rep.measures), ]
+  Xw = X - Xb
+  dimnames(Xw) = list(indiv.names, colnames(X))
+  return(list(Xw=Xw,Xb=X.mean.indiv))
+}
+
 #' Decomposition Step
 #'
 #' Function to decompose expression into one shared component and specific components per context to run crocotel direct
 #'
-#' @param  exp_mat_filename - full input filepath where expression matrix is stored. This file should be in the same format as the expression data file outputted by FastGxC's simulate_data function
-#' @param  data_dir - full filepath where decomposed output files will be written out to
-#' @return outputs one file with the shared component of expression per individual and C files for each specific expression component for each of the C contexts
+#' @param  exp_files - list of expression files for each context
+#' @return returns the shared component of expression per individual and each specific expression component for each of the C contexts
 #'
-decomposition_step = function(exp_mat_filename, data_dir){
-  if(!dir.exists(data_dir)) dir.create(data_dir)
-  #%%%%%%%%%%%%%%% Read expression matrix, genes in columns, samples in rows.
-  #exp_mat=read.table(file = paste0(data_dir,exp_mat_filename), sep = '\t')
-  exp_mat=data.table::fread(file = exp_mat_filename, sep = '\t', data.table = F)
+decomposition_step = function(exp_files){
+
+  context_names = c()
+  
+  ### merge the expression files
+  exp_all=data.frame(fread(input = exp_files[1], header = T), check.names = F,stringsAsFactors = F)
+  cur_context = gsub("_expression.txt", "", basename(exp_files[1]))
+  names(exp_all)[-1] = paste(names(exp_all)[-1],cur_context, sep = " - ")
+  context_names = c(context_names, cur_context)
+  print(paste("Finished merging context",1))
+  
+  for(i in 2:length(exp_files)){
+    
+    # Read expression matrix for tissue t
+    cur_context = gsub("_expression.txt", "", basename(exp_files[i]))
+    exp_t=data.frame(fread(input = exp_files[i], header = T), check.names = F,stringsAsFactors = F)
+    colnames(exp_t)[-1] = paste(colnames(exp_t)[-1],cur_context, sep = " - ")
+    context_names = c(context_names, cur_context)
+    
+    # Merge with other tissues
+    exp_all = merge(x = exp_all, y = exp_t, by="id", all = TRUE)
+    
+    print(paste("Finished merging context",i))
+  }
+  
+  # Transpose merged expression matrix to have genes in the columns 
+  exp_mat = t(as.matrix(exp_all[, -1]))
+  colnames(exp_mat) = exp_all[,1]
+  exp_mat = cbind(id = rownames(exp_mat), data.frame(exp_mat, check.names = F))
+  print("Finished transposing merged file")
   
   #%%%%%%%%%%%%%%% Sample and context names
   design=sapply(1:nrow(exp_mat), function(i) unlist(strsplit(exp_mat[,1][i], split = " - "))[1])
@@ -430,20 +472,19 @@ decomposition_step = function(exp_mat_filename, data_dir){
   #%%%%%%%%%%%%%%% Save decomposed expression files 
   print("Finished decomposition")
   
-  print("Saving between-individuals variation matrix")
-  
-  fwrite(x = data.table::data.table(t(bexp_all),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]},
-         file = paste0(data_dir,"context_shared_expression.txt"), quote = F, row.names = F,
-         col.names = T, append = F, sep = '\t')
-  
-  print("Saving within-individuals variation matrix for context: ")
+  exp_list = list()
+  shared_exp = data.table::data.table(t(bexp_all),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]}
+  exp_list[["shared"]] = shared_exp
+
   for(i in 1:length(contexts)){
     print(contexts[i])
     wexp_t = wexp_all[grep(pattern = paste0(contexts[i],"$"), rownames(wexp_all)),]
     rownames(wexp_t)=gsub(pattern = paste0(" - ",contexts[i]), replacement = "", x = rownames(wexp_t))
-    fwrite(x = data.table::data.table(t(wexp_t),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]},
-           file = paste0(data_dir,contexts[i],"_specific_expression.txt"),quote = F, row.names = F,
-           col.names = T, append = F, sep = '\t')
+    cur_sp_exp = data.table::data.table(t(wexp_t),keep.rownames = T) %>% {setnames(., old = "rn", new = "geneID")[]}
+    exp_list[[contexts[i]]] = cur_sp_exp
   }
+  
+  return(exp_list)
+  
 }
 

@@ -93,7 +93,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   
   # check if imputation is needed
   if(impute){
-    if(sum(is.na(total_exp_mat) == 0)){
+    if(sum(is.na(total_exp_mat)) == 0){
       message("imputation not needed")
       impute = F
     }else{
