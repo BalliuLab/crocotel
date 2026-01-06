@@ -258,6 +258,54 @@ evaluation_helper = function(total_exp_mat, combined_full_preds, out_dir, gene_n
   
 }
 
+format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
+  files = list.files(crocotel_dir, full.names = T)
+  for(file in files){
+    context = sub("\\..*", "", basename(file))
+    sub_df = fread(file, sep = "\t", data.table = F)
+    if (top_level == "R"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = target,
+          gene = regulator,
+          tstat = statistic,
+          p.value = pvalue
+        ) 
+    }else if(top_level == "T"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = regulator,
+          gene = target,
+          tstat = statistic,
+          p.value = pvalue
+        ) 
+    }else{
+      stop("No valid input specified for target or regulator as top level.")
+    }
+    sub_df %>% select(SNP, gene, beta, tstat, p.value, FDR) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", quote = F, na = NA)
+    
+    sub_df = fread(file, sep = "\t", data.table = F)
+    if (top_level == "R"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = target,
+          gene = regulator
+        ) 
+    }else if(top_level == "T"){
+      sub_df = sub_df %>%
+        rename(
+          SNP = regulator,
+          gene = target
+        ) 
+    }
+    
+    sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
+      select(family, fam_p) %>% distinct() %>%
+      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
+  }
+  
+}
+
 # Modified treeQTL function to get eGenes in a multi-context experiment
 get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_level = "R", level1 = 0.05, level2 = 0.05, level3 = 0.05) {
   
