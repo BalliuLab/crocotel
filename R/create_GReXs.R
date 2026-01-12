@@ -121,7 +121,7 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
     crocotel_grex[is.na(crocotel_grex)] = cxc_grex[is.na(crocotel_grex)]
     # write out imputed results
     method = "crocotel_imputed"
-    fwrite(crocotel_grex,  file = paste0(GReX_outdir, gene_name,".", method, "_context.GReX_predictors.txt"), sep = "\t")
+    fwrite(crocotel_grex,  file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
   }
   
 }

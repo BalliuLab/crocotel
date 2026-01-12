@@ -152,8 +152,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
         names(df) = c("rownames", col)
         df
       }))
-    names(full) = colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))])
-    full = cbind(id = rownames(combined_context_preds), full)
+    names(full) = colnames(combined_context_preds[1:ncol(combined_context_preds)-1])
     ## get full r2
     method = "crocotel"
     evaluation_helper(total_exp_mat, full, GReX_outdir, gene_name, method = method, combined_context_preds)
