@@ -68,8 +68,8 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
 }
 
 #' @export
-crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, cisDist = 1e6){
-  out_dir_crocotel_lite = paste0(out_dir, "/crocotel_lite_output/")
+crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, cisDist = 1e6,  method = "crocotel_lite"){
+  out_dir_crocotel_lite = paste0(out_dir, "/", method, "_output/")
   dir.create(out_dir_crocotel_lite, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
   #tmp_dir = paste0(out_dir_crocotel_lite, "/MEQTL_input/")
@@ -110,7 +110,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   pvOutputThreshold_tra = pval_thresh;
   # Distance for local gene-SNP pairs
   #cisDist = 1e6; ## hard coded cis distance of 1MB
-  file_prefix = ".crocotel_lite.txt"
+  file_prefix = paste0(".", method, ".txt")
   # Covariates file name
   # Set to character() for no covariates
   covariates_file_name = character()
