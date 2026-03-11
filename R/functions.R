@@ -72,7 +72,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
       beta_vec[is.na(beta_vec)] <- 0
       if (length(beta_vec) < ncol(X)) {
         full_beta <- rep(0, ncol(X))
-        full_beta[attr(tiss_fit, "ind.col")] <- beta_vec
+        full_beta[attr(context_fit, "ind.col")] <- beta_vec
         beta_vec <- full_beta
       }
       
