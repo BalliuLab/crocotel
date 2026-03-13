@@ -40,7 +40,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
   cl <- makeCluster(n_cores)
   registerDoParallel(cl)
   
-  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr"), .export = c("method")) %dopar% {
+  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
     
@@ -116,17 +116,22 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
       }
     }
     
-    fwrite(beta_hat_mat, file = paste0(GReX_outdir, gene_name,".", method, ".fold_",cur_fold, ".snp_effects.txt"))
+    hat_mat_nonzero = as.data.frame(matrix(colSums(beta_hat_mat > 0), nrow = 1, dimnames = list(NULL, colnames(beta_hat_mat))))
+    rownames(hat_mat_nonzero) = paste0("fold", cur_fold)
+    hat_mat_nonzero$total_variants = nrow(beta_hat_mat)
     file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
-    return_list = list(fold_Yhats)
+    return_list = list(fold_Yhats, hat_mat_nonzero)
     return(return_list)
   }
   stopCluster(cl)
   
   # Combine predictions across parallelized folds
   context_predictions_list = lapply(Yhats_list, `[[`, 1) 
+  context_betas_list = lapply(Yhats_list, `[[`, 2)
   combined_context_preds = Reduce(function(a, b) dplyr::coalesce(a, b), context_predictions_list)
   combined_context_preds = cbind(id = rownames(combined_context_preds), combined_context_preds)
+  combined_betas = do.call(rbind, context_betas_list)
+  fwrite(combined_betas, file = paste0(GReX_outdir, gene_name,".", method, ".effects.txt"), sep = "\t")
   
   if(is_cxc){
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
