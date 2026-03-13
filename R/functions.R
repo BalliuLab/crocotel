@@ -2,6 +2,12 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
                                     GReX_outdir, gene_name, is_cxc, num_folds, alpha = 0.5,
                                     n_cores = 4) {
   
+  if(is_cxc){
+    method = "cxc"
+  }else{
+    method = "crocotel"
+  }
+  
   ### create a working matrix based on the decomposed (regular expression if cxc) to use in this function
   context_exp_mat = decomp_exp_mat
   rownames(context_exp_mat) = decomp_exp_mat$id
@@ -34,7 +40,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
   cl <- makeCluster(n_cores)
   registerDoParallel(cl)
   
-  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
+  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr"), .export = c("method")) %dopar% {
     
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
     
@@ -123,7 +129,6 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
   combined_context_preds = cbind(id = rownames(combined_context_preds), combined_context_preds)
   
   if(is_cxc){
-    method = "cxc"
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     full = NA
     ## get r2
@@ -155,7 +160,6 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
       }))
     names(full) = colnames(combined_context_preds[1:ncol(combined_context_preds)-1])
     ## get full r2
-    method = "crocotel"
     evaluation_helper(total_exp_mat, full, GReX_outdir, gene_name, method = method, combined_context_preds)
     fwrite(full, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     fwrite(combined_context_preds, file = paste0(GReX_outdir, gene_name,".", method, "_context.GReX_predictors.txt"), sep = "\t")
