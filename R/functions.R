@@ -110,6 +110,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
       }
     }
     
+    fwrite(beta_hat_mat, file = paste0(GReX_outdir, gene_name,".", method, ".fold_",cur_fold, ".snp_effects.txt"))
     file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
     return_list = list(fold_Yhats)
     return(return_list)
