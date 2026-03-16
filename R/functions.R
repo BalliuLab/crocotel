@@ -150,6 +150,7 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
     evaluation_helper(total_exp_mat, added, GReX_outdir, gene_name, method = method, combined_context_preds)
     fwrite(added, file = paste0(GReX_outdir, gene_name,".", method, ".GReX_predictors.txt"), sep = "\t")
     ## get crocotel_full
+    method = "crocotel"
     full = Reduce(
       function(x, y) merge(x, y, by = "rownames", all = TRUE),
         lapply(colnames(combined_context_preds[,(2:(ncol(combined_context_preds)-1))]), function(col){
