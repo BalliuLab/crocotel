@@ -40,9 +40,11 @@ regress_target_GReX = function(gene_name, total_exp_mat, crocotel_grex, out_dir,
 #' @param alpha - The regularization constant. Default is .5 (eNet). Minimum value of 1e-4.
 #' @param num_folds - Number of folds for cross-validation
 #' @param method - Takes values of "crocotel" or "cxc". Default is "crocotel", if "cxc" then will not run decomposition and will build GReXs in a context by context manner.
-#' @return writes out a file of predicted expression across individuals and contexts 
+#' @param engine - Elastic-net solver: "glmnet" (default, fast for cis-window matrices) or "bigstatsr" (file-backed; for genotype matrices too large to hold in memory). Both give equivalent predictive performance.
+#' @return writes out a file of predicted expression across individuals and contexts
 #' @export
-create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10, impute = F, run_cxc = F, save_decomposition = F, regress_tGReX = T){
+create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NULL, context_thresh = 2, alpha = 0.5, num_folds = 10, impute = F, run_cxc = F, save_decomposition = F, regress_tGReX = T, engine = c("glmnet", "bigstatsr")){
+  engine = match.arg(engine)
   seed = 9000
   set.seed(seed)
   GReX_outdir = paste0(out_dir, "GReXs/")
@@ -95,13 +97,13 @@ create_GReXs = function(gene_name, out_dir, genotype_file = NULL, exp_files = NU
   
   if(run_cxc){
     message("Running cxc")
-    crossval_output_cxc = crossval_helper_parallel(total_exp_mat, total_exp_mat, X, GReX_outdir, gene_name, TRUE, num_folds, alpha)
+    crossval_output_cxc = crossval_helper_parallel(total_exp_mat, total_exp_mat, X, GReX_outdir, gene_name, TRUE, num_folds, alpha, engine = engine)
   }
-  
+
   ### decompose expression and run crocotel
   decomp_exp_mat = decompose_expression(total_exp, gene_name, context_thresh, if(save_decomposition) data_dir = GReX_outdir)
   message("Running crocotel")
-  crossval_output = crossval_helper_parallel(total_exp_mat, decomp_exp_mat, X, GReX_outdir, gene_name, FALSE, num_folds, alpha)
+  crossval_output = crossval_helper_parallel(total_exp_mat, decomp_exp_mat, X, GReX_outdir, gene_name, FALSE, num_folds, alpha, engine = engine)
   
   if(regress_tGReX){
     regress_target_GReX(gene_name, total_exp_mat, crossval_output$full, out_dir, method = "crocotel")
