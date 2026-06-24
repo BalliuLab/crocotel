@@ -1,7 +1,10 @@
 crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
                                     GReX_outdir, gene_name, is_cxc, num_folds, alpha = 0.5,
-                                    n_cores = 4) {
-  
+                                    n_cores = 4, engine = c("glmnet", "bigstatsr")) {
+
+  engine = match.arg(engine)
+  fold_pkgs = if (engine == "bigstatsr") "bigstatsr" else "glmnet"
+
   if(is_cxc){
     method = "cxc"
   }else{
@@ -40,49 +43,62 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
   cl <- makeCluster(n_cores)
   registerDoParallel(cl)
   
-  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = c("bigstatsr")) %dopar% {
-    
+  Yhats_list <- foreach(cur_fold = 1:num_folds, .packages = fold_pkgs) %dopar% {
+
     train_inds_id <- setdiff(rownames(X), test_inds_ids[[cur_fold]])
-    
+
     fold_exp_mat <- context_exp_mat[train_inds_id, , drop = FALSE]
-    
+
     ### create a matrix of mxc to store estimated betas for this fold
     beta_hat_mat = data.frame(matrix(NA, ncol = ncol(context_exp_mat), nrow = ncol(X)))
     colnames(beta_hat_mat) = colnames(context_exp_mat)
     intercept_mat = data.frame(matrix(NA, ncol = ncol(context_exp_mat), nrow = 1))
     colnames(intercept_mat) = colnames(context_exp_mat)
-    
-    # Per-fold FBM (avoid file collisions)
-    fold_bkfile <- paste0(GReX_outdir, gene_name, "_crocotel_tmp_fold", cur_fold)
-    if(file.exists(paste0(fold_bkfile, ".bk"))){
-      file.remove(paste0(fold_bkfile, ".bk"))
+
+    # Per-fold file-backed matrix (bigstatsr only; glmnet fits the in-memory matrix)
+    if (engine == "bigstatsr") {
+      fold_bkfile <- paste0(GReX_outdir, gene_name, "_crocotel_tmp_fold", cur_fold)
+      if(file.exists(paste0(fold_bkfile, ".bk"))){
+        file.remove(paste0(fold_bkfile, ".bk"))
+      }
+      explanatory <- bigstatsr::as_FBM(X, backingfile = fold_bkfile)
     }
-    explanatory <- as_FBM(X, backingfile = fold_bkfile)
-    
+
     fold_Yhats <- data.frame(matrix(NA,nrow = nrow(context_exp_mat), ncol = ncol(context_exp_mat),
                                     dimnames = list(rownames(context_exp_mat), colnames(context_exp_mat))), check.names = F)
-    
+
     ## fit each specific component per context
     for (context in colnames(context_exp_mat)) {
       context_ids <- rownames(fold_exp_mat)[!is.na(fold_exp_mat[,context])]
-      context_fit <- big_spLinReg(X = explanatory,
-                                  ind.train = match(context_ids, rownames(X)),
-                                  y.train = fold_exp_mat[context_ids, context],
-                                  K = 10, alphas = alpha, warn = FALSE)
-      
-      best_idx <- which.min(summary(context_fit)$validation_loss)
-      beta_vec <- unlist(summary(context_fit)$beta[best_idx])
-      intercept <- summary(context_fit)$intercept[[best_idx]]
-      
-      # Handle NA beta 
-      beta_vec[is.na(beta_vec)] <- 0
-      if (length(beta_vec) < ncol(X)) {
-        full_beta <- rep(0, ncol(X))
-        full_beta[attr(context_fit, "ind.col")] <- beta_vec
-        beta_vec <- full_beta
+
+      if (engine == "glmnet") {
+        # Standard elastic net: fast for cis-window-sized matrices, no FBM churn.
+        cvfit <- glmnet::cv.glmnet(X[context_ids, , drop = FALSE],
+                                   fold_exp_mat[context_ids, context],
+                                   alpha = alpha, nfolds = 10)
+        co <- as.numeric(coef(cvfit, s = "lambda.min"))  # [1] = intercept, rest = betas
+        intercept <- co[1]
+        beta_vec  <- co[-1]
+        beta_vec[is.na(beta_vec)] <- 0
+      } else {
+        context_fit <- bigstatsr::big_spLinReg(X = explanatory,
+                                    ind.train = match(context_ids, rownames(X)),
+                                    y.train = fold_exp_mat[context_ids, context],
+                                    K = 10, alphas = alpha, warn = FALSE)
+
+        best_idx <- which.min(summary(context_fit)$validation_loss)
+        beta_vec <- unlist(summary(context_fit)$beta[best_idx])
+        intercept <- summary(context_fit)$intercept[[best_idx]]
+
+        # Handle NA beta and columns dropped by bigstatsr
+        beta_vec[is.na(beta_vec)] <- 0
+        if (length(beta_vec) < ncol(X)) {
+          full_beta <- rep(0, ncol(X))
+          full_beta[attr(context_fit, "ind.col")] <- beta_vec
+          beta_vec <- full_beta
+        }
       }
-      
-      
+
       beta_hat_mat[,context] = beta_vec
       intercept_mat[1,context] = intercept
     }
@@ -119,7 +135,9 @@ crossval_helper_parallel = function(total_exp_mat, decomp_exp_mat, X,
     hat_mat_nonzero = as.data.frame(matrix(colSums(beta_hat_mat > 0), nrow = 1, dimnames = list(NULL, colnames(beta_hat_mat))))
     rownames(hat_mat_nonzero) = paste0("fold", cur_fold)
     hat_mat_nonzero$total_variants = nrow(beta_hat_mat)
-    file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
+    if (engine == "bigstatsr") {
+      file.remove(paste0(fold_bkfile, ".bk"))  # Clean up
+    }
     return_list = list(fold_Yhats, hat_mat_nonzero)
     return(return_list)
   }
