@@ -1,5 +1,4 @@
 
-
 regress_target_GReX = function(gene_name, total_exp_mat, crocotel_grex, out_dir, method = "crocotel"){
   res_dir = paste0(out_dir, "exp_residualized_GReX/")
   dir.create(res_dir, showWarnings = F)
