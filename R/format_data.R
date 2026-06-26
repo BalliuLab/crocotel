@@ -70,6 +70,9 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
     expr_mat = as.matrix(df[, -1, drop = FALSE])         # genes x individuals, row j == genes[j]
     expr_inds = colnames(expr_mat)
     ind_idx = match(geno_ind_order, expr_inds)           # NA where a genotype individual is absent
+    present     = !is.na(ind_idx)                         # genotype individuals present in this context
+    present_ids = geno_ind_order[present]                 # only these are written (no NA-id padding)
+    present_col = ind_idx[present]
 
     for (g in seq_along(genes)) {
       gene = genes[g]
@@ -91,10 +94,15 @@ format_data = function(exp_files, geneloc_file, snpsloc_file, genotypes_file, ou
 
       dir.create(paste0(out_dir, gene), showWarnings = FALSE)
 
-      # Expression row -> one value per genotype individual (NA if absent).
+      # Expression row -> one value per individual PRESENT in this context's expression.
+      # Do NOT pad absent genotype individuals: padding wrote rows with an empty id,
+      # which collide as duplicate (id, context) keys in create_GReXs' pivot_wider
+      # whenever the genotype individuals are a superset of a context's expression
+      # individuals -- the normal ragged multi-tissue case (e.g. GTEx full panel vs
+      # per-tissue expression).
       gene_df = data.frame(
-        id    = ifelse(is.na(ind_idx), NA_character_, geno_ind_order),
-        value = expr_mat[g, ind_idx],
+        id    = present_ids,
+        value = expr_mat[g, present_col],
         check.names = FALSE, stringsAsFactors = FALSE
       )
       data.table::fwrite(gene_df, file = paste0(out_dir, gene, "/", context, ".txt"),
