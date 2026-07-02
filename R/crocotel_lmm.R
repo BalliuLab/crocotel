@@ -38,7 +38,7 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
     regulator_r2_file = list.files(paste0(out_dir, "/GReXs/"), pattern = paste0(regulator_gene_name, ".crocotel.crossval_r2.txt"), full.names = T)
     regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F, header = T)
     ### checks that at least one contexts has r2 > threshold
-    r2 = max(regulator_r2$full_cv_r2s, na.rm = T) < r2_thresh
+    r2 = max(regulator_r2$full, na.rm = T) < r2_thresh
     if(r2){
       print("Regulator GReX did not pass specified R2 threshold in any context. Not running Crocotel for this regulator-target pair.")
       return(NULL)

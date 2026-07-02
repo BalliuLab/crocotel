@@ -43,7 +43,7 @@ format_GReX_for_association = function(GReX_dir, context, r2_genes, tmp_dir){
   ct_combined <- rbindlist(ct_list, fill = TRUE)
   
   if(!is.null(r2_genes)){
-    if(nrow(ct_combined != 0)){
+    if(nrow(ct_combined) != 0){
       ct_combined = ct_combined %>% filter(gene %in% r2_genes[[context]])
     }
   }
@@ -59,7 +59,7 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
   for(file in all_r2_files){
     regulator_r2 = fread(file, sep = "\t", data.table = F, check.names = F, header = T)
     gene_id = sub("\\..*", "", basename(file))
-    selected_contexts = regulator_r2 %>% filter(full_cv_r2s > r2_thresh)
+    selected_contexts = regulator_r2 %>% filter(full > r2_thresh)
     for(context in selected_contexts$context){
       context_gene_list[[context]] = c(context_gene_list[[context]], gene_id)
     }
