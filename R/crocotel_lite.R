@@ -125,7 +125,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   
   # Gene expression file name
   if(!is.null(exp_files)){
-    pattern <- paste0("(^|[^A-Za-z0-9])", context, "([^A-Za-z0-9]|$)")
+    pattern <- paste0("(^|[^A-Za-z0-9])", context, "\\.")
     # Match against basenames
     matching_file <- exp_files[grepl(pattern, basename(exp_files))]
     # Check for match
