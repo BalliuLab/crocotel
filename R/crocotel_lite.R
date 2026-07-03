@@ -219,7 +219,14 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   outfile = paste0(out_dir_crocotel_lite, context, file_prefix)
   fwrite(output, file = outfile, sep = "\t", quote = F)
   print(paste0("finished analysis association mapping for context ", context))
-  
+
+  ## record the total number of trans tests per gene for this context, based on
+  ## the design (regulators x targets, minus cis pairs). This is independent of
+  ## pval_thresh, so treeQTL family sizes stay correct even when `output` above
+  ## is stored with a stringent p-value threshold.
+  nt = count_trans_tests(rownames(genos_formatted), rownames(gene_mat_formatted), geneloc, cisDist)
+  write_n_tests_per_gene(nt, paste0(out_dir_crocotel_lite, "n_tests_per_gene/"), context)
+
   ## remove uneeded directories
   unlink(tmp_dir, recursive = T)
   #unlink(tmp_dir_regressed, recursive = TRUE)

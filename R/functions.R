@@ -286,8 +286,86 @@ evaluation_helper = function(total_exp_mat, combined_full_preds, out_dir, gene_n
   
 }
 
+# Count, per gene, the number of trans regulator-target tests it participates in,
+# in BOTH roles, from the gene positions and cis distance. This is the total
+# number of tests DONE (independent of any p-value threshold applied to stored
+# output), used as the family size for treeQTL's hierarchical FDR.
+#
+# A pair (regulator r, target g) is a trans test when it is NOT cis, i.e. when
+# r and g are on different chromosomes, OR the regulator start (s1_r) falls
+# outside [s1_g - dist, s2_g + dist] -- the same window MatrixEQTL treats as cis
+# (target gene span padded by cisDist, regulator SNP as a point). Self-pairs
+# (r == g) are always cis and therefore never counted.
+#
+# Returns data.frame(gene, n_as_regulator, n_as_target). Vectorized per
+# chromosome via findInterval, so it scales to genome-wide gene sets.
+count_trans_tests = function(regulators, targets, geneloc, dist){
+  gp = geneloc
+  names(gp)[1:4] = c("geneid", "chr", "s1", "s2")
+  gp = gp[!duplicated(gp$geneid), c("geneid", "chr", "s1", "s2")]
+  rownames(gp) = gp$geneid
+
+  regs = intersect(regulators, gp$geneid)
+  tars = intersect(targets,    gp$geneid)
+  Rn = length(regs); Tn = length(tars)
+
+  reg_chr = gp[regs, "chr"]; reg_s1 = gp[regs, "s1"]
+  tar_chr = gp[tars, "chr"]; tar_s1 = gp[tars, "s1"]; tar_s2 = gp[tars, "s2"]
+
+  n_as_target = setNames(rep(Rn, Tn), tars)   # start from "all regulators", subtract cis
+  n_as_reg    = setNames(rep(Tn, Rn), regs)   # start from "all targets",    subtract cis
+
+  # n_as_target(g): cis regulators on chr_g with s1_r in [s1_g - dist, s2_g + dist]
+  reg_by_chr = lapply(split(reg_s1, reg_chr), sort)
+  for (i in seq_len(Tn)) {
+    v = reg_by_chr[[as.character(tar_chr[i])]]
+    if (is.null(v)) next
+    hi = findInterval(tar_s2[i] + dist, v)              # #{s1_r <= s2_g + dist}
+    lo = findInterval((tar_s1[i] - dist) - 1, v)        # #{s1_r <  s1_g - dist}
+    n_as_target[i] = Rn - (hi - lo)
+  }
+
+  # n_as_regulator(r): cis targets on chr_r whose window contains s1_r, i.e.
+  #   s1_g <= s1_r + dist AND s2_g >= s1_r - dist
+  tar_s1_by_chr = lapply(split(tar_s1, tar_chr), sort)
+  tar_s2_by_chr = lapply(split(tar_s2, tar_chr), sort)
+  for (i in seq_len(Rn)) {
+    v1 = tar_s1_by_chr[[as.character(reg_chr[i])]]
+    v2 = tar_s2_by_chr[[as.character(reg_chr[i])]]
+    if (is.null(v1)) next
+    Fs1 = findInterval(reg_s1[i] + dist, v1)             # #{s1_g <= s1_r + dist}
+    Fs2 = findInterval((reg_s1[i] - dist) - 1, v2)       # #{s2_g <  s1_r - dist}
+    n_as_reg[i] = Tn - (Fs1 - Fs2)
+  }
+
+  all_genes = union(regs, tars)
+  nr = n_as_reg[all_genes];    nr[is.na(nr)] = 0L
+  nt = n_as_target[all_genes]; nt[is.na(nt)] = 0L
+  data.frame(gene = all_genes,
+             n_as_regulator = as.integer(nr),
+             n_as_target    = as.integer(nt),
+             stringsAsFactors = FALSE, row.names = NULL)
+}
+
+# Write per-context "number of tests per gene" files in the same format treeQTL
+# consumes (CSV; columns: family, fam_p). Because the family axis (regulator vs
+# target) is only chosen later via top_level, one file is written per role:
+#   <context>.R.n_tests_per_gene.txt  (family = regulator, fam_p = # trans targets)
+#   <context>.T.n_tests_per_gene.txt  (family = target,    fam_p = # trans regulators)
+write_n_tests_per_gene = function(nt, nt_dir, context){
+  dir.create(nt_dir, showWarnings = FALSE, recursive = TRUE)
+  R_df = data.frame(family = nt$gene, fam_p = nt$n_as_regulator, stringsAsFactors = FALSE)
+  R_df = R_df[R_df$fam_p > 0, ]
+  fwrite(R_df, file = file.path(nt_dir, paste0(context, ".R.n_tests_per_gene.txt")), sep = ",", quote = F)
+  T_df = data.frame(family = nt$gene, fam_p = nt$n_as_target, stringsAsFactors = FALSE)
+  T_df = T_df[T_df$fam_p > 0, ]
+  fwrite(T_df, file = file.path(nt_dir, paste0(context, ".T.n_tests_per_gene.txt")), sep = ",", quote = F)
+}
+
 format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
+  nt_dir = file.path(crocotel_dir, "n_tests_per_gene")
   files = list.files(crocotel_dir, full.names = T)
+  files = files[!file.info(files)$isdir]   # skip the n_tests_per_gene/ subdir
   for(file in files){
     context = sub("\\..*", "", basename(file))
     sub_df = fread(file, sep = "\t", data.table = F)
@@ -298,7 +376,7 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
           gene = regulator,
           tstat = statistic,
           p.value = pvalue
-        ) 
+        )
     }else if(top_level == "T"){
       sub_df = sub_df %>%
         rename(
@@ -306,32 +384,33 @@ format_treeQTL = function(crocotel_dir, top_level, tmp_dir){
           gene = target,
           tstat = statistic,
           p.value = pvalue
-        ) 
+        )
     }else{
       stop("No valid input specified for target or regulator as top level.")
     }
     sub_df %>% select(SNP, gene, beta, tstat, p.value, FDR) %>% fwrite(file = paste0(tmp_dir, "all_gene_pairs.", context, ".txt"), sep = "\t", quote = F, na = NA)
-    
-    sub_df = fread(file, sep = "\t", data.table = F)
-    if (top_level == "R"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = target,
-          gene = regulator
-        ) 
-    }else if(top_level == "T"){
-      sub_df = sub_df %>%
-        rename(
-          SNP = regulator,
-          gene = target
-        ) 
+
+    ## number of tests per family: prefer the recorded design-based counts
+    ## (correct even when the stored output was p-value thresholded); otherwise
+    ## fall back to counting rows in the (possibly thresholded) output.
+    nt_file = file.path(nt_dir, paste0(context, ".", top_level, ".n_tests_per_gene.txt"))
+    if (file.exists(nt_file)) {
+      nt = fread(nt_file, sep = ",", data.table = F)                 # columns: family, fam_p
+      nt = nt[!is.na(nt$fam_p) & nt$fam_p > 0, ]
+      fwrite(nt, file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
+    } else {
+      sub_df = fread(file, sep = "\t", data.table = F)
+      if (top_level == "R"){
+        sub_df = sub_df %>% rename(SNP = target, gene = regulator)
+      }else if(top_level == "T"){
+        sub_df = sub_df %>% rename(SNP = regulator, gene = target)
+      }
+      sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
+        select(family, fam_p) %>% distinct() %>%
+        fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
     }
-    
-    sub_df %>% group_by(gene) %>% mutate(fam_p = n()) %>% rename(family = gene) %>%
-      select(family, fam_p) %>% distinct() %>%
-      fwrite(file = paste0(tmp_dir, "n_tests_per_gene.", context, ".txt"), sep = ",", quote = F)
   }
-  
+
 }
 
 # Modified treeQTL function to get eGenes in a multi-context experiment
