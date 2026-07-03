@@ -38,7 +38,7 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
     regulator_r2_file = list.files(paste0(out_dir, "/GReXs/"), pattern = paste0(regulator_gene_name, ".crocotel.crossval_r2.txt"), full.names = T)
     regulator_r2 = fread(regulator_r2_file, sep = "\t", data.table = F, check.names = F, header = T)
     ### checks that at least one contexts has r2 > threshold
-    r2 = max(regulator_r2$full_cv_r2s, na.rm = T) < r2_thresh
+    r2 = max(regulator_r2$full, na.rm = T) < r2_thresh
     if(r2){
       print("Regulator GReX did not pass specified R2 threshold in any context. Not running Crocotel for this regulator-target pair.")
       return(NULL)
@@ -121,6 +121,85 @@ crocotel_lmm = function(regulator_gene_name, target_gene_name, out_dir, target_e
     }
   }
   print("Finished running crocotel lmm for this pair.")
+}
+
+#' Record the total number of trans tests per gene for crocotel_lmm
+#'
+#' crocotel_lmm tests one regulator-target pair per call, so no single call sees
+#' the whole design. Run this once (e.g. alongside \code{concat_crocotel_lmm_files})
+#' to record, per context and per family role, the total number of trans tests each
+#' gene participates in over the full regulator x target trans grid. These counts are
+#' independent of any p-value threshold applied to stored output, so treeQTL family
+#' sizes stay correct. Files are written in the same format treeQTL consumes (CSV;
+#' columns \code{family, fam_p}) under \code{out_dir/<method>_output/n_tests_per_gene/},
+#' one per context and role (\code{<context>.R.n_tests_per_gene.txt},
+#' \code{<context>.T.n_tests_per_gene.txt}).
+#'
+#' Per-context gene membership is inferred from which contexts each gene's GReX
+#' predictor / residualized-expression file contains, read cheaply from file headers
+#' (one line per file). If \code{r2_thresh} is given, regulators are filtered exactly
+#' as crocotel_lmm does: kept only if their maximum full-model cross-validated R2
+#' across contexts is >= r2_thresh (this reads each gene's small crossval_r2 file,
+#' which also supplies its contexts). This is a one-time O(#genes) pass of light reads.
+#'
+#' @param out_dir crocotel output directory (reads out_dir/GReXs/ and out_dir/exp_residualized_GReX/)
+#' @param geneloc_file gene location file: geneid, chr, start, end
+#' @param dist trans distance (bp); pairs within this window on the same chromosome are cis and not counted. Default 1e6.
+#' @param method output subdirectory to write into ("crocotel_lmm" or "crocotel_lite"). Default "crocotel_lmm".
+#' @param r2_thresh optional regulator R2 threshold, matching crocotel_lmm's filter (keep regulator if max full R2 across contexts >= r2_thresh). Default NULL (no filtering).
+#' @return invisibly, the vector of contexts written
+#' @export
+record_n_tests_per_gene = function(out_dir, geneloc_file, dist = 1e6, method = "crocotel_lmm", r2_thresh = NULL){
+  nt_dir = paste0(out_dir, "/", method, "_output/n_tests_per_gene/")
+  dir.create(nt_dir, showWarnings = FALSE, recursive = TRUE)
+
+  geneloc = fread(geneloc_file, sep = "\t", data.table = F)
+  GReX_dir = paste0(out_dir, "/GReXs/")
+  exp_residualized_dir = paste0(out_dir, "/exp_residualized_GReX/")
+
+  reg_files = list.files(GReX_dir, pattern = "\\.crocotel\\.GReX_predictors\\.txt$", full.names = TRUE)
+  tar_files = list.files(exp_residualized_dir, pattern = "\\.crocotel\\.GReX_residuals\\.txt$", full.names = TRUE)
+  if(length(tar_files) == 0) stop("No residualized target expression files found in ", exp_residualized_dir)
+
+  gene_of = function(f) sub("\\..*", "", basename(f))
+  header_contexts = function(f) setdiff(strsplit(readLines(f, n = 1L), "\t", fixed = TRUE)[[1]], "id")
+
+  ## regulators: contexts present per gene (+ max R2 if filtering).
+  reg_by_ctx = list()
+  if(is.null(r2_thresh)){
+    if(length(reg_files) == 0) stop("No regulator GReX predictor files found in ", GReX_dir)
+    for(f in reg_files){
+      g = gene_of(f)
+      for(ctx in header_contexts(f)) reg_by_ctx[[ctx]] = c(reg_by_ctx[[ctx]], g)
+    }
+  } else {
+    ## the crossval_r2 file gives both the gene's contexts and its R2 in one read
+    r2_files = list.files(GReX_dir, pattern = "\\.crocotel\\.crossval_r2\\.txt$", full.names = TRUE)
+    if(length(r2_files) == 0) stop("No crossval_r2 files found in ", GReX_dir)
+    for(f in r2_files){
+      g = gene_of(f)
+      d = fread(f, sep = "\t", data.table = F)
+      if(!length(d$full) || max(d$full, na.rm = TRUE) < r2_thresh) next   # regulator fails threshold
+      for(ctx in as.character(d$context)) reg_by_ctx[[ctx]] = c(reg_by_ctx[[ctx]], g)
+    }
+  }
+
+  ## targets: contexts present per gene (not R2-filtered)
+  tar_by_ctx = list()
+  for(f in tar_files){
+    g = gene_of(f)
+    for(ctx in header_contexts(f)) tar_by_ctx[[ctx]] = c(tar_by_ctx[[ctx]], g)
+  }
+
+  contexts = intersect(names(reg_by_ctx), names(tar_by_ctx))
+  message("Recording n_tests_per_gene for contexts: ", paste(contexts, collapse = ", "))
+
+  for(context in contexts){
+    nt = count_trans_tests(reg_by_ctx[[context]], tar_by_ctx[[context]], geneloc, dist)
+    write_n_tests_per_gene(nt, nt_dir, context)
+  }
+  message("Wrote n_tests_per_gene files to ", nt_dir)
+  invisible(contexts)
 }
 
 #' @export
