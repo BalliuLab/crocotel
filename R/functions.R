@@ -430,7 +430,10 @@ get_eGenes_multi_tissue_mod = function(crocotel_dir, exp_suffix, out_dir, top_le
   sprintf("Proceeding with %i summary statistic files", length(crocotel_outfiles))
   sprintf("Proceeding with %i tests per gene files", length(n_SNPs_per_gene_files))
   
-  contexts_vec = sub("\\..*", "", basename(list.files(crocotel_dir)))
+  context_files = list.files(crocotel_dir, full.names = TRUE)
+  context_files = context_files[!file.info(context_files)$isdir]   # skip n_tests_per_gene/ subdir
+  contexts_vec = sub("\\..*", "", basename(context_files))
+
   print(paste("inferred contexts:", paste(contexts_vec, collapse = ",")))
   n_tissue <- length(contexts_vec)
   for (i in 1:n_tissue) {
