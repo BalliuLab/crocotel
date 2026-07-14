@@ -299,7 +299,12 @@ evaluation_helper = function(total_exp_mat, combined_full_preds, out_dir, gene_n
 #
 # Returns data.frame(gene, n_as_regulator, n_as_target). Vectorized per
 # chromosome via findInterval, so it scales to genome-wide gene sets.
-count_trans_tests = function(regulators, targets, geneloc, dist){
+#
+# cross_map_pairs (optional): a 2-column data.frame of gene pairs
+# (unordered/symmetric) that were removed from the association output because the
+# two genes cross-map. Any such pair that WOULD have been a trans test is
+# subtracted here as well, so the family sizes match the tests actually retained.
+count_trans_tests = function(regulators, targets, geneloc, dist, cross_map_pairs = NULL){
   gp = geneloc
   names(gp)[1:4] = c("geneid", "chr", "s1", "s2")
   gp = gp[!duplicated(gp$geneid), c("geneid", "chr", "s1", "s2")]
@@ -338,6 +343,42 @@ count_trans_tests = function(regulators, targets, geneloc, dist){
     n_as_reg[i] = Tn - (Fs1 - Fs2)
   }
 
+  # Subtract cross-mappable trans pairs. A cross-map pair is symmetric, so each
+  # unordered pair {a, b} can contribute up to two directed trans tests
+  # (a->b and b->a); each is subtracted only when it is a genuine trans test
+  # (both roles present, a != b, not cis) so we never double-subtract cis pairs
+  # that were already excluded above.
+  if (!is.null(cross_map_pairs) && nrow(cross_map_pairs) > 0) {
+    cm = data.frame(a = as.character(cross_map_pairs[[1]]),
+                    b = as.character(cross_map_pairs[[2]]),
+                    stringsAsFactors = FALSE)
+    # keep only pairs with both genes positioned, dedupe unordered pairs
+    keep = cm$a %in% gp$geneid & cm$b %in% gp$geneid & cm$a != cm$b
+    cm = cm[keep, , drop = FALSE]
+    if (nrow(cm) > 0) {
+      lo = pmin(cm$a, cm$b); hi = pmax(cm$a, cm$b)
+      cm = cm[!duplicated(paste(lo, hi)), , drop = FALSE]
+
+      regset = setNames(rep(TRUE, Rn), regs)
+      tarset = setNames(rep(TRUE, Tn), tars)
+      in_reg = function(x) !is.na(regset[x])
+      in_tar = function(x) !is.na(tarset[x])
+      # cis(reg, tar): same chr and reg start within [tar_s1 - dist, tar_s2 + dist]
+      is_cis = function(r, g) gp[r, "chr"] == gp[g, "chr"] &
+        gp[r, "s1"] >= gp[g, "s1"] - dist & gp[r, "s1"] <= gp[g, "s2"] + dist
+
+      # direction 1: regulator = a, target = b
+      d1 = in_reg(cm$a) & in_tar(cm$b) & !is_cis(cm$a, cm$b)
+      # direction 2: regulator = b, target = a
+      d2 = in_reg(cm$b) & in_tar(cm$a) & !is_cis(cm$b, cm$a)
+
+      dec_reg = table(c(cm$a[d1], cm$b[d2]))
+      dec_tar = table(c(cm$b[d1], cm$a[d2]))
+      if (length(dec_reg)) n_as_reg[names(dec_reg)]    = n_as_reg[names(dec_reg)]    - as.integer(dec_reg)
+      if (length(dec_tar)) n_as_target[names(dec_tar)] = n_as_target[names(dec_tar)] - as.integer(dec_tar)
+    }
+  }
+
   all_genes = union(regs, tars)
   nr = n_as_reg[all_genes];    nr[is.na(nr)] = 0L
   nt = n_as_target[all_genes]; nt[is.na(nt)] = 0L
@@ -345,6 +386,18 @@ count_trans_tests = function(regulators, targets, geneloc, dist){
              n_as_regulator = as.integer(nr),
              n_as_target    = as.integer(nt),
              stringsAsFactors = FALSE, row.names = NULL)
+}
+
+# Read a cross-mappability file (>=2 columns; first two are the gene-pair IDs,
+# any further columns such as a cross-map score are ignored). Returns a 2-column
+# data.frame(g1, g2) of the pairs, or NULL if the path is NULL/empty.
+read_cross_map_pairs = function(cross_map_file){
+  if (is.null(cross_map_file)) return(NULL)
+  cm = fread(cross_map_file, sep = "\t", header = FALSE, data.table = FALSE)
+  if (ncol(cm) < 2) stop("cross_map_file must have at least two columns (gene1, gene2).")
+  # drop a header row if the file happens to carry one (non-gene labels)
+  data.frame(g1 = as.character(cm[[1]]), g2 = as.character(cm[[2]]),
+             stringsAsFactors = FALSE)
 }
 
 # Write per-context "number of tests per gene" files in the same format treeQTL
