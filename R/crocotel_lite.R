@@ -68,7 +68,7 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
 }
 
 #' @export
-crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, cisDist = 1e6,  method = "crocotel_lite"){
+crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_dir = NULL, regress_target_GReX = T, pval_thresh = 1, r2_thresh = NULL, cisDist = 1e6, cross_map_file = NULL,  method = "crocotel_lite"){
   out_dir_crocotel_lite = paste0(out_dir, "/", method, "_output/")
   dir.create(out_dir_crocotel_lite, showWarnings = F)
   ## create temp dir to store input matrixEQTL files
@@ -216,6 +216,21 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   
   output = me$trans$eqtls
   output = output %>% filter(snps != gene) %>% rename(regulator = "snps", target = "gene")
+
+  ## drop regulator-target pairs whose genes cross-map (symmetric: a pair is
+  ## removed regardless of which gene is regulator vs target)
+  cross_map_pairs = read_cross_map_pairs(cross_map_file)
+  if(!is.null(cross_map_pairs)){
+    cm_keys = paste(pmin(cross_map_pairs$g1, cross_map_pairs$g2),
+                    pmax(cross_map_pairs$g1, cross_map_pairs$g2))
+    reg = as.character(output$regulator); tar = as.character(output$target)
+    out_keys = paste(pmin(reg, tar), pmax(reg, tar))
+    n_before = nrow(output)
+    output = output[!(out_keys %in% cm_keys), , drop = F]
+    message(sprintf("removed %d cross-mappable regulator-target pairs from %s output",
+                    n_before - nrow(output), context))
+  }
+
   outfile = paste0(out_dir_crocotel_lite, context, file_prefix)
   fwrite(output, file = outfile, sep = "\t", quote = F)
   print(paste0("finished analysis association mapping for context ", context))
@@ -224,7 +239,7 @@ crocotel_lite = function(context, geneloc_file, out_dir, exp_files = NULL, GReX_
   ## the design (regulators x targets, minus cis pairs). This is independent of
   ## pval_thresh, so treeQTL family sizes stay correct even when `output` above
   ## is stored with a stringent p-value threshold.
-  nt = count_trans_tests(rownames(genos_formatted), rownames(gene_mat_formatted), geneloc, cisDist)
+  nt = count_trans_tests(rownames(genos_formatted), rownames(gene_mat_formatted), geneloc, cisDist, cross_map_pairs)
   write_n_tests_per_gene(nt, paste0(out_dir_crocotel_lite, "n_tests_per_gene/"), context)
 
   ## remove uneeded directories
