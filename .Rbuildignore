@@ -1,0 +1,5 @@
+^load_all\.R$
+^install_deps\.sh$
+^LICENSE\.md$
+^\.git$
+^\.DS_Store$

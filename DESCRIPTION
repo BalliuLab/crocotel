@@ -1,60 +1,28 @@
 Package: crocotel
-Title: What the Package Does (One Line, Title Case)
-Version: 0.0.0.9000
-Authors@R: 
-    person(given = "First",
-           family = "Last",
-           role = c("aut", "cre"),
-           email = "first.last@example.com",
-           comment = c(ORCID = "YOUR-ORCID-ID"))
-Description: What the package does (one paragraph).
-Imports:
-  data.table,
-  dplyr,
-  reshape2,
-  magrittr,
-  bigstatsr,
-  glmnet,
-  caret,
-  devtools,
-  purrr,
-  foreach,
-  tidyr,
-  lme4,
-  emmeans,
-  broom,
-  TreeQTL,
-  mashr,
-  MuMIn,
-  future.apply,
-  MatrixEQTL,
-  doParallel,
-  matrixStats
-Depends:
-  data.table,
-  dplyr,
-  reshape2,
-  magrittr,
-  bigstatsr,
-  glmnet,
-  caret,
-  devtools,
-  purrr,
-  foreach,
-  tidyr,
-  lme4,
-  emmeans,
-  broom,
-  TreeQTL,
-  mashr,
-  MuMIn,
-  future.apply,
-  MatrixEQTL,
-  doParallel,
-  matrixStats
-License: `use_mit_license()`, `use_gpl3_license()` or friends to pick a
-    license
+Type: Package
+Title: Context-Resolved Trans-eQTL Mapping via Genetically Regulated Expression
+Version: 0.1.0
+Authors@R:
+    person("Brunilda", "Balliu", email = "bballiu@g.ucla.edu",
+           role = c("aut", "cre"))
+Description: Builds cross-validated genetically regulated expression (GReX)
+    predictors using a CONTENT-style shared/context-specific decomposition and
+    an elastic net, then maps trans-eQTLs by testing regulator GReX against
+    target expression with hierarchical (treeQTL-style) FDR control. Includes
+    simulation utilities, memory-mapped (bigSNP) genotype ingest, and
+    MatrixEQTL-based association scans.
+License: MIT + file LICENSE
 Encoding: UTF-8
-LazyData: true
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.3
+Imports:
+    MatrixEQTL,
+    bigsnpr,
+    bigstatsr,
+    data.table,
+    glmnet,
+    parallel,
+    stats,
+    utils
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3
+RoxygenNote: 7.3.1
