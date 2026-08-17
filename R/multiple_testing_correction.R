@@ -163,8 +163,103 @@ multiple_testing_correction = function(crocotel_dir, out_dir, fdr_thresh = 0.05,
   }
 }
 
+#' Merge per-pair crocotel_lmm output files for one context
+#'
+#' crocotel_lmm writes one file per regulator-target pair per context. This merges
+#' them into a single p-value-sorted \code{<context><file_suffix>} in the same
+#' directory. Per-pair inputs are deleted only after the merged file is written, and
+#' the merged output is never itself consumed as an input.
+#'
+#' @param directory crocotel out_dir (the parent of the output subdirectory)
+#' @param context context to merge
+#' @param file_suffix suffix of the per-pair input files; must match the value used
+#'   by crocotel_lmm. Default ".crocotel_lmm.txt".
+#' @param to_concatenate optional file listing input files, one per line; if NULL,
+#'   inputs are discovered in the output subdirectory
+#' @param subdir subdirectory of \code{directory} to merge within
+#' @param keep_inputs if TRUE, leave the per-pair files in place after merging
+#' @param regress_target_GReX deprecated; only for merging output written by older
+#'   versions, which named files ".crocotel_lmm_regress.txt". Use file_suffix instead.
+#' @return invisibly, the path to the merged file
 #' @export
-concat_crocotel_lmm_files <- function(directory = ".", context, regress_target_GReX = F, to_concatenate = NULL) {
+concat_crocotel_lmm_files <- function(directory = ".", context,
+                                      file_suffix = ".crocotel_lmm.txt",
+                                      to_concatenate = NULL,
+                                      subdir = "crocotel_lmm_output",
+                                      keep_inputs = FALSE,
+                                      regress_target_GReX = NULL) {
+  if (!is.null(regress_target_GReX)) {
+    warning("`regress_target_GReX` is deprecated; pass `file_suffix` instead.")
+    if (isTRUE(regress_target_GReX)) file_suffix = ".crocotel_lmm_regress.txt"
+  }
+  if (missing(context) || length(context) != 1L || !nzchar(context))
+    stop("`context` must be a single non-empty context name.")
+
+  out_subdir = file.path(normalizePath(directory, mustWork = TRUE), subdir)
+  if (!dir.exists(out_subdir)) stop("output subdirectory does not exist: ", out_subdir)
+  out_file = file.path(out_subdir, paste0(context, file_suffix))
+
+  ## ---- collect inputs -------------------------------------------------------
+  if (!is.null(to_concatenate)) {
+    if (!file.exists(to_concatenate)) stop("to_concatenate file not found: ", to_concatenate)
+    files = readLines(to_concatenate)
+    files = files[nzchar(files)]
+    files = ifelse(startsWith(files, "/"), files, file.path(out_subdir, basename(files)))
+  } else {
+    nm = list.files(out_subdir)
+    ## per-pair files are "<context>.<reg>_<tar><file_suffix>"; the merged output is
+    ## "<context><file_suffix>", with nothing between, so the length test excludes it
+    keep = startsWith(nm, paste0(context, ".")) &
+           endsWith(nm, file_suffix) &
+           nchar(nm) > nchar(context) + 1L + nchar(file_suffix)
+    files = file.path(out_subdir, nm[keep])
+  }
+  files = setdiff(files[file.exists(files)], out_file)
+
+  ## a killed parallel job can leave zero-byte files behind; skip rather than abort
+  sizes = file.info(files)$size
+  empty = is.na(sizes) | sizes == 0
+  if (any(empty)) {
+    warning(sprintf("skipping %d empty file(s), e.g. %s",
+                    sum(empty), basename(files[which(empty)[1]])))
+    files = files[!empty]
+  }
+  if (length(files) == 0L)
+    stop("no per-pair files found for context '", context, "' with suffix '",
+         file_suffix, "' in ", out_subdir)
+  message(sprintf("merging %d per-pair files for context %s", length(files), context))
+
+  ## ---- read under a column contract ----------------------------------------
+  ## use.names = TRUE also aligns the regulator/target column order difference
+  ## between crocotel_lmm's LMM path and its <3-context fallback path
+  expected = c("regulator", "target", "beta", "se", "statistic", "pvalue", "FDR")
+  merged = rbindlist(lapply(files, function(f) {
+    d = fread(f, sep = "\t", header = TRUE, data.table = TRUE)
+    if (!setequal(names(d), expected))
+      stop("unexpected columns in ", f, ": ", paste(names(d), collapse = ", "),
+           "\nexpected: ", paste(expected, collapse = ", "))
+    d
+  }), use.names = TRUE)
+
+  setorder(merged, pvalue, na.last = TRUE)
+  fwrite(merged, out_file, sep = "\t", quote = FALSE, na = "NA")
+
+  ## ---- only now is it safe to drop the inputs -------------------------------
+  if (!keep_inputs) {
+    if (!file.exists(out_file)) stop("merged file was not written; inputs left in place")
+    unlink(files)
+  }
+  message(sprintf("wrote %s (%d rows from %d pairs)", out_file, nrow(merged), length(files)))
+  invisible(out_file)
+}
+
+# Legacy shell-based merge, preserved verbatim as a fallback for merges too large to
+# hold in memory (sort(1) spills to disk where rbindlist cannot). NOT exported, and
+# NOT currently usable as-is: the regress_target_GReX flag is never interpolated into
+# the script, headers are not stripped before sorting, `uniq` can drop duplicate data
+# rows, inputs are deleted before the merge is finalized, and `find -printf` is
+# GNU-only. Fix those before relying on it.
+concat_crocotel_lmm_files_shell <- function(directory = ".", context, regress_target_GReX = F, to_concatenate = NULL) {
   tmp_dir = paste0(tempfile(tmpdir = paste0(directory, "crocotel_lmm_output/")), "/")
   bash_script <- sprintf('
     cd "%s"
