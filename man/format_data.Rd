@@ -2,7 +2,7 @@
 % Please edit documentation in R/format_data.R
 \name{format_data}
 \alias{format_data}
-\title{Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts}
+\title{Format MatrixEQTL-style inputs into per-gene crocotel directories}
 \usage{
 format_data(
   exp_files,
@@ -15,12 +15,34 @@ format_data(
 }
 \arguments{
 \item{exp_files}{\itemize{
-\item vector of file names for each context's expression for all genes and individuals
+\item vector of expression files, one per context (rows = genes, columns = individuals)
+}}
+
+\item{geneloc_file}{\itemize{
+\item gene location file: geneid, chr, start, end
+}}
+
+\item{snpsloc_file}{\itemize{
+\item SNP location file: snp, chr, pos
+}}
+
+\item{genotypes_file}{\itemize{
+\item genotype matrix: first column "SNP", remaining columns individuals
+}}
+
+\item{out_dir}{\itemize{
+\item output directory; files are written under out_dir/crocotel_formatted_data/
+}}
+
+\item{cis_window}{\itemize{
+\item cis distance (bp) around the gene TSS used to select SNPs. Default 1e6.
 }}
 }
 \value{
-writes out a file of predicted expression across individuals and contexts
+writes a per-gene genotype file and per-(gene,context) expression file
 }
 \description{
-Creates GReXs (Genetically regulated predictors of expression) for one gene across contexts
+Splits genome-wide expression / genotype inputs into one directory per gene
+(one expression file per context) plus a per-gene cis-SNP genotype file, the
+layout consumed by \code{create_GReXs}.
 }

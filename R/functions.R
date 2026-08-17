@@ -400,6 +400,19 @@ read_cross_map_pairs = function(cross_map_file){
              stringsAsFactors = FALSE)
 }
 
+# Extract a gene id from a crocotel output filename by stripping its known suffix.
+# Gene ids commonly contain dots (versioned Ensembl ids such as ENSG00000123456.7),
+# so the sub("\\..*", "", basename(f)) idiom silently truncates them; the mangled id
+# then fails to match geneloc or the GReX matrix with no error raised. Pure string
+# operations, so dots in either the id or the suffix need no regex escaping.
+# Vectorized; names that do not carry the suffix are returned unchanged.
+strip_suffix = function(x, suffix){
+  x = basename(x)
+  has = endsWith(x, suffix)
+  x[has] = substr(x[has], 1L, nchar(x[has]) - nchar(suffix))
+  x
+}
+
 # Write per-context "number of tests per gene" files in the same format treeQTL
 # consumes (CSV; columns: family, fam_p). Because the family axis (regulator vs
 # target) is only chosen later via top_level, one file is written per role:

@@ -58,7 +58,7 @@ get_genes_passing_r2 = function(GReX_dir, r2_thresh){
   
   for(file in all_r2_files){
     regulator_r2 = fread(file, sep = "\t", data.table = F, check.names = F, header = T)
-    gene_id = sub("\\..*", "", basename(file))
+    gene_id = strip_suffix(file, ".crocotel.crossval_r2.txt")
     selected_contexts = regulator_r2 %>% filter(full > r2_thresh)
     for(context in selected_contexts$context){
       context_gene_list[[context]] = c(context_gene_list[[context]], gene_id)

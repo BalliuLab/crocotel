@@ -21,6 +21,12 @@ crocotel_SNP_based(
 )
 }
 \arguments{
+\item{genotype_file}{Full path to SNP genotype matrix.}
+
+\item{snpsloc_file}{Full path to SNP location file.}
+
+\item{geneloc_file}{Full path to gene location file.}
+
 \item{out_dir}{Output directory.}
 
 \item{output_file_name_cis}{Path to write cis-eQTL output.}
@@ -39,13 +45,7 @@ crocotel_SNP_based(
 
 \item{error_covariance}{Covariance matrix (or numeric()).}
 
-\item{SNP_file_name}{Full path to SNP genotype matrix.}
-
-\item{snps_location_file_name}{Full path to SNP location file.}
-
 \item{expression_file_name}{Full path to expression matrix.}
-
-\item{gene_location_file_name}{Full path to gene location file.}
 
 \item{context}{Context name for labeling output.}
 }

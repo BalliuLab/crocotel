@@ -14,7 +14,9 @@ create_GReXs(
   num_folds = 10,
   impute = F,
   run_cxc = F,
-  save_decomposition = F
+  save_decomposition = F,
+  regress_tGReX = T,
+  engine = c("glmnet", "bigstatsr")
 )
 }
 \arguments{
@@ -44,6 +46,10 @@ create_GReXs(
 
 \item{num_folds}{\itemize{
 \item Number of folds for cross-validation
+}}
+
+\item{engine}{\itemize{
+\item Elastic-net solver: "glmnet" (default, fast for cis-window matrices) or "bigstatsr" (file-backed; for genotype matrices too large to hold in memory). Both give equivalent predictive performance.
 }}
 
 \item{method}{\itemize{
