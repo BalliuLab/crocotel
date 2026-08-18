@@ -8,13 +8,26 @@
 #
 # Three nested levels of FDR control:
 #   Level 1 (eTargets): which target genes have any signal across any
-#     context? BH on cross-context Simes p-value at `level1`.
+#     context? BH on cross-context Simes p-value at `level1`. ALWAYS BH --
+#     see `dependence` below.
 #   Level 2 (eTarget x context): within each eTarget, in which contexts
-#     is it active? BH within-target on per-context Simes p-values, at
-#     adjusted threshold q2 = R_G * level2 / M (Bogomolov-Benjamini).
+#     is it active? BH (or BY) within-target on per-context Simes p-values,
+#     at adjusted threshold q2 = R_G * level2 / M (Bogomolov-Benjamini).
 #   Level 3 (triplets): within each active (target, context) cell, which
-#     regulators drive it? BH within-cell on raw p-values, at per-gene
-#     adjusted threshold q3_g = R_G * n_sel_t_g * level3 / (M * n_test_t_g).
+#     regulators drive it? BH (or BY) within-cell on raw p-values, at
+#     per-gene threshold q3_g = R_G * n_sel_t_g * level3 / (M * n_test_t_g).
+#
+# `dependence` selects the cut-off rule at levels 2 and 3 ONLY; level 1 is
+# BH under every setting. Rationale: the dependence that breaks BH here is
+# WITHIN a gene across contexts (driven by cross-context residual
+# correlation). Level 1 tests across GENES, which have different
+# regulators at different loci and are close to independent -- and the
+# within-gene dependence has already been absorbed by the Simes
+# combination, itself conservative under positive dependence. Empirically
+# level 1 is calibrated across the simulation grid (FDP 0.004-0.052 at a
+# nominal 0.05) while levels 2-3 reach 0.26; applying BY at level 1 would
+# also shrink R_G, which feeds the level-2 and level-3 budgets, costing
+# power at all three levels to correct a level that is not broken.
 #
 # Hierarchy can be flipped via `hierarchy = "regulator"` to put eRegulators
 # on the outer level for master-regulator analyses.
@@ -40,9 +53,6 @@
 #'   written. Created if missing.
 #' @param method          Character. \code{"crocotel"} or \code{"cbc"}; one
 #'   call per method.
-#' @param gene_locations  Data frame or path to TSV with columns
-#'   \code{gene_id, chr, start, end}. Used to determine the universe of
-#'   genes considered.
 #' @param n_tests         Data frame/data.table or \code{NULL}. The
 #'   design-based test universe with columns \code{gene, context, n_pairs}
 #'   (\code{n_pairs} = true number of candidate pairs per cell, used as the
@@ -54,6 +64,15 @@
 #'   Default 0.05.
 #' @param level1,level2,level3 Numeric or \code{NULL}. Per-level FDR
 #'   targets; \code{NULL} (default) inherits \code{alpha}.
+#' @param dependence      Character. Cut-off rule at levels 2 and 3:
+#'   \code{"BY"} (default) applies the Benjamini-Yekutieli correction,
+#'   valid under arbitrary dependence; \code{"BH"} is the uncorrected
+#'   Benjamini-Hochberg rule. \strong{Level 1 is always BH regardless of
+#'   this setting} (see the file header for why). \code{"BY"} is the
+#'   default because the intended use -- multi-context data in which the
+#'   same individuals recur across contexts -- guarantees cross-context
+#'   residual correlation, under which BH is anti-conservative at the
+#'   cell and triplet levels; the measured cost is 1-3 power points.
 #' @param hierarchy       \code{"target"} (default) puts target genes on
 #'   the outer level (eTargets first). \code{"regulator"} flips: outer
 #'   level becomes "eRegulators".
@@ -71,7 +90,7 @@
 #'       \code{context}, \code{pvalue} (raw trans p-value), \code{q3_g}
 #'       (per-gene level-3 FDR target: \code{level3} scaled by the fraction
 #'       of eGenes and of the gene's active contexts), and
-#'       \code{bh_threshold} (the BH critical p-value the pair passed,
+#'       \code{crit_threshold} (the critical p-value the pair passed,
 #'       \code{q3_g * k / m}). A \code{beta} column is appended when the
 #'       input p-value files contain one.}
 #'     \item{summary}{One-row data frame with discovery counts at each
@@ -85,19 +104,23 @@
 run_fdr <- function(trans_dir,
                      output_dir,
                      method,
-                     gene_locations,
                      n_tests        = NULL,
                      alpha          = 0.05,
                      level1         = NULL,
                      level2         = NULL,
                      level3         = NULL,
+                     dependence     = c("BY", "BH"),
                      hierarchy      = c("target", "regulator"),
                      verbose        = TRUE) {
 
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required: install.packages('data.table')")
 
-  hierarchy <- match.arg(hierarchy)
+  dependence <- match.arg(dependence)
+  hierarchy  <- match.arg(hierarchy)
+
+  # Harmonic number H_m: the BY penalty for a family of size m.
+  .Hm <- function(m) if (m <= 1L) 1 else sum(1 / seq_len(m))
   if (is.null(level1)) level1 <- alpha
   if (is.null(level2)) level2 <- alpha
   if (is.null(level3)) level3 <- alpha
@@ -117,11 +140,6 @@ run_fdr <- function(trans_dir,
   if (!all(c("gene", "context", "n_pairs") %in% names(n_tests)))
     stop("n_tests must have columns: gene, context, n_pairs.")
   data.table::setkey(n_tests, gene, context)
-
-  if (is.character(gene_locations))
-    gene_locations <- read.table(gene_locations, header = TRUE,
-                                  stringsAsFactors = FALSE,
-                                  check.names = FALSE)
 
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
@@ -207,6 +225,7 @@ run_fdr <- function(trans_dir,
 
   # ------------------------------------------------------------------
   # 4. Level 1: BH on cross-context Simes -> eGenes
+  #    ALWAYS BH -- `dependence` deliberately does not apply here.
   # ------------------------------------------------------------------
   per_g$q1 <- stats::p.adjust(per_g$simes_p_xC, method = "BH")
   per_g$is_eGene <- per_g$q1 <= level1
@@ -219,13 +238,13 @@ run_fdr <- function(trans_dir,
     empty_g  <- per_g[is_eGene == TRUE]
     empty_gc <- per_gc[0]
     triplet_cols <- c("gene", "snp", "context", "pvalue",
-                      "q3_g", "bh_threshold")
+                      "q3_g", "crit_threshold")
     if ("beta" %in% names(all_pairs)) triplet_cols <- c(triplet_cols, "beta")
     empty_t <- data.frame(matrix(NA_real_, nrow = 0,
                                   ncol = length(triplet_cols)))
     names(empty_t) <- triplet_cols
     summary_row <- data.table::data.table(
-      method = method, hierarchy = hierarchy,
+      method = method, hierarchy = hierarchy, dependence = dependence,
       M = M, R_G = 0, R_GT = 0, R_triplets = 0,
       level1 = level1, level2 = level2, level3 = level3
     )
@@ -244,15 +263,17 @@ run_fdr <- function(trans_dir,
   }
 
   # ------------------------------------------------------------------
-  # 5. Level 2: within each eGene, BH on per-context Simes
+  # 5. Level 2: within each eGene, BH/BY on per-context Simes
   #    Threshold: q2_adj = R_G * level2 / M
+  #    p.adjust(method = "BY") is exactly BH * H_m, so the rule switch is
+  #    a straight substitution of the adjustment method here.
   # ------------------------------------------------------------------
   if (verbose) message("Level 2: selecting contexts within each eGene...")
   q2_adj <- R_G * level2 / M
 
   eg_names <- per_g$gene[per_g$is_eGene]
   per_gc_e <- per_gc[gene %in% eg_names]
-  per_gc_e[, q2 := stats::p.adjust(simes_p, method = "BH"), by = gene]
+  per_gc_e[, q2 := stats::p.adjust(simes_p, method = dependence), by = gene]
   per_gc_e[, is_active := q2 <= q2_adj]
 
   R_GT <- sum(per_gc_e$is_active)
@@ -267,8 +288,12 @@ run_fdr <- function(trans_dir,
   ), by = gene]
 
   # ------------------------------------------------------------------
-  # 6. Level 3: within each active (gene, context) cell, BH on raw p
+  # 6. Level 3: within each active (gene, context) cell, BH/BY on raw p
   #    Per-gene threshold: q3_g = R_G * n_sel_t * level3 / (M * n_test_t)
+  #    Under BY the critical value carries a 1/H_m factor, with m the TRUE
+  #    test count for the cell (m_tests from n_tests), matching the m used
+  #    in the BH denominator -- not .N, which counts only the p-values that
+  #    survived pv_threshold.
   # ------------------------------------------------------------------
   if (verbose) message("Level 3: selecting triplets within active cells...")
   q3_g <- per_g_counts[, .(
@@ -289,8 +314,10 @@ run_fdr <- function(trans_dir,
                          by = c("gene", "context"))
     data.table::setorder(cell_pairs, gene, context, pvalue)
     cell_pairs[, k := seq_len(.N), by = .(gene, context)]
-    cell_pairs[, bh_threshold := q3_g * k / m_tests]
-    cell_pairs[, accept := pvalue <= bh_threshold]
+    cell_pairs[, F3 := if (dependence == "BY") .Hm(m_tests[1]) else 1,
+               by = .(gene, context)]
+    cell_pairs[, crit_threshold := q3_g * k / (m_tests * F3)]
+    cell_pairs[, accept := pvalue <= crit_threshold]
     # BH step-up: largest k with accept = TRUE  ->  reject k = 1..k*
     cell_pairs[, max_accept_k := if (any(accept)) max(k[accept]) else 0L,
                by = .(gene, context)]
@@ -311,7 +338,7 @@ run_fdr <- function(trans_dir,
                                               simes_p, q2)])
 
   triplet_cols <- c("gene", "snp", "context", "pvalue",
-                    "q3_g", "bh_threshold")
+                    "q3_g", "crit_threshold")
   if ("beta" %in% names(all_pairs)) triplet_cols <- c(triplet_cols, "beta")
   out_triplets <- if (R_triplets > 0) {
     as.data.frame(sel_triplets[, ..triplet_cols])
@@ -331,6 +358,7 @@ run_fdr <- function(trans_dir,
   summary_row <- data.frame(
     method     = method,
     hierarchy  = hierarchy,
+    dependence = dependence,
     M          = M,
     R_G        = R_G,
     R_GT       = R_GT,

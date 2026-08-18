@@ -8,12 +8,12 @@ run_fdr(
   trans_dir,
   output_dir,
   method,
-  gene_locations,
   n_tests = NULL,
   alpha = 0.05,
   level1 = NULL,
   level2 = NULL,
   level3 = NULL,
+  dependence = c("BY", "BH"),
   hierarchy = c("target", "regulator"),
   verbose = TRUE
 )
@@ -31,10 +31,6 @@ written. Created if missing.}
 \item{method}{Character. \code{"crocotel"} or \code{"cbc"}; one
 call per method.}
 
-\item{gene_locations}{Data frame or path to TSV with columns
-\code{gene_id, chr, start, end}. Used to determine the universe of
-genes considered.}
-
 \item{n_tests}{Data frame/data.table or \code{NULL}. The
 design-based test universe with columns \code{gene, context, n_pairs}
 (\code{n_pairs} = true number of candidate pairs per cell, used as the
@@ -48,6 +44,16 @@ Default 0.05.}
 
 \item{level1, level2, level3}{Numeric or \code{NULL}. Per-level FDR
 targets; \code{NULL} (default) inherits \code{alpha}.}
+
+\item{dependence}{Character. Cut-off rule at levels 2 and 3:
+\code{"BY"} (default) applies the Benjamini-Yekutieli correction,
+valid under arbitrary dependence; \code{"BH"} is the uncorrected
+Benjamini-Hochberg rule. \strong{Level 1 is always BH regardless of
+this setting} (see the file header for why). \code{"BY"} is the
+default because the intended use -- multi-context data in which the
+same individuals recur across contexts -- guarantees cross-context
+residual correlation, under which BH is anti-conservative at the
+cell and triplet levels; the measured cost is 1-3 power points.}
 
 \item{hierarchy}{\code{"target"} (default) puts target genes on
 the outer level (eTargets first). \code{"regulator"} flips: outer
@@ -68,7 +74,7 @@ Invisibly returns a named list:
       \code{context}, \code{pvalue} (raw trans p-value), \code{q3_g}
       (per-gene level-3 FDR target: \code{level3} scaled by the fraction
       of eGenes and of the gene's active contexts), and
-      \code{bh_threshold} (the BH critical p-value the pair passed,
+      \code{crit_threshold} (the critical p-value the pair passed,
       \code{q3_g * k / m}). A \code{beta} column is appended when the
       input p-value files contain one.}
     \item{summary}{One-row data frame with discovery counts at each
