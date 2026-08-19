@@ -15,6 +15,7 @@ utils::globalVariables(c(
   "g1", "g2", "gs", "gene", "gene_id", "chr", "start", "end", "context",
   "n_pairs", "reg", "tgt", "rchr", "tchr", "strength", "snps", "snp", "pos",
   "snp_chr", "partner", "sub", "lo", "hi", "pvalue",
+  "rgs", "pchr", "rlo", "rhi",
   "accept", "bh_threshold", "is_active", "is_eGene", "k", "m_tests",
   "max_accept_k", "n_sel_tissues", "n_tested", "n_tested_tissues",
   "q1", "q2", "simes_min_term", "simes_p", "simes_p_xC"

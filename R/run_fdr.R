@@ -59,6 +59,15 @@
 #'   BH multiplicity \code{m}). \code{NULL} (default) loads the sidecar
 #'   \code{trans_dir/n_tests_<method>.rds} written by \code{run_trans_eqtl()};
 #'   construct one directly with \code{build_n_tests_trans()}.
+#' @param crossmap        Cross-mappability enforcement. \code{NULL} (default)
+#'   requires \code{n_tests} to have been cross-map filtered by
+#'   \code{apply_crossmap_post()} (it stamps attr \code{crossmap_filtered});
+#'   \code{run_fdr()} errors otherwise, because cross-mappable + LD-halo
+#'   (regulator, target) pairs are a leading source of false trans-eQTLs that
+#'   read-level alignment filtering does not fully remove (the LD-halo case has
+#'   no alignment-side equivalent). Pass \code{NA} to acknowledge that no
+#'   cross-mappability applies by construction (e.g. simulations) and skip the
+#'   check. Matches the acknowledgement policy of \code{resolve_cross_map()}.
 #' @param alpha           Numeric. Default FDR level applied at each tier
 #'   when \code{level1}, \code{level2}, \code{level3} are not supplied.
 #'   Default 0.05.
@@ -105,6 +114,7 @@ run_fdr <- function(trans_dir,
                      output_dir,
                      method,
                      n_tests        = NULL,
+                     crossmap       = NULL,
                      alpha          = 0.05,
                      level1         = NULL,
                      level2         = NULL,
@@ -135,6 +145,22 @@ run_fdr <- function(trans_dir,
            ". Pass n_tests explicitly (see build_n_tests_trans()) or run ",
            "run_trans_eqtl() first to write the sidecar.")
     n_tests <- readRDS(sidecar)
+  }
+  # Cross-mappability guard (checked BEFORE as.data.table below, which can strip
+  # custom attributes). Real trans-eQTL analyses MUST remove cross-mappable +
+  # LD-halo (regulator, target) pairs BEFORE FDR -- apply_crossmap_post() stamps
+  # attr 'crossmap_filtered' on the n_tests sidecar -- or the BH/BY family counts
+  # are calibrated on artifact pairs. Read-level alignment filtering and the
+  # direct filter alone do NOT cover the LD-halo case, so this is enforced, not
+  # advisory. The ONLY exemption is crossmap = NA: no cross-mappability applies by
+  # construction (e.g. simulations, which have no sequence-similarity structure).
+  # Mirrors the NULL/NA/path acknowledgement policy of resolve_cross_map().
+  if (!(length(crossmap) == 1L && is.na(crossmap))) {          # NA = acknowledged
+    if (!isTRUE(attr(n_tests, "crossmap_filtered")))
+      stop("n_tests is not cross-map filtered. Run apply_crossmap_post() before ",
+           "run_fdr() (gene methods get direct + LD-halo proximity; the SNP ",
+           "method gets proximity), or pass crossmap = NA to acknowledge that no ",
+           "cross-mappability applies (e.g. simulations). See ?apply_crossmap_post.")
   }
   n_tests <- data.table::as.data.table(n_tests)
   if (!all(c("gene", "context", "n_pairs") %in% names(n_tests)))

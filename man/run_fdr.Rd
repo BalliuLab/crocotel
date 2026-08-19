@@ -9,6 +9,7 @@ run_fdr(
   output_dir,
   method,
   n_tests = NULL,
+  crossmap = NULL,
   alpha = 0.05,
   level1 = NULL,
   level2 = NULL,
@@ -37,6 +38,16 @@ design-based test universe with columns \code{gene, context, n_pairs}
 BH multiplicity \code{m}). \code{NULL} (default) loads the sidecar
 \code{trans_dir/n_tests_<method>.rds} written by \code{run_trans_eqtl()};
 construct one directly with \code{build_n_tests_trans()}.}
+
+\item{crossmap}{Cross-mappability enforcement. \code{NULL} (default)
+requires \code{n_tests} to have been cross-map filtered by
+\code{apply_crossmap_post()} (it stamps attr \code{crossmap_filtered});
+\code{run_fdr()} errors otherwise, because cross-mappable + LD-halo
+(regulator, target) pairs are a leading source of false trans-eQTLs that
+read-level alignment filtering does not fully remove (the LD-halo case has
+no alignment-side equivalent). Pass \code{NA} to acknowledge that no
+cross-mappability applies by construction (e.g. simulations) and skip the
+check. Matches the acknowledgement policy of \code{resolve_cross_map()}.}
 
 \item{alpha}{Numeric. Default FDR level applied at each tier
 when \code{level1}, \code{level2}, \code{level3} are not supplied.

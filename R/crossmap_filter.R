@@ -3,10 +3,17 @@
 # Cross-mappability PAIR filter for trans-eQTL (Saha & Battle 2018). Shared by
 # all three trans scanners (run_trans_eqtl, run_trans_eqtl_snp, run_trans_lmm).
 # A (regulator gene, target gene) trans pair whose two genes are cross-mappable
-# is an RNA-seq alignment artifact, not a real trans effect. Dropping such pairs
-# must be done consistently in BOTH the trans output AND the FDR family count
-# (n_tests) or FDR is miscalibrated -- hence a single helper applied where the
-# full regulator x target universe is known (the scanner), not run_fdr.
+# is an RNA-seq alignment artifact, not a real trans effect. TWO rules:
+#   DIRECT    -- regulator and target mutually cross-mappable (strength > 0).
+#   PROXIMITY -- a gene cross-mappable to the TARGET lies near the REGULATOR (for
+#                gene methods, within the regulator's cis-window interval; for the
+#                SNP method, within +-cis_window of the variant), so the
+#                regulator inherits that gene's signal through LD (strength >=100).
+# Gene methods (crocotel/GBAT) apply DIRECT union PROXIMITY; the SNP method
+# applies PROXIMITY only. Dropping such pairs must be done consistently in BOTH
+# the trans output AND the FDR family count (n_tests) or FDR is miscalibrated --
+# hence a single helper applied where the full regulator x target universe is
+# known (the scanner), not run_fdr.
 #
 # Internal helpers (not exported); gene IDs are matched version-stripped so a
 # versioned Saha-Battle table joins any-versioned gene IDs.
@@ -16,7 +23,8 @@
 # Load the cross-mappability table, restricted to a gene universe. The full
 # table (~28M pairs) lists only cross-mappable (non-zero) unordered pairs;
 # restricting to genes in play keeps memory + joins small. Returns a data.table
-# with version-stripped columns g1, g2.
+# with version-stripped columns g1, g2 and the numeric cross-map strength (kept
+# so the direct >0 and proximity >=100 thresholds can be applied downstream).
 load_cross_map <- function(cross_map_file, universe, min_strength = 0,
                            verbose = TRUE) {
   if (!requireNamespace("data.table", quietly = TRUE))
@@ -32,7 +40,7 @@ load_cross_map <- function(cross_map_file, universe, min_strength = 0,
     message(sprintf(
       "Cross-mappability: %d pair(s) within the gene universe (strength >= %g).",
       nrow(cm), min_strength))
-  cm[, .(g1, g2)]
+  cm[, .(g1, g2, strength)]
 }
 
 # Resolve the cross_map_file argument into a restricted table (or NULL = off),
@@ -62,11 +70,17 @@ resolve_cross_map <- function(cross_map_file, universe, min_strength = 0,
                  min_strength = min_strength, verbose = verbose)
 }
 
-# Cross-chr (regulator, target) pairs to exclude, from the restricted table.
-# cm is unordered, so both orientations are checked. reg_ids/tgt_ids are the
-# actual tested genes (original IDs); chr_of maps version-stripped gene -> chr.
-crossmap_excluded_pairs <- function(cm, reg_ids, tgt_ids, chr_of) {
+# Cross-chr (regulator, target) pairs to exclude by the DIRECT rule: regulator
+# and target genes mutually cross-mappable. cm is unordered, so both orientations
+# are checked. reg_ids/tgt_ids are the actual tested genes (original IDs); chr_of
+# maps version-stripped gene -> chr. min_strength is the direct-filter strength
+# floor (default 0 = keep all non-zero pairs, as in GBAT); editable so a caller
+# can raise it.
+crossmap_excluded_pairs <- function(cm, reg_ids, tgt_ids, chr_of,
+                                    min_strength = 0) {
   empty <- data.table::data.table(reg = character(0), tgt = character(0))
+  if (nrow(cm) == 0L) return(empty)
+  if (min_strength > 0) cm <- cm[strength >= min_strength]
   if (nrow(cm) == 0L) return(empty)
   reg_dt <- data.table::data.table(gs = .cm_strip_ver(reg_ids), reg = reg_ids)
   tgt_dt <- data.table::data.table(gs = .cm_strip_ver(tgt_ids), tgt = tgt_ids)
@@ -79,6 +93,62 @@ crossmap_excluded_pairs <- function(cm, reg_ids, tgt_ids, chr_of) {
   excl[, rchr := chr_of[.cm_strip_ver(reg)]]
   excl[, tchr := chr_of[.cm_strip_ver(tgt)]]
   unique(excl[!is.na(rchr) & !is.na(tchr) & rchr != tchr, .(reg, tgt)])
+}
+
+# (regulator gene, target) pairs to exclude by the PROXIMITY / LD-halo rule: a
+# gene cross-mappable to the TARGET falls within the REGULATOR's cis-window
+# (gene body +- cis_window), so the regulator's GReX inherits that gene's genetic
+# signal through LD and picks up the contamination. Gene analogue of
+# crossmap_excluded_pairs_snp -- the "variant" there becomes the regulator's
+# whole cis-window INTERVAL (the span its GReX predictors are drawn from), so the
+# LD halo reaches ~cis_window past the gene body (effective ~+-2 Mb at 1e6/1e6).
+# reg_ids = regulator gene IDs; partner + regulator loci come from
+# gene_locations (gene_id, chr, start, end). min_strength defaults to 100 and is
+# editable. Keys version-stripped throughout.
+crossmap_excluded_pairs_gene_proximity <- function(cm, reg_ids, tgt_ids,
+                                                   gene_locations,
+                                                   cis_window = 1e6,
+                                                   window = 1e6, chr_of,
+                                                   min_strength = 100) {
+  empty <- data.table::data.table(reg = character(0), tgt = character(0))
+  if (nrow(cm) == 0L) return(empty)
+  cmf <- cm[strength >= min_strength]                    # proximity threshold
+  if (!nrow(cmf)) return(empty)
+
+  # Genes cross-mappable to each tested target (both orientations).
+  tv <- data.table::data.table(tv = .cm_strip_ver(tgt_ids), tgt = tgt_ids)
+  a  <- merge(cmf, tv, by.x = "g1", by.y = "tv")[, .(tgt, partner = g2)]
+  b  <- merge(cmf, tv, by.x = "g2", by.y = "tv")[, .(tgt, partner = g1)]
+  partners <- unique(data.table::rbindlist(list(a, b)))  # (tgt, partner)
+  if (!nrow(partners)) return(empty)
+
+  gl <- data.table::as.data.table(gene_locations)
+  gl[, gs := .cm_strip_ver(gene_id)]
+  # Partner-gene loci, expanded by `window`.
+  ploc <- unique(gl[gs %in% unique(partners$partner),
+                    .(partner = gs, pchr = as.character(chr),
+                      lo = pmax(1L, as.integer(start) - as.integer(window)),
+                      hi = as.integer(end)   + as.integer(window))])
+  # Regulator loci = cis-window INTERVAL (gene body +- cis_window) -- the anchor.
+  rloc <- unique(gl[gs %in% unique(.cm_strip_ver(reg_ids)),
+                    .(rgs = gs, rchr = as.character(chr),
+                      rlo = pmax(1L, as.integer(start) - as.integer(cis_window)),
+                      rhi = as.integer(end)   + as.integer(cis_window))])
+  if (!nrow(ploc) || !nrow(rloc)) return(empty)
+
+  # Same-chr interval overlap: regulator cis-window vs partner-of-target window.
+  data.table::setkey(ploc, pchr, lo, hi)
+  ov <- data.table::foverlaps(rloc, ploc, by.x = c("rchr", "rlo", "rhi"),
+                              by.y = c("pchr", "lo", "hi"), nomatch = 0L)
+  if (!nrow(ov)) return(empty)
+
+  # (reg cis-window overlaps partner) x (target has that partner) -> (reg, tgt).
+  reg_dt <- data.table::data.table(rgs = .cm_strip_ver(reg_ids), reg = reg_ids)
+  hit <- merge(ov[, .(rgs, rchr, partner)], partners, by = "partner",
+               allow.cartesian = TRUE)              # (rgs, rchr, tgt)
+  hit <- merge(hit, reg_dt, by = "rgs", allow.cartesian = TRUE)  # + original reg
+  hit[, tchr := chr_of[.cm_strip_ver(tgt)]]
+  unique(hit[!is.na(tchr) & rchr != tchr, .(reg, tgt)])  # cross-chr reg vs tgt
 }
 
 # Shared apply step given a precomputed excluded-pairs table (columns reg, tgt):
@@ -107,9 +177,24 @@ crossmap_excluded_pairs <- function(cm, reg_ids, tgt_ids, chr_of) {
 
 # Apply the filter for one context (GENE regulator = crocotel GReX methods and
 # the SNP `lead` mode, whose regulator is the gene its lead cis-SNP belongs to).
+# Gene methods get BOTH the direct rule (mutually cross-mappable reg<->tgt, >
+# direct_min_strength) AND the proximity/LD-halo rule (partner-of-target within
+# the regulator cis-window, >= proximity_min_strength); the two exclusion sets
+# are unioned. gene_locations must be supplied to enable the proximity filter;
+# if NULL, only the direct filter is applied (backward-compatible).
 apply_crossmap_filter <- function(out_file, n_tests_dt, cm,
-                                  reg_ids, tgt_ids, chr_of) {
-  excl <- crossmap_excluded_pairs(cm, reg_ids, tgt_ids, chr_of)
+                                  reg_ids, tgt_ids, chr_of,
+                                  gene_locations = NULL, cis_window = 1e6,
+                                  direct_min_strength = 0,
+                                  proximity_min_strength = 100) {
+  excl <- crossmap_excluded_pairs(cm, reg_ids, tgt_ids, chr_of,
+                                  min_strength = direct_min_strength)
+  if (!is.null(gene_locations)) {
+    excl_prox <- crossmap_excluded_pairs_gene_proximity(
+      cm, reg_ids, tgt_ids, gene_locations, cis_window = cis_window,
+      window = 1e6, chr_of = chr_of, min_strength = proximity_min_strength)
+    excl <- unique(data.table::rbindlist(list(excl, excl_prox)))
+  }
   .apply_crossmap_excl(out_file, n_tests_dt, excl)
 }
 
@@ -125,9 +210,12 @@ apply_crossmap_filter <- function(out_file, n_tests_dt, cm,
 # data.frame(gene_id, chr, start, end). chr_of maps stripped gene -> chr (used
 # for the target's chromosome). Keys are version-stripped throughout.
 crossmap_excluded_pairs_snp <- function(cm, snpspos, tgt_ids, gene_locations,
-                                        window = 1e6, chr_of) {
+                                        window = 1e6, chr_of,
+                                        min_strength = 100) {
   empty <- data.table::data.table(reg = character(0), tgt = character(0))
   if (nrow(cm) == 0L) return(empty)
+  cm <- cm[strength >= min_strength]                    # proximity threshold
+  if (!nrow(cm)) return(empty)
 
   # Genes cross-mappable to each tested target (both orientations).
   tv <- data.table::data.table(tv = .cm_strip_ver(tgt_ids), tgt = tgt_ids)
@@ -167,9 +255,11 @@ crossmap_excluded_pairs_snp <- function(cm, snpspos, tgt_ids, gene_locations,
 # Apply the variant-regulator cross-map filter for one context (genome_wide).
 apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
                                       tgt_ids, gene_locations,
-                                      window = 1e6, chr_of) {
+                                      window = 1e6, chr_of,
+                                      min_strength = 100) {
   excl <- crossmap_excluded_pairs_snp(cm, snpspos, tgt_ids, gene_locations,
-                                      window = window, chr_of = chr_of)
+                                      window = window, chr_of = chr_of,
+                                      min_strength = min_strength)
   .apply_crossmap_excl(out_file, n_tests_dt, excl)
 }
 
@@ -186,13 +276,18 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 
 #' Apply the cross-mappability filter to a method's trans output (post-scan)
 #'
-#' Method-agnostic post-scan step. GReX methods (crocotel/cbc/lmm) use the
-#' gene-pair rule (\code{regulator = "gene"}); the SNP-based method uses the
-#' exact GTEx v8 SNP->local-gene(+-\code{cis_window}) rule
-#' (\code{regulator = "variant"}) for BOTH genome_wide and lead (for lead the
-#' meta sidecar supplies each gene's lead-SNP position). Cross-mappable
-#' (regulator, target) pairs are dropped from the output and subtracted from the
-#' FDR family, keeping treeQTL consistent.
+#' Method-agnostic post-scan step. GReX methods (crocotel/cbc/lmm,
+#' \code{regulator = "gene"}) get a TWO-PART filter: the DIRECT rule (regulator
+#' and target mutually cross-mappable, strength > \code{direct_min_strength}, as
+#' in GBAT) UNIONED with the PROXIMITY / LD-halo rule (a gene cross-mappable to
+#' the target lies within the regulator's cis-window, so its GReX inherits that
+#' signal through LD; strength >= \code{proximity_min_strength}, anchored on the
+#' regulator's cis-window interval). The SNP-based method
+#' (\code{regulator = "variant"}) uses the GTEx v8 SNP->local-gene(+-
+#' \code{cis_window}) proximity rule (>= \code{proximity_min_strength}) for BOTH
+#' genome_wide and lead (for lead the meta sidecar supplies each gene's lead-SNP
+#' position). Cross-mappable (regulator, target) pairs are dropped from the
+#' output and subtracted from the FDR family, keeping treeQTL consistent.
 #'
 #' @param output_dir     Character. Directory holding the method's
 #'   \code{trans_<method>_<ctx>.tsv}, \code{n_tests_<method>.rds}, and
@@ -202,13 +297,23 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 #'   series of a \code{snp_method = "both"} run).
 #' @param regulator      Character. \code{"gene"} (GReX methods) or
 #'   \code{"variant"} (SNP method).
-#' @param cross_map_file,cross_map_min_strength Cross-mappability table; ON by
-#'   default (\code{NULL} = off with a \code{warning()}; \code{NA} = acknowledged
-#'   off; a path enables). See \code{resolve_cross_map}.
+#' @param cross_map_file Cross-mappability table; ON by default (\code{NULL} =
+#'   off with a \code{warning()}; \code{NA} = acknowledged off; a path enables).
+#'   See \code{resolve_cross_map}.
+#' @param cross_map_min_strength Strength floor applied at LOAD time. Default
+#'   \code{0} (keep all non-zero pairs) so each filter can threshold itself; the
+#'   direct and proximity floors below are what actually gate exclusion.
+#' @param direct_min_strength Strength floor for the DIRECT filter (gene
+#'   methods). Default \code{0} (all non-zero, as in GBAT); editable.
+#' @param proximity_min_strength Strength floor for the PROXIMITY / LD-halo
+#'   filter, applied to gene methods AND the SNP method. Default \code{100};
+#'   editable (robustness is reported across 100/200/500).
 #' @param gene_locations Data frame or path to TSV with columns
-#'   \code{gene_id, chr, start, end}.
-#' @param cis_window     Integer. bp window for the SNP->local-gene lookup
-#'   (\code{regulator = "variant"}). Default \code{1e6}.
+#'   \code{gene_id, chr, start, end}. Required; also supplies the regulator
+#'   cis-window interval anchoring the gene proximity filter.
+#' @param cis_window     Integer. Regulator cis-window (bp): the SNP->local-gene
+#'   lookup for \code{regulator = "variant"} AND the interval anchor (gene body
+#'   +- \code{cis_window}) for the gene proximity filter. Default \code{1e6}.
 #' @param verbose        Logical. Default \code{TRUE}.
 #'
 #' @return Invisibly the adjusted \code{n_tests} \code{data.table} (also written
@@ -221,6 +326,8 @@ apply_crossmap_post <- function(output_dir, method,
                                 gene_locations = NULL,
                                 cis_window = 1e6,
                                 cross_map_min_strength = 0,
+                                direct_min_strength = 0,
+                                proximity_min_strength = 100,
                                 verbose = TRUE) {
   regulator <- match.arg(regulator)
   if (!requireNamespace("data.table", quietly = TRUE))
@@ -264,7 +371,11 @@ apply_crossmap_post <- function(output_dir, method,
     tgt_ids  <- unique(nt_ctx$gene)
     if (regulator == "gene") {
       out[[ctx]] <- apply_crossmap_filter(out_file, nt_ctx, cm,
-                                          snpspos$snp, tgt_ids, chr_of)
+                                          snpspos$snp, tgt_ids, chr_of,
+                                          gene_locations = gene_locations,
+                                          cis_window = cis_window,
+                                          direct_min_strength = direct_min_strength,
+                                          proximity_min_strength = proximity_min_strength)
     } else {
       if (!("pos" %in% names(snpspos)))
         stop("regulator = \"variant\" needs a 'pos' column in the meta sidecar ",
@@ -272,7 +383,8 @@ apply_crossmap_post <- function(output_dir, method,
              "' did not provide one.")
       out[[ctx]] <- apply_crossmap_filter_snp(out_file, nt_ctx, cm, snpspos,
                                               tgt_ids, gene_locations,
-                                              window = cis_window, chr_of = chr_of)
+                                              window = cis_window, chr_of = chr_of,
+                                              min_strength = proximity_min_strength)
     }
   }
   other  <- nt[!(nt$context %in% names(meta)), ]

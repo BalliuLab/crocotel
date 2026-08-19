@@ -12,6 +12,8 @@ apply_crossmap_post(
   gene_locations = NULL,
   cis_window = 1e+06,
   cross_map_min_strength = 0,
+  direct_min_strength = 0,
+  proximity_min_strength = 100,
   verbose = TRUE
 )
 }
@@ -27,15 +29,28 @@ series of a \code{snp_method = "both"} run).}
 \item{regulator}{Character. \code{"gene"} (GReX methods) or
 \code{"variant"} (SNP method).}
 
-\item{cross_map_file, cross_map_min_strength}{Cross-mappability table; ON by
-default (\code{NULL} = off with a \code{warning()}; \code{NA} = acknowledged
-off; a path enables). See \code{resolve_cross_map}.}
+\item{cross_map_file}{Cross-mappability table; ON by default (\code{NULL} =
+off with a \code{warning()}; \code{NA} = acknowledged off; a path enables).
+See \code{resolve_cross_map}.}
 
 \item{gene_locations}{Data frame or path to TSV with columns
-\code{gene_id, chr, start, end}.}
+\code{gene_id, chr, start, end}. Required; also supplies the regulator
+cis-window interval anchoring the gene proximity filter.}
 
-\item{cis_window}{Integer. bp window for the SNP->local-gene lookup
-(\code{regulator = "variant"}). Default \code{1e6}.}
+\item{cis_window}{Integer. Regulator cis-window (bp): the SNP->local-gene
+lookup for \code{regulator = "variant"} AND the interval anchor (gene body
++- \code{cis_window}) for the gene proximity filter. Default \code{1e6}.}
+
+\item{cross_map_min_strength}{Strength floor applied at LOAD time. Default
+\code{0} (keep all non-zero pairs) so each filter can threshold itself; the
+direct and proximity floors below are what actually gate exclusion.}
+
+\item{direct_min_strength}{Strength floor for the DIRECT filter (gene
+methods). Default \code{0} (all non-zero, as in GBAT); editable.}
+
+\item{proximity_min_strength}{Strength floor for the PROXIMITY / LD-halo
+filter, applied to gene methods AND the SNP method. Default \code{100};
+editable (robustness is reported across 100/200/500).}
 
 \item{verbose}{Logical. Default \code{TRUE}.}
 }
@@ -45,11 +60,16 @@ Invisibly the adjusted \code{n_tests} \code{data.table} (also written
   filter is off (\code{cross_map_file} \code{NULL}/\code{NA}).
 }
 \description{
-Method-agnostic post-scan step. GReX methods (crocotel/cbc/lmm) use the
-gene-pair rule (\code{regulator = "gene"}); the SNP-based method uses the
-exact GTEx v8 SNP->local-gene(+-\code{cis_window}) rule
-(\code{regulator = "variant"}) for BOTH genome_wide and lead (for lead the
-meta sidecar supplies each gene's lead-SNP position). Cross-mappable
-(regulator, target) pairs are dropped from the output and subtracted from the
-FDR family, keeping treeQTL consistent.
+Method-agnostic post-scan step. GReX methods (crocotel/cbc/lmm,
+\code{regulator = "gene"}) get a TWO-PART filter: the DIRECT rule (regulator
+and target mutually cross-mappable, strength > \code{direct_min_strength}, as
+in GBAT) UNIONED with the PROXIMITY / LD-halo rule (a gene cross-mappable to
+the target lies within the regulator's cis-window, so its GReX inherits that
+signal through LD; strength >= \code{proximity_min_strength}, anchored on the
+regulator's cis-window interval). The SNP-based method
+(\code{regulator = "variant"}) uses the GTEx v8 SNP->local-gene(+-
+\code{cis_window}) proximity rule (>= \code{proximity_min_strength}) for BOTH
+genome_wide and lead (for lead the meta sidecar supplies each gene's lead-SNP
+position). Cross-mappable (regulator, target) pairs are dropped from the
+output and subtracted from the FDR family, keeping treeQTL consistent.
 }
