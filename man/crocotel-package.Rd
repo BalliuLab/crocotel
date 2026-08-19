@@ -12,10 +12,5 @@ Builds cross-validated genetically regulated expression (GReX) predictors using 
 \author{
 \strong{Maintainer}: Brunilda Balliu \email{bballiu@g.ucla.edu}
 
-Authors:
-\itemize{
-  \item Brunilda Balliu \email{bballiu@g.ucla.edu}
-}
-
 }
 \keyword{internal}
