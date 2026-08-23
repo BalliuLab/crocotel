@@ -1,124 +1,135 @@
-# _crocotel_ R package
+# crocotel
 
+Context-resolved **trans**-eQTL mapping via genetically regulated expression
+(GReX). crocotel builds cross-validated GReX predictors with a CONTENT-style
+shared / context-specific decomposition and an elastic net, then tests each
+regulator gene's GReX against every distal target gene across contexts
+(tissues, cell types), with hierarchical treeQTL-style FDR control — validated
+exactly against TreeQTL 2.0 in both hierarchy orientations.
 
-### Install _crocotel_ via Github:
-##### Note: qvalue and TreeQTL must be installed from source before crocotel is installed 
+## Installation
+
+```r
+# install.packages("remotes")
+remotes::install_github("BalliuLab/crocotel")
 ```
 
-# Install qvalue
-if (!requireNamespace("qvalue", quietly = TRUE)) {
-if (!require("BiocManager", quietly = TRUE)) install.packages("BiocManager")
-BiocManager::install("qvalue")
-}
+Dependencies (`MatrixEQTL`, `bigsnpr`, `glmnet`, `data.table`) install from
+CRAN automatically. On a cluster without compilers, `install_deps.sh` sets up
+a conda environment with everything pre-built. Requires R >= 4.1.
 
-# Install treeQTL
-install.packages("http://bioinformatics.org/treeqtl/TreeQTL_2.0.tar.gz", repos = NULL, type = "source")
+## Pipeline at a glance
 
-# Install crocotel
-devtools::install_github("BalliuLab/crocotel", dependencies = TRUE)
+```
+expression (per context)          genotypes (PLINK bed / plink2 .traw)
+        |                                    |
+  preprocess_expression()            prepare_genotypes()
+        |                                    |
+        +--------------+---------------------+
+                       |
+              fit_grex_gene() / fit_grex_batch()     one job per gene
+                       |
+              assemble_grex_matrices()               per-context matrices
+                       |                             + target-eligibility file
+        +--------------+--------------+
+        |              |              |
+ run_trans_eqtl()  run_trans_lmm()  run_trans_eqtl_snp()
+  (crocotel / CBC)  (joint LMM)      (SNP comparators)
+        |              |              |
+        +--------------+--------------+
+                       |
+              apply_crossmap_post()                  cross-mappability filter
+                       |
+                   run_fdr()                         3-level hierarchical FDR
+```
+
+## Quick start
+
+```r
 library(crocotel)
-```
-### Preliminary step: Format the input data
-#### This step takes in input files formatted exactly as in MatrixEQTL (1 expression file for each context, 1 genotype file, 1 snpsloc file, and 1 geneloc file)
-#### The output creates a directory called "crocotel_formatted_data/" inside the specified output directory with a subdirectory for the expression of each gene in each context. 
-```
-exp_files=list.files("crocotel_example/input_data/", pattern = ".exp.txt", full.names = T)
-geneloc_file="crocotel_example/input_data/geneloc.txt"
-snpsloc_file="crocotel_example/input_data/snpsloc.txt"
-genotypes_file="crocotel_example/input_data/all_genotypes.txt"
 
-# output directory where all crocotel final and intermediate output will be stored. Only set this directory once.
-out_dir="crocotel_example/"
+## 1. One file per gene from per-context expression tables
+preprocess_expression(
+  expr_files  = c("liver.txt.gz", "muscle.txt.gz", "blood.txt.gz"),
+  output_dir  = "expr_by_gene",
+  gene_id_col = "gene_id")
 
-format_data(exp_files, geneloc_file, snpsloc_file, genotypes_file, out_dir)
-```
+## 2. Convert genotypes to a memory-mapped backing (once)
+prepare_genotypes("genotypes/cohort")          # cohort.bed/.bim/.fam
 
-### Step 1: Build cis Genetically Regulated eXpression componentS (GReXs)
-#### This step builds cross-validated cis genetic predictors of expression for a gene across all contexts (e.g. cell types and tissues) using elastic net regularized regression.
-#### If the preliminary format data step was run, only the gene name and the crocotel "out_dir" set above is a required parameter. 
-#### Filenames can also be passed in for all parameters if they were not created by the above function. 
+## 3. Fit GReX, one gene per job (parallelize across genes on your scheduler)
+fit_grex_batch(
+  gene_ids       = my_genes,
+  expr_dir       = "expr_by_gene",
+  plink_prefix   = "genotypes/cohort",
+  gene_locations = "gene_locations.txt",       # gene_id, chr, start, end
+  output_dir     = "grex",
+  mc.cores       = 8)
 
-#### example code for one gene:
-```
-out_dir="crocotel_example/"
-gene_name = "gene1"
-context_thresh = 3 # minimum # of contexts a gene has to have expression on 
-alpha = 0.5 # elastic net mixture parameter 
-num_folds = 10 # number of folds for cross-validation 
-method = "crocotel" # alternative is "cxc"
+## 4. Assemble per-context matrices (also decides target eligibility)
+assemble_grex_matrices(
+  grex_dir = "grex", expr_dir = "expr_by_gene", output_dir = "matrices")
 
-create_GReXs(gene_name, out_dir, 
-  context_thresh = context_thresh,
-  alpha = alpha,
-  num_folds = num_folds,
-  method = method)
-  
+## 5. Trans scan (pick a method; all share the same eligibility rules)
+run_trans_eqtl(matrix_dir = "matrices", gene_locations = "gene_locations.txt",
+               output_dir = "trans", method = "crocotel")
+
+## 6. Cross-mappability filter (required on real data), then FDR
+apply_crossmap_post("trans", "crocotel", regulator = "gene",
+                    cross_map_file = "crossmap_pairs.txt.gz",
+                    gene_locations = "gene_locations.txt")
+run_fdr(trans_dir = "trans", output_dir = "fdr", method = "crocotel")
 ```
 
-### Step 2: Run regulator-target associations 
-##### Option 1 (faster but less powerful): Lite version which tests all regulator-target pairs simultaneously in each context using ultra-fast linear regression 
-##### The p-value output threshold 
-```
-out_dir="crocotel_example/"
-context = "0"
-geneloc_file = "crocotel_example/input_data/geneloc.txt"
+`run_fdr()` writes the discoveries at three levels: `eTargets_*` (which genes
+are trans-regulated at all), `eTarget_context_*` (in which contexts), and
+`triplets_*` (by which regulator).
 
-crocotel_lite(context, geneloc_file, out_dir)
-```
+## The methods
 
-##### Option 2 (slower but more powerful): LMM version which tests each regulator-target pairs separately but jointly models all contexts for each pair
-```
+| Function | Test | Regulator unit | Notes |
+|---|---|---|---|
+| `run_trans_eqtl(method="crocotel")` | per-context OLS on GReX | gene | the primary method; `target_response = "residualized"` (default) removes the target's own cis signal first |
+| `run_trans_eqtl(method="cbc")` | per-context OLS on context-by-context GReX | gene | GBAT-style comparator |
+| `run_trans_lmm()` | joint cross-context score test (het-CS noise model) | gene | highest power; pools evidence across contexts |
+| `run_trans_eqtl_snp(snp_method="lead")` | per-context OLS on each gene's lead cis-SNP | gene | GBAT "top cis-eQTL" baseline |
+| `run_trans_eqtl_snp(snp_method="genome_wide")` | per-context OLS on every variant | variant | GTEx/eQTLGen-style baseline |
 
-regulator_gene_name = "gene1"
-target_gene_name = "gene2"
-out_dir = "crocotel_example/"
+## Key concepts
 
-crocotel_lmm(regulator_gene_name = regulator_gene_name, target_gene_name = target_gene_name, out_dir = out_dir)
-```
+- **GReX** — the genetic component of a gene's expression, predicted from cis
+  variants by cross-validated elastic net; testing GReX (not observed
+  expression) against distal genes protects trans hits from environmental
+  confounding. The decomposition splits it into a **shared** (cross-context)
+  and **context-specific** part; the fitted effect sizes and SNP support are
+  saved on every record.
+- **Target eligibility** — decided once at assembly (`expressed_targets.rds`):
+  a gene is a target in a context only with >= 30 observed expression values
+  there (`min_obs_per_ctx`). Every scanner obeys the same file, so FDR
+  families are identical across methods by construction.
+- **Regulator gate** — a gene is admitted as a regulator in a context only if
+  its GReX is significantly predictive there (`grex_gate_mode = "pval"`,
+  default), clears a prediction-R2 floor (`"r2"`, the GBAT criterion), or
+  both.
+- **Cross-mappability** — on real data, `run_fdr()` refuses to run unless the
+  (regulator, target) pairs confounded by sequence similarity (direct +
+  LD-halo proximity) have been removed by `apply_crossmap_post()`. Pass
+  `crossmap = NA` only when no cross-mappability applies by construction
+  (simulations).
+- **Hierarchy orientation** — the default tree asks "which genes are
+  trans-regulated?" (eTargets). `hierarchy = "regulator"` flips it to "which
+  genes are trans-regulators?" (eRegulators); `write_n_tests()` converts an
+  existing scan to the other orientation in seconds, no re-scan.
 
-##### The implementation of crocotel lmm requires user parallelization to run across all regulator-target pairs. Once association for all pairs is run, use this function to concatenate output files for multiple testing correction
+## Simulating data
 
-```
-out_dir = "crocotel_example/"
-regress_target_GReX = T
-concat_crocotel_lmm_files(directory = out_dir, regress_target_GReX = regress_target_GReX)
-```
+`simulate_expression()` generates multi-context regulator + target expression
+with known trans effects (`n_active_contexts` controls in how many contexts
+each signal is active); `write_simulated_genotypes()` /
+`write_simulated_expression()` write it in exactly the pipeline's input
+format. See the examples in their help pages — they form one coherent flow.
 
+## License
 
-### Step 3: Multiple testing correction
-#### example using crocotel lite output with treeQTL:
-
-
-```
-method = "treeQTL"
-crocotel_dir = "crocotel_example/crocotel_lite_output/"
-out_dir = "crocotel_example/"
-top_level = "R"
-
-multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method, top_level = top_level)
-
-```
-
-#### example using crocotel lite output with mashr:
-```
-method = "mashr"
-crocotel_dir = "crocotel_example/crocotel_lite_output/"
-out_dir = "crocotel_example/"
-
-multiple_testing_correction(crocotel_dir = crocotel_dir, out_dir = out_dir, method = method)
-
-```
-
-### Important notes:
-1. Input file names for total expression should be in the following format with the following filenames "contextName.txt":
-    
-2. Input file names for expression of each gene must have its own directory with no other files. The names of the files should be "contextName.txt" or "contextName" with no other leading or trailing strings.
-
-
-
-
-
-
-
-
-
+MIT. Please file issues at
+<https://github.com/BalliuLab/crocotel/issues>.

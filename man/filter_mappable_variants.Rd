@@ -16,7 +16,10 @@ filter_mappable_variants(
 to the genotype IDs, e.g. bigSNP \code{$map$marker.ID}).}
 
 \item{mappability_file}{Character, \code{NULL}, or \code{NA}. Path to a
-2-column (variant_id, score) TSV, optionally gzipped; score in [0, 1].}
+TSV (optionally gzipped), either headerless with exactly two columns
+(variant_id, score) or headered with columns named \code{variant_id}
+and \code{score} (any order, extra columns ignored); score in [0, 1].
+Malformed files are rejected with an explanatory error.}
 
 \item{min}{Numeric. Minimum mappability to retain. Default
 \code{1.0} (GTEx v8 trans-variant convention; a variant must be uniquely
@@ -40,8 +43,8 @@ the table are KEPT (mappability unknown, not necessarily low), matching the
 gene-level convention in \code{filter_mappable_genes}.
 }
 \details{
-The filter is ON by default: \code{NULL} (the default) leaves it off but
-emits a \code{warning()}; \code{NA} acknowledges "no variant-mappability
+The filter is opt-in but LOUD when skipped: \code{NULL} (the default)
+leaves it off and emits a \code{warning()}; \code{NA} acknowledges "no variant-mappability
 data" and silences the warning (e.g. simulations, whose genotypes are
 simulated and have no mappability concept). In both non-path cases
 \code{variant_ids} is returned unchanged.

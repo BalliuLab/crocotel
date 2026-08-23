@@ -6,9 +6,12 @@
 #   * One task per (method, context) - invoke this function once per task.
 #   * Tests every gene-vs-gene pair where regulator and target sit on
 #     different chromosomes (cross-chromosome filter applied post-MatrixEQTL).
-#   * Drops regulators with no fitted GReX (all-NA rows).
-#   * Mean-imputes NAs in Z_grex / target to keep MatrixEQTL's vectorised
-#     matrix product well-defined.
+#   * Target eligibility + regulator eligibility (GReX-quality gate,
+#     observation floor, positive variance) via the shared rules in
+#     trans_scan_shared.R.
+#   * Response missingness: complete-case (individuals unobserved in a
+#     context are dropped as whole columns; the response is never imputed).
+#     Regulator GReX NAs are mean-imputed (predictor-side).
 #   * Target expression: "raw" uses the assembled observed expr_<ctx>
 #     directly; "residualized" de-cis's it on the fly against the method's
 #     GReX (residualize_grex).
@@ -48,7 +51,7 @@
 #'   survive hierarchical FDR is retained, tight enough to keep files
 #'   manageable. Set to \code{1} to retain all pairs (large files; useful
 #'   for benchmarking).
-#' @param grex_gate        Logical. B12 regulator GReX-quality gate. When
+#' @param grex_gate        Logical. Regulator GReX-quality gate. When
 #'   \code{TRUE} (default), a gene is admitted as a REGULATOR in a context only
 #'   if its GReX is significantly predictive there (within-context BH on the
 #'   assembled p-values, \code{q < grex_gate_q}). Applied before the scan, so
@@ -63,10 +66,41 @@
 #' @param grex_gate_r2_min Numeric. Optional adjusted-R2 floor applied on top
 #'   of significance (significance is not usefulness at large n). Default
 #'   \code{0} = significance-only (no R2 filtering).
+#' @param grex_gate_mode   Character. Gate criterion: \code{"pval"} (default,
+#'   the historical behavior) admits regulators with within-context BH
+#'   q < \code{grex_gate_q} (plus the R2 floor when
+#'   \code{grex_gate_r2_min > 0}); \code{"r2"} admits on the R2 floor ALONE
+#'   with no significance test (the GBAT-paper criterion -- note that
+#'   \code{grex_gate_q = 1} can NOT emulate this: BH returns exactly q = 1
+#'   for some genes and \code{q < 1} silently drops them); \code{"both"}
+#'   requires both criteria. One shared implementation serves
+#'   \code{run_trans_eqtl()} and \code{run_trans_lmm()} identically.
+#' @param min_obs_per_ctx  Integer. Target-eligibility threshold: a gene is a
+#'   TARGET in a context only with at least this many observed expression
+#'   values there (default \code{30L}, shared by all methods). The decision
+#'   is made once by \code{assemble_grex_matrices()} and read from its
+#'   \code{expressed_targets.rds} file; this argument is used to compute
+#'   the identical rule on the fly only when \code{matrix_dir} lacks that
+#'   file (hand-built directories), and a conflict with its recorded
+#'   threshold is an error.
+#' @param min_reg_obs      Integer. A gene is a REGULATOR in a context only
+#'   with at least this many observed GReX values there (plus the gate and a
+#'   positive-variance requirement); the shared rule with
+#'   \code{run_trans_lmm()}. Default \code{5L}.
+#' @param hierarchy        \code{"target"} (default) or \code{"regulator"}:
+#'   orientation of the FDR family-count file this run writes
+#'   (\code{n_tests_<hierarchy>_<method>.rds}, one orientation per run).
+#'   \code{"target"}: one family per (target, context), counting cross-chr
+#'   regulators -- L1 discoveries are eTargets. \code{"regulator"}: one
+#'   family per (regulator, context), counting cross-chr targets -- L1
+#'   discoveries are eRegulators. The scan TSVs are identical either way;
+#'   \code{write_n_tests()} can regenerate the other orientation later
+#'   without re-scanning.
 #'
-#'   Cross-mappability filtering is DECOUPLED (Task B): this function writes raw
+#' @details
+#'   Cross-mappability filtering is DECOUPLED: this function writes raw
 #'   output + \code{n_tests_<method>.rds} + an \code{n_tests_meta_<method>.rds}
-#'   sidecar; run \code{apply_crossmap_post(regulator = "gene", ...)} afterward to
+#'   file; run \code{apply_crossmap_post(regulator = "gene", ...)} afterward to
 #'   filter. The upstream low-mappability gene filter is
 #'   \code{filter_mappable_genes} (applied to the gene universe before fitting).
 #' @param verbose          Logical. Print progress messages. Default
@@ -76,16 +110,17 @@
 #'   Per-context output is written by MatrixEQTL's native writer to
 #'   \code{output_dir/trans_<method>_<context>.tsv} - a tab-separated file
 #'   with MatrixEQTL's standard columns
-#'   (\code{SNP, gene, beta, t-stat, p-value, FDR}). This format is
-#'   directly consumable by treeQTL's \code{get_eGenes_*} family in
-#'   Phase 4, with no renaming required.
+#'   (\code{SNP, gene, beta, t-stat, p-value, FDR}), consumed by
+#'   \code{apply_crossmap_post()} and then \code{run_fdr()}. Use a fresh
+#'   \code{output_dir} per run: files from a previous run with a different
+#'   context set are not cleared.
 #'
 #' @examples
 #' \dontrun{
 #' run_trans_eqtl(
-#'   matrix_dir     = "/u/scratch/b/bballiu/crocotel_gtex/grex_matrices",
-#'   gene_locations = "/u/scratch/b/bballiu/crocotel_gtex/input/gene_locations.txt",
-#'   output_dir     = "/u/scratch/b/bballiu/crocotel_gtex/trans_eqtl",
+#'   matrix_dir     = "/path/to/project/grex_matrices",
+#'   gene_locations = "/path/to/project/input/gene_locations.txt",
+#'   output_dir     = "/path/to/project/trans_eqtl",
 #'   method         = "crocotel"
 #' )
 #' }
@@ -101,11 +136,17 @@ run_trans_eqtl <- function(matrix_dir,
                             grex_gate_pval  = c("full", "shared", "specific"),
                             grex_gate_q     = 0.05,
                             grex_gate_r2_min = 0,
+                            grex_gate_mode  = c("pval", "r2", "both"),
+                            min_obs_per_ctx = 30L,
+                            min_reg_obs     = 5L,
+                            hierarchy       = c("target", "regulator"),
                             verbose         = TRUE) {
 
   method          <- match.arg(method)
   target_response <- match.arg(target_response)
   grex_gate_pval  <- match.arg(grex_gate_pval)
+  grex_gate_mode  <- match.arg(grex_gate_mode)
+  hierarchy       <- match.arg(hierarchy)
 
   if (!requireNamespace("MatrixEQTL", quietly = TRUE))
     stop("Package 'MatrixEQTL' is required: install.packages('MatrixEQTL')")
@@ -186,52 +227,34 @@ run_trans_eqtl <- function(matrix_dir,
       t(residualize_grex(t(raw), t(Z)))
     }
 
-    # B10: drop all-NA (unexpressed / padded) TARGET rows before the family
-    # count. assemble_grex_matrices pads every gene into every context, but a
-    # target not expressed here carries no signal and must NOT inflate the FDR
-    # family (M / n_tested). Must run BEFORE impute_row_mean(Y) (which would turn
-    # an all-NA row into all-NaN and mask the pattern) and before genepos /
-    # n_tests. Symmetric to the regulator all-NA drop below.
-    keep_tgt <- rowSums(!is.na(Y)) > 0
+    # Target eligibility (shared rule, decided at assembly): only genes with
+    # >= min_obs_per_ctx observed expression values in this context are
+    # admissible targets -- padded/unexpressed genes and too-small cells must
+    # NOT inflate the FDR family (M / n_tested). The sidecar written by
+    # assemble_grex_matrices() is the authority; .get_eligible_targets()
+    # recomputes the identical rule when no sidecar exists. Must run before
+    # genepos / n_tests are built.
+    elig     <- .get_eligible_targets(matrix_dir, ctx, Y, min_obs_per_ctx,
+                                      verbose)
+    keep_tgt <- rownames(Y) %in% elig
     if (!any(keep_tgt)) {
-      warning(sprintf("No expressed targets for context '%s', skipping.", ctx))
+      warning(sprintf("No eligible targets for context '%s', skipping.", ctx))
       next
     }
     Y <- Y[keep_tgt, , drop = FALSE]
 
     # ----------------------------------------------------------------
-    # 2a. B12 regulator GReX-quality gate + drop all-NA regulator rows.
-    #     The gate keeps only regulators whose GReX is significantly
-    #     predictive in this context (within-context BH q < grex_gate_q on the
-    #     assembled p-values). Applied to Z (regulators) only; Y (targets) was
-    #     already built above from the full Z and is never gated.
+    # 2a. Regulator eligibility (shared rule with run_trans_lmm):
+    #     .usable_regulators() = B12 GReX-quality gate (within-context BH
+    #     q < grex_gate_q on the assembled p-values, optional R2 floor)
+    #     + >= min_reg_obs observed GReX values + positive variance over
+    #     the observed values. Applied to Z (regulators) only; Y (targets)
+    #     was already built above from the full Z and is never gated.
     # ----------------------------------------------------------------
-    gate_pass <- rep(TRUE, nrow(Z))
-    if (grex_gate) {
-      qc_file <- file.path(matrix_dir, paste0("qc_", method, "_", ctx, ".rds"))
-      if (!file.exists(qc_file))
-        stop(sprintf(paste0("grex_gate=TRUE but QC file is missing:\n  %s\n",
-                            "Re-run assemble_grex_matrices() to write the ",
-                            "qc_%s_* files, or set grex_gate=FALSE."),
-                     qc_file, method))
-      qc   <- readRDS(qc_file)
-      pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
-      rcol <- if (method == "cbc") "r2_cbc" else "r2_full"
-      pv   <- qc[rownames(Z), pcol]
-      r2   <- qc[rownames(Z), rcol]
-      q    <- stats::p.adjust(pv, method = "BH")   # within-context BH
-      r2_ok <- if (grex_gate_r2_min > 0)
-        (!is.na(r2) & r2 >= grex_gate_r2_min) else TRUE
-      gate_pass <- !is.na(q) & q < grex_gate_q & r2_ok
-      if (verbose)
-        message(sprintf("  GReX gate (%s, q<%.3g%s): %d/%d regulators pass.",
-                        pcol, grex_gate_q,
-                        if (grex_gate_r2_min > 0)
-                          sprintf(", r2>=%.3g", grex_gate_r2_min) else "",
-                        sum(gate_pass), length(gate_pass)))
-    }
-
-    keep_reg <- (rowSums(!is.na(Z)) > 0) & gate_pass
+    keep_reg <- .usable_regulators(Z, matrix_dir, method, ctx,
+                                   grex_gate, grex_gate_pval, grex_gate_q,
+                                   grex_gate_r2_min, min_reg_obs,
+                                   grex_gate_mode, verbose)
     if (!any(keep_reg)) {
       warning(sprintf("No usable regulators for context '%s', skipping.",
                       ctx))
@@ -253,8 +276,30 @@ run_trans_eqtl <- function(matrix_dir,
       M
     }
     Z <- impute_row_mean(Z)
-    Y <- impute_row_mean(Y)
+    # Complete-case response: drop individuals (columns) with NO observed
+    # target in this context -- they were only union-padded in by
+    # assemble_grex_matrices. MatrixEQTL runs unchanged on the smaller dense
+    # matrix; subset Z to the same individuals. Guard: GTEx-style missingness
+    # is whole-individual-per-context, so nothing should survive the column
+    # drop -- any leftover NA means sporadic per-gene missingness, which a
+    # column drop cannot fix and MatrixEQTL cannot tolerate.
+    keep_ind <- colSums(!is.na(Y)) > 0
+    if (!any(keep_ind)) {
+      warning(sprintf("No individuals with observed targets in '%s', skipping.",
+                      ctx))
+      next
+    }
+    Y <- Y[, keep_ind, drop = FALSE]
+    Z <- Z[, keep_ind, drop = FALSE]
+    .assert_dense_response(Y, sprintf("Context '%s'", ctx))
+    if (verbose)
+      message(sprintf("  complete-case response: %d/%d individuals kept.",
+                      sum(keep_ind), length(keep_ind)))
 
+    # Engine backstop (NOT a family decision -- .usable_regulators already
+    # required positive variance over observed cells): re-check variance on
+    # the imputed, complete-case-subset matrix so MatrixEQTL never sees a
+    # constant row (NaN t-stats).
     z_var    <- apply(Z, 1, var)
     keep_var <- !is.na(z_var) & z_var > 0
     Z        <- Z[keep_var, , drop = FALSE]
@@ -298,12 +343,12 @@ run_trans_eqtl <- function(matrix_dir,
                            stringsAsFactors = FALSE)
 
     # Capture the test universe using the same snpspos/genepos passed to
-    # MatrixEQTL. n_pairs[gene, context] = # SNPs on different chr; this
-    # is what trans-eQTL FDR control needs as m, regardless of any
-    # pv_threshold filtering done downstream.
+    # MatrixEQTL, in the requested orientation. n_pairs = # cross-chr
+    # partners of the outer-level unit; this is what trans-eQTL FDR control
+    # needs as m, regardless of any pv_threshold filtering downstream.
     n_tests_list[[ctx]] <- build_n_tests_trans(snpspos, genepos,
                                                  contexts = ctx,
-                                                 hierarchy = "target")
+                                                 hierarchy = hierarchy)
 
     # cisDist is used only when pvOutputThreshold.cis > 0 - setting it to
     # 0 disables cis classification entirely and leaks same-chromosome
@@ -344,10 +389,10 @@ run_trans_eqtl <- function(matrix_dir,
       if (file.exists(tmp_cis)) unlink(tmp_cis)
     })
 
-    # Task B: persist the tested snpspos (regulator gene positions) so the
-    # decoupled apply_crossmap_post() can compute exclusions over the exact
-    # gated regulator set.
-    meta_list[[ctx]] <- snpspos
+    # Task B: persist the scan-time facts the decoupled apply_crossmap_post()
+    # (and write_n_tests()) cannot reconstruct afterwards: the exact tested
+    # regulator positions (post-gate/floor) and the eligible target IDs.
+    meta_list[[ctx]] <- list(snpspos = snpspos, tgt_ids = genepos$geneid)
   }
 
   # ------------------------------------------------------------------
@@ -357,8 +402,10 @@ run_trans_eqtl <- function(matrix_dir,
   # ------------------------------------------------------------------
   if (length(n_tests_list) > 0) {
     n_tests <- data.table::rbindlist(n_tests_list)
+    data.table::setattr(n_tests, "hierarchy", hierarchy)  # rbindlist drops attrs
     saveRDS(n_tests, file.path(output_dir,
-                                paste0("n_tests_", method, ".rds")))
+                                paste0("n_tests_", hierarchy, "_",
+                                       method, ".rds")))
     saveRDS(meta_list, file.path(output_dir,
                                  paste0("n_tests_meta_", method, ".rds")))
   }

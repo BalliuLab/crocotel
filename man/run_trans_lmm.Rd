@@ -9,10 +9,17 @@ run_trans_lmm(
   gene_locations,
   output_dir,
   contexts = NULL,
-  sigma_E_form = "cs",
+  target_response = c("residualized", "raw"),
+  sigma_E_form = "het_cs",
+  grex_gate = TRUE,
+  grex_gate_pval = c("full", "shared", "specific"),
+  grex_gate_q = 0.05,
+  grex_gate_r2_min = 0,
+  grex_gate_mode = c("pval", "r2", "both"),
   min_obs_per_ctx = 30L,
   min_reg_obs = 5L,
-  pv_threshold = 0.001,
+  hierarchy = c("target", "regulator"),
+  pv_threshold = 0.05,
   force_iid = FALSE,
   verbose = TRUE
 )
@@ -32,30 +39,81 @@ files are written. Created if absent.}
 \item{contexts}{Character vector or \code{NULL}. \code{NULL}
 (default) processes every context found in \code{matrix_dir}.}
 
-\item{sigma_E_form}{Character. \eqn{\Sigma_E} parameterisation
-passed to \code{fit_sigma_E()}. \code{"cs"} (compound symmetry) is the
-only v1 option.}
+\item{target_response}{Character. \code{"residualized"} (default,
+previous behaviour) de-cis's the observed expression against this
+gene's crocotel GReX on the fly (\code{residualize_grex}, identical to
+\code{run_trans_eqtl()}); \code{"raw"} scans the observed expression
+directly. Mirrors \code{run_trans_eqtl()}'s argument.}
 
-\item{min_obs_per_ctx}{Integer. Contexts with fewer observed
-individuals than this are dropped from the \eqn{\Sigma_E} fit (and
-thus from the scan) for that target. Default 30, mirroring
-\code{fit_sigma_E()}.}
+\item{sigma_E_form}{Character. \eqn{\Sigma_E} parameterisation passed
+to \code{fit_sigma_E()}: \code{"het_cs"} (heteroskedastic compound
+symmetry -- per-context variances; the default) or \code{"cs"} (compound
+symmetry -- one shared variance across contexts). het-CS controls the
+trans FDR strictly better across the grid (complete control at
+\eqn{\rho_E \le 0.5}) for a negligible power cost, so it is the default.}
 
-\item{min_reg_obs}{Integer. A (regulator, context) cell is only
-tested if the regulator has at least this many non-missing GReX values
-among the target's observed individuals. Default 5.}
+\item{grex_gate}{Logical. Regulator GReX-quality gate, same
+semantics and default as \code{run_trans_eqtl()}: a gene is admitted as
+a REGULATOR in a context only if its crocotel GReX is significantly
+predictive there (within-context BH on the assembled
+\code{qc_crocotel_<ctx>} p-values, \code{q < grex_gate_q}). Targets are
+never gated. Default \code{TRUE}; requires the
+\code{qc_crocotel_<ctx>.rds} files from
+\code{assemble_grex_matrices()} (errors if absent).}
+
+\item{grex_gate_pval}{Character. Which GReX p-value to gate on:
+\code{"full"} (default), \code{"shared"}, or \code{"specific"}.}
+
+\item{grex_gate_q}{Numeric. Within-context BH q-value cutoff for the
+gate. Default \code{0.05}.}
+
+\item{grex_gate_r2_min}{Numeric. Optional additional floor on
+\code{r2_full}; \code{0} (default) disables it.}
+
+\item{grex_gate_mode}{Character. Gate criterion: \code{"pval"} (default,
+the historical behavior) admits regulators with within-context BH
+q < \code{grex_gate_q} (plus the R2 floor when
+\code{grex_gate_r2_min > 0}); \code{"r2"} admits on the R2 floor ALONE
+with no significance test (the GBAT-paper criterion -- note that
+\code{grex_gate_q = 1} can NOT emulate this: BH returns exactly q = 1
+for some genes and \code{q < 1} silently drops them); \code{"both"}
+requires both criteria. One shared implementation serves
+\code{run_trans_eqtl()} and \code{run_trans_lmm()} identically.}
+
+\item{min_obs_per_ctx}{Integer. Target-eligibility threshold, shared by
+all methods (default \code{30L}): a gene is a TARGET in a context only
+with at least this many observed expression values there. Read from the
+\code{expressed_targets.rds} file written by
+\code{assemble_grex_matrices()} when present (a conflicting value here
+is an error); computed on the fly by the identical rule otherwise. The
+same threshold governs which contexts enter each target's
+\eqn{\Sigma_E} fit (\code{fit_sigma_E()}), so the scan and the FDR
+family agree by construction.}
+
+\item{min_reg_obs}{Integer. A gene is a REGULATOR in a context only
+with at least this many observed GReX values there (plus the gate and a
+positive-variance requirement); the shared rule with
+\code{run_trans_eqtl()}. Also applied per (regulator, target) pair as
+a joint-observation floor in the score scan; the FDR family counts a
+regulator on the MARGINAL criterion (observed GReX across individuals),
+so for sparsely observed regulators the family can include pairs the
+pairwise floor later declines -- conservative only (tested pairs are
+always a subset of the family). Default \code{5L}.}
+
+\item{hierarchy}{\code{"target"} (default) or \code{"regulator"}:
+orientation of the FDR family-count file this run writes
+(\code{n_tests_<hierarchy>_lmm.rds}, one orientation per run). See
+\code{run_trans_eqtl()}; \code{write_n_tests()} regenerates the other
+orientation without re-scanning.}
 
 \item{pv_threshold}{Numeric. Only pairs with \eqn{p_c} below this are
-written. Default \code{1e-3} (matches \code{run_trans_eqtl()}). Set to
-\code{1} to retain all pairs.}
+written. Default \code{0.05}, matching \code{run_trans_eqtl()} and
+\code{run_trans_eqtl_snp()}. Set to \code{1} to retain all pairs.}
 
 \item{force_iid}{Logical. Test hook only. When \code{TRUE},
 \eqn{\Sigma_E} is forced to \eqn{\widehat\sigma^2 I} (rho = 0) after
 fitting, so \eqn{p_c} reduces to the per-context OLS score. Used by the
-numerical-sanity unit test (design doc section 9). Default \code{FALSE}.
-Cross-mappability filtering is DECOUPLED (Task B): writes raw output +
-\code{n_tests_lmm.rds} + \code{n_tests_meta_lmm.rds}; run
-\code{apply_crossmap_post(regulator = "gene", ...)} afterward.}
+numerical-sanity unit test (design doc section 9). Default \code{FALSE}.}
 
 \item{verbose}{Logical. Print progress. Default \code{TRUE}.}
 }
@@ -63,8 +121,9 @@ Cross-mappability filtering is DECOUPLED (Task B): writes raw output +
 Invisibly the character vector of contexts processed. Per
   context, writes \code{output_dir/trans_lmm_<context>.tsv} with columns
   \code{SNP, gene, beta, t-stat, p-value} (SNP = regulator gene id,
-  gene = target gene id), plus a single \code{output_dir/n_tests_lmm.rds}
-  sidecar (\code{gene, context, n_pairs}) for the FDR step.
+  gene = target gene id), plus a single
+  \code{output_dir/n_tests_<hierarchy>_lmm.rds}
+  family-count file (\code{gene, context, n_pairs}) for the FDR step.
 }
 \description{
 Loads the per-context crocotel GReX (regulator predictor) and
@@ -76,4 +135,9 @@ cross-context residual covariance \eqn{\Sigma_E} once per target gene
 (regulator, target) pair. Output files match \code{run_trans_eqtl()} so
 the downstream hierarchical-FDR pipeline consumes them with no
 branching.
+}
+\details{
+Cross-mappability filtering is DECOUPLED: writes raw output +
+  \code{n_tests_<hierarchy>_lmm.rds} + \code{n_tests_meta_lmm.rds}; run
+  \code{apply_crossmap_post(regulator = "gene", ...)} afterward.
 }

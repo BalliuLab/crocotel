@@ -53,7 +53,11 @@ instead of drawing internally; \code{pi_C} is then ignored. Used by
 sides share one global specific-context set C (spec sec 4.2). Ignored for
 \code{null} and \code{shared_only} architectures.}
 
-\item{seed}{Integer or NULL. Random seed.}
+\item{seed}{Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+untouched: each call draws fresh randomness, so replicate loops give
+independent datasets. Pass a seed for a reproducible dataset -- and
+give each replicate its OWN seed (a fixed shared seed would make
+every replicate identical).}
 }
 \value{
 A named list:

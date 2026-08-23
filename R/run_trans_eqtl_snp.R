@@ -24,9 +24,9 @@
 # methods (GTEx/eQTLGen/GBAT test against observed expression); only crocotel/CBC
 # use the CBC-residualized target. There is no residualized option here.
 #
-# Output naming: a single-mode run writes trans_snp_<ctx>.tsv + n_tests_snp.rds.
-# "both" writes genome_wide to trans_snp_<ctx>.tsv / n_tests_snp.rds and lead to
-# trans_snp_lead_<ctx>.tsv / n_tests_snp_lead.rds.
+# Output naming: a single-mode run writes trans_snp_<ctx>.tsv + n_tests_<hierarchy>_snp.rds.
+# "both" writes genome_wide to trans_snp_<ctx>.tsv / n_tests_<hierarchy>_snp.rds and lead to
+# trans_snp_lead_<ctx>.tsv / n_tests_<hierarchy>_snp_lead.rds.
 
 
 # Load the full genome-wide dosage matrix (individuals x variants) + positions
@@ -37,11 +37,10 @@
     stop("Package 'bigsnpr' is required for the SNP scan.")
   rds_file <- paste0(plink_prefix, ".rds")
   bed_file <- paste0(plink_prefix, ".bed")
-  if (!file.exists(rds_file)) {
-    if (!file.exists(bed_file))
-      stop("Neither bigSNP backing (.rds) nor PLINK .bed found at: ", plink_prefix)
-    bigsnpr::snp_readBed(bed_file, backingfile = sub("\\.bed$", "", bed_file))
-  }
+  if (!file.exists(rds_file) && !file.exists(bed_file))
+    stop("Neither bigSNP backing (.rds) nor PLINK .bed found at: ", plink_prefix)
+  # Single stale/broken-backing guard (see prepare_genotypes).
+  prepare_genotypes(plink_prefix, verbose = FALSE)
   obj   <- bigsnpr::snp_attach(rds_file)
   G_big <- obj$genotypes
   map   <- obj$map
@@ -87,7 +86,17 @@
   common <- intersect(colnames(Z_gw), colnames(Y))
   if (length(common) < 3L) return(NULL)
   Zc <- Z_gw[, common, drop = FALSE]
-  Yc <- .impute_row_mean(Y[, common, drop = FALSE])
+  Yc <- Y[, common, drop = FALSE]
+  # Cis lead-SNP selection is ALWAYS complete-case (never imputed), matching
+  # the gene-based methods' cis stage (the GReX elastic net fits on observed
+  # rows only). Individuals unobserved in this context are all-NA columns
+  # (union padding) -- drop them; a leftover NA means sporadic per-gene
+  # missingness MatrixEQTL cannot tolerate, so fail loudly.
+  keep_ind <- colSums(!is.na(Yc)) > 0
+  if (sum(keep_ind) < 3L) return(NULL)
+  Yc <- Yc[, keep_ind, drop = FALSE]
+  Zc <- Zc[, keep_ind, drop = FALSE]
+  .assert_dense_response(Yc, "Cis lead-SNP scan")
 
   gl <- gene_pos[match(rownames(Yc), gene_pos$id), ]
   keep_g <- !is.na(gl$chr)
@@ -147,8 +156,15 @@
 
   Z <- Z[rowSums(!is.na(Z)) > 0, , drop = FALSE]
   if (!nrow(Z)) return(NULL)
+  # Complete-case response (mirrors run_trans_eqtl): drop individuals with
+  # NO observed target here, subset the predictor to match, and error on
+  # sporadic per-gene NAs a column drop cannot clear.
+  keep_ind <- colSums(!is.na(Y)) > 0
+  if (!any(keep_ind)) return(NULL)
+  Y <- Y[, keep_ind, drop = FALSE]
+  Z <- Z[, keep_ind, drop = FALSE]
+  .assert_dense_response(Y, "SNP trans scan")
   Z <- .impute_row_mean(Z)
-  Y <- .impute_row_mean(Y)
 
   zv <- apply(Z, 1L, stats::var)
   Z  <- Z[!is.na(zv) & zv > 0, , drop = FALSE]
@@ -197,19 +213,24 @@
 #' for both cis (lead-SNP selection) and trans. \code{"genome_wide"} tests every
 #' variant, \code{"lead"} tests each gene's top cis-SNP, \code{"both"} runs both,
 #' each against every cross-chromosome target, writing MatrixEQTL output plus the
-#' \code{n_tests} sidecar consumed by \code{run_fdr()} (treeQTL hierarchy; the
+#' \code{n_tests} family-count file consumed by \code{run_fdr()} (treeQTL
+#' hierarchy; the
 #' level-3 regulator unit is a variant for genome_wide, a gene for lead).
 #'
 #' (Cross)mappability filtering is decoupled from this function and applied as a
 #' separate, method-agnostic post-scan step.
 #'
-#' @param matrix_dir       Character. Directory with \code{expr_<ctx>.rds} (and
-#'   \code{grex_cbc_<ctx>.rds} when \code{target_response = "residualized"}).
+#' @param matrix_dir       Character. Directory with \code{expr_<ctx>.rds}
+#'   (raw observed expression; this scanner has no residualized option).
 #' @param gene_locations   Data frame or path to TSV with columns
 #'   \code{gene_id, chr, start, end}.
 #' @param output_dir       Character. Output directory. Created if absent.
 #' @param snp_method       Character. \code{"genome_wide"} (default), \code{"lead"},
-#'   or \code{"both"}.
+#'   or \code{"both"}. Note the lead mode's regulator universe differs from
+#'   the gene-based methods' by design (mirroring the published GBAT/GTEx
+#'   comparators): a gene needs only >= 3 shared individuals for its lead
+#'   cis-SNP scan, whereas a GReX regulator must clear \code{fit_grex_gene}'s
+#'   per-context \code{min_valid_n}.
 #' @param plink_prefix     Character. bigSNP/PLINK prefix of the genome-wide
 #'   genotypes (\code{prepare_genotypes()} must have been run). Required.
 #' @param contexts         Character vector or \code{NULL}. \code{NULL} (default)
@@ -222,13 +243,27 @@
 #'   (beside MAF); see \code{filter_mappable_variants()}. \code{NULL} (default) =
 #'   off with a \code{warning()}; \code{NA} = acknowledged off (simulations);
 #'   default \code{min = 1.0} (GTEx v8 trans variants).
+#' @param min_obs_per_ctx  Integer. Target-eligibility threshold: a gene is a
+#'   TARGET in a context only with at least this many observed expression
+#'   values there (default \code{30L}, shared by all methods). Read from the
+#'   \code{expressed_targets.rds} file written by
+#'   \code{assemble_grex_matrices()} when present; for a hand-built
+#'   \code{matrix_dir} (e.g. a SNP-only analysis that never fits a GReX) the
+#'   identical rule is computed on the fly from \code{expr_<ctx>.rds}.
+#'   A conflict with that file's recorded threshold is an error.
+#' @param hierarchy        \code{"target"} (default) or \code{"regulator"}:
+#'   orientation of the FDR family-count file this run writes
+#'   (\code{n_tests_<hierarchy>_snp*.rds}, one orientation per run).
+#'   \code{"regulator"} is only supported for \code{snp_method = "lead"}
+#'   (gene regulators); genome_wide refuses it (per-variant families are not
+#'   supported). See \code{run_trans_eqtl()}.
 #' @param pv_threshold     Numeric. Trans output threshold. Default \code{0.05}.
 #' @param verbose          Logical. Default \code{TRUE}.
 #'
 #' @return Invisibly the character vector of contexts processed. Writes, per
 #'   context, \code{trans_snp_<ctx>.tsv} (+ \code{trans_snp_lead_<ctx>.tsv} when
-#'   \code{both}) and the \code{n_tests_snp.rds} (+ \code{n_tests_snp_lead.rds})
-#'   sidecar(s).
+#'   \code{both}) and the \code{n_tests_<hierarchy>_snp.rds}
+#'   (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s).
 #' @export
 run_trans_eqtl_snp <- function(matrix_dir,
                                gene_locations,
@@ -241,12 +276,22 @@ run_trans_eqtl_snp <- function(matrix_dir,
                                maf_max         = 0.50,
                                variant_mappability_file = NULL,
                                variant_mappability_min  = 1.0,
+                               min_obs_per_ctx = 30L,
+                               hierarchy       = c("target", "regulator"),
                                pv_threshold    = 0.05,
                                verbose         = TRUE) {
 
   snp_method <- match.arg(snp_method)
+  hierarchy  <- match.arg(hierarchy)
   do_gw   <- snp_method %in% c("genome_wide", "both")
   do_lead <- snp_method %in% c("lead", "both")
+  # A regulator-oriented family for genome_wide would be one row per VARIANT
+  # per context -- a giant sidecar for an "eVariant" discovery unit no
+  # analysis uses. Only the lead mode (regulator = gene) supports it.
+  if (hierarchy == "regulator" && do_gw)
+    stop("hierarchy = \"regulator\" is only supported for snp_method = ",
+         "\"lead\" (gene regulators); a per-variant family table for ",
+         "genome_wide is not supported.")
 
   if (!requireNamespace("MatrixEQTL", quietly = TRUE))
     stop("Package 'MatrixEQTL' is required: install.packages('MatrixEQTL')")
@@ -322,10 +367,14 @@ run_trans_eqtl_snp <- function(matrix_dir,
     }
     Y <- readRDS(expr_file)                          # raw target x individual
 
-    # B10: drop all-NA (unexpressed) target rows before the family count.
-    keep_tgt <- rowSums(!is.na(Y)) > 0
+    # Target eligibility (shared rule, decided at assembly; identical rule
+    # computed on the fly for sidecar-less, hand-built matrix dirs).
+    elig     <- .get_eligible_targets(matrix_dir, ctx, Y, min_obs_per_ctx,
+                                      verbose)
+    keep_tgt <- rownames(Y) %in% elig
     if (!any(keep_tgt)) {
-      warning(sprintf("No expressed targets for context '%s', skipping.", ctx)); next
+      warning(sprintf("No eligible targets for context '%s', skipping.", ctx))
+      next
     }
     Y <- Y[keep_tgt, , drop = FALSE]
 
@@ -334,10 +383,18 @@ run_trans_eqtl_snp <- function(matrix_dir,
       out_file <- file.path(output_dir, paste0("trans_snp_", ctx, ".tsv"))
       res <- .snp_trans_scan(Z_gw, Y, reg_pos = gw_reg, tgt_pos = gene_pos,
                              pv_threshold = pv_threshold, out_file = out_file)
-      if (!is.null(res)) {
+      if (is.null(res)) {
+        # mirror the lead branch / lite: a skipped context must be loud
+        warning(sprintf(paste0(
+          "genome_wide scan for context '%s' produced no testable pairs ",
+          "(<3 shared individuals, no variants, or no observed ",
+          "individuals); context skipped."), ctx))
+      } else {
         nt_gw[[ctx]] <- build_n_tests_trans(res$snpspos, res$genepos,
-                                             contexts = ctx, hierarchy = "target")
-        meta_gw[[ctx]] <- res$snpspos          # variant positions (for cross-map)
+                                             contexts = ctx,
+                                             hierarchy = hierarchy)
+        meta_gw[[ctx]] <- list(snpspos = res$snpspos,   # variant positions
+                               tgt_ids = res$genepos$geneid)
       }
     }
 
@@ -357,10 +414,14 @@ run_trans_eqtl_snp <- function(matrix_dir,
                                pv_threshold = pv_threshold, out_file = out_file)
         if (!is.null(res)) {
           nt_lead[[ctx]] <- build_n_tests_trans(res$snpspos, res$genepos,
-                                                 contexts = ctx, hierarchy = "target")
+                                                 contexts = ctx,
+                                                 hierarchy = hierarchy)
           # cross-map meta = lead-SNP positions for the tested regulator genes
-          # (snp = gene id to match the output; chr/pos = the lead cis-SNP).
-          meta_lead[[ctx]] <- ml$pos[ml$pos$snp %in% res$snpspos$snp, , drop = FALSE]
+          # (snp = gene id to match the output; chr/pos = the lead cis-SNP),
+          # plus the eligible target IDs.
+          meta_lead[[ctx]] <- list(
+            snpspos = ml$pos[ml$pos$snp %in% res$snpspos$snp, , drop = FALSE],
+            tgt_ids = res$genepos$geneid)
         }
       }
     }
@@ -370,13 +431,18 @@ run_trans_eqtl_snp <- function(matrix_dir,
   # by apply_crossmap_post(regulator = "variant")). "both" splits genome_wide
   # (token "snp") from the lead series (token "snp_lead").
   if (length(nt_gw) > 0L) {
-    saveRDS(data.table::rbindlist(nt_gw), file.path(output_dir, "n_tests_snp.rds"))
+    nt <- data.table::rbindlist(nt_gw)
+    data.table::setattr(nt, "hierarchy", hierarchy)
+    saveRDS(nt, file.path(output_dir,
+                          paste0("n_tests_", hierarchy, "_snp.rds")))
     saveRDS(meta_gw, file.path(output_dir, "n_tests_meta_snp.rds"))
   }
   if (length(nt_lead) > 0L) {
     lead_tok <- if (snp_method == "both") "snp_lead" else "snp"
-    saveRDS(data.table::rbindlist(nt_lead),
-            file.path(output_dir, paste0("n_tests_", lead_tok, ".rds")))
+    nt <- data.table::rbindlist(nt_lead)
+    data.table::setattr(nt, "hierarchy", hierarchy)
+    saveRDS(nt, file.path(output_dir,
+                          paste0("n_tests_", hierarchy, "_", lead_tok, ".rds")))
     saveRDS(meta_lead,
             file.path(output_dir, paste0("n_tests_meta_", lead_tok, ".rds")))
   }

@@ -17,7 +17,8 @@ fit_grex_doublecv(
   min_full = 4L,
   var_floor = 1e-08,
   dfmax = NULL,
-  pmax = NULL
+  pmax = NULL,
+  return_components = FALSE
 )
 }
 \arguments{
@@ -29,14 +30,20 @@ cis-genotype dosages. Columns are standardised internally before the
 elastic net fit.}
 
 \item{folds}{Integer vector (n_individuals). Outer fold assignment,
-values in 1..K_outer. Generate with:
-\code{folds <- sample(findInterval(rowMeans(E),
-                       quantile(rowMeans(E), seq(0,1,length.out=K_outer+1)),
-                       rightmost.closed=TRUE))}}
+values in 1..K_outer. Generate STRATIFIED folds with the sorted-block
+idiom the callers use (random within blocks of the expression-sorted
+order, so each fold spans the expression range):
+\code{ord <- order(rowMeans(E, na.rm = TRUE));}
+\code{folds <- integer(nrow(E));}
+\code{folds[ord] <- rep(sample(K_outer), length.out = nrow(E))}
+(\code{sample(findInterval(...))} does NOT stratify: permuting the
+quantile-bin labels destroys the pairing.)}
 
 \item{method}{Character vector. One or both of \code{"crocotel"} and
 \code{"cbc"}. Default \code{c("crocotel", "cbc")} runs both methods in a
-single CV loop. Fields for unused methods are \code{NULL} in the output.}
+single CV loop. Fields for unused methods are \code{NULL} in the output.
+With fewer than 3 contexts the crocotel decomposition is unidentifiable
+and the method is auto-disabled with a warning (CBC still runs).}
 
 \item{K_outer}{Integer. Number of outer CV folds. Must match the number of
 unique values in \code{folds}. Default 10.}
@@ -82,17 +89,25 @@ nonzero (\code{dfmax}) / ever-active (\code{pmax}) coefficients, passed to
 \code{cv.glmnet} only when non-NULL. \code{NULL} (default) uses glmnet's
 own defaults, i.e. no behaviour change. An OOM escape hatch; the real fix
 is \code{var_floor}, so leave these NULL unless a runaway fit persists.}
+
+\item{return_components}{Logical. When \code{TRUE}, also return the
+shared/specific GReX sub-matrices (\code{Z_shared}, \code{Z_specific})
+alongside the combined \code{Z_full}. Default \code{FALSE}: the specific
+matrix is n_individuals x n_contexts, so keeping components roughly
+doubles per-gene GReX storage at biobank scale.}
 }
 \value{
 A named list. Fields for unused methods are \code{NULL}. The de-cis
   residual is NOT returned: it is fully derivable from raw expression + GReX,
   so \code{run_trans_eqtl()} reconstructs it on the fly (via
   \code{residualize_grex()}) from the assembled raw \code{expr_<ctx>} + GReX.
-  Columns of \code{Z_full} and \code{Z_cbc} contain
-  \code{NA} for any test fold where the elastic net selected zero SNPs;
-  a column that is entirely \code{NA} indicates no genetic model was
-  fitted for that gene-context, and downstream pipelines should drop
-  such regulators before testing.
+  A zero-SNP elastic-net fit contributes intercept-only (constant)
+  predictions for its test fold, which are kept; a column becomes
+  entirely \code{NA} only when the assembled predictor is constant
+  overall (no genetic signal, \code{ctx_gate = "no_signal"}) -- drop
+  such regulators before testing. If \code{Z_specific[, c]} is exactly
+  collinear with \code{Z_shared}, \code{anova()} returns \code{NA} for
+  \code{p_shared}/\code{p_specific} (0-df comparison; no crash).
 \describe{
   \item{Z_full}{Numeric matrix (n_individuals x n_contexts) or \code{NULL}.
     crocotel(Full) GReX - OLS combination of shared and specific components.
@@ -102,12 +117,37 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
     CBC GReX - one elastic net per context on raw expression.
     Input to Step 3 as the CBC regulator GReX predictor.
     \code{NULL} when \code{"cbc"} is not in \code{method}.}
+  \item{Z_shared}{Numeric vector (n_individuals) or \code{NULL}. The
+    shared-component GReX (one value per individual). Returned only when
+    \code{return_components = TRUE} (roughly doubles per-gene storage
+    together with Z_specific).}
+  \item{Z_specific}{Numeric matrix (n_individuals x n_contexts) or
+    \code{NULL}. The specific-component GReX. Returned only when
+    \code{return_components = TRUE}.}
+  \item{effects}{List of the elastic-net fits' effects, per component and
+    outer fold: \code{effects$shared[[k]]},
+    \code{effects$specific[[ctx]][[k]]}, \code{effects$cbc[[ctx]][[k]]}.
+    Each entry is a list \code{lambda} (chosen lambda.min),
+    \code{intercept}, \code{n_snps} (support size), and \code{coef} (a
+    data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
+    \code{NULL} entries mark skipped fits. Makes the GReX reconstructable
+    and exposes the selected cis-SNP support for downstream conditioning.}
   \item{r2_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
     shared GReX vs rowMeans(E).
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
   \item{r2_specific}{Numeric vector (n_contexts) or \code{NULL}. Adjusted
     R2 of the specific GReX vs within-individual deviation per context.
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
+  \item{r2_shared_expr}{Numeric vector (n_contexts) or \code{NULL}.
+    Adjusted R2 of the SHARED GReX alone vs RAW expression per context --
+    comparable to CONTENT/crossval "shared" columns that score against
+    observed expression (unlike \code{r2_shared}, whose response is the
+    cross-context mean). \code{NULL} when \code{"crocotel"} is not in
+    \code{method}.}
+  \item{r2_specific_expr}{Numeric vector (n_contexts) or \code{NULL}.
+    Adjusted R2 of the SPECIFIC GReX alone vs RAW expression per context
+    (unlike \code{r2_specific}, whose response is de-meaned). \code{NULL}
+    when \code{"crocotel"} is not in \code{method}.}
   \item{r2_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
     of Z_full vs E.
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
@@ -115,24 +155,24 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
     of Z_cbc vs E.
     \code{NULL} when \code{"cbc"} is not in \code{method}.}
   \item{p_full}{Numeric vector (n_contexts) or \code{NULL}. Per-context
-    likelihood-ratio p-value for the full crocotel GReX (Z_shared +
-    Z_specific) vs an intercept-only null, df = 2 -- "is there any cis
-    GReX in this context?". NA for gated/unfit contexts. \code{NULL} when
-    \code{"crocotel"} is not in \code{method}.}
+    nested-model p-value (\code{anova()} exact F-test) for the full
+    crocotel GReX (Z_shared + Z_specific) vs an intercept-only null,
+    df = 2 -- "is there any cis GReX in this context?". NA for gated/unfit
+    contexts. \code{NULL} when \code{"crocotel"} is not in \code{method}.}
   \item{p_shared}{Numeric vector (n_contexts) or \code{NULL}. Conditional
-    LRT p-value for the shared component given specific (full vs
+    F-test p-value for the shared component given specific (full vs
     specific-only), df = 1. NA for gated/unfit contexts. \code{NULL} when
     \code{"crocotel"} is not in \code{method}.}
   \item{p_specific}{Numeric vector (n_contexts) or \code{NULL}. Conditional
-    LRT p-value for the specific component given shared (full vs
+    F-test p-value for the specific component given shared (full vs
     shared-only), df = 1 -- the context-specificity test. NA for
     gated/unfit contexts. \code{NULL} when \code{"crocotel"} is not in
     \code{method}.}
-  \item{p_cbc}{Numeric vector (n_contexts) or \code{NULL}. LRT p-value for
-    the CBC GReX vs an intercept-only null, df = 1. NA for gated/unfit
+  \item{p_cbc}{Numeric vector (n_contexts) or \code{NULL}. F-test p-value
+    for the CBC GReX vs an intercept-only null, df = 1. NA for gated/unfit
     contexts. \code{NULL} when \code{"cbc"} is not in \code{method}. All
-    nested models per test are fit on one common observed-row set so the
-    likelihoods are comparable.}
+    nested models per test are fit on one common observed-row set --
+    \code{anova()} errors otherwise.}
   \item{ctx_gate_crocotel}{Named character vector (n_contexts) or
     \code{NULL}. Per-context outcome of the crocotel fit: \code{"ok"},
     \code{"low_n"} (fewer than \code{min_valid_n} measured),
@@ -172,7 +212,10 @@ reg <- simulate_regulator_expression(list(G), n_contexts = 20, seed = 1)
 E   <- reg$E[, 1, ]   # 500 x 20 for gene 1
 
 K_outer <- 10
-folds   <- sample(findInterval(rowMeans(E),
+ord     <- order(rowMeans(E, na.rm = TRUE))
+folds   <- integer(nrow(E))
+folds[ord] <- rep(sample(K_outer), length.out = nrow(E))
+old_recipe <- sample(findInterval(rowMeans(E),
                    quantile(rowMeans(E), seq(0, 1, length.out = K_outer + 1)),
                    rightmost.closed = TRUE))
 

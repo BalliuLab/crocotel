@@ -41,8 +41,7 @@
 #' @param alpha          Numeric. Elastic net mixing parameter. Default 0.5.
 #' @param min_valid_n    Integer. Minimum measured individuals a context must
 #'   have (and it must be non-constant) for its specific / CBC / combination
-#'   fit. Default \code{60}. Forwarded to \code{fit_grex_doublecv()}; shared
-#'   with \code{run_cis_eqtl_lead_snp()} so both methods use one floor.
+#'   fit. Default \code{60}. Forwarded to \code{fit_grex_doublecv()}.
 #' @param min_train      Integer. Minimum training individuals per elastic-net
 #'   component fit within an outer fold. Default \code{15} (CONTENT parity).
 #'   Forwarded to
@@ -58,6 +57,10 @@
 #' @param dfmax,pmax     Integer or \code{NULL}. Optional \code{cv.glmnet}
 #'   coefficient caps (OOM escape hatch); \code{NULL} (default) uses glmnet's
 #'   defaults. Forwarded to \code{fit_grex_doublecv()}.
+#' @param return_components Logical. When \code{TRUE}, the saved record also
+#'   carries the shared/specific GReX sub-matrices (\code{Z_grex_shared},
+#'   \code{Z_grex_specific}). Default \code{FALSE} (roughly doubles per-gene
+#'   storage). Forwarded to \code{fit_grex_doublecv()}.
 #' @param maf_min        Numeric. Minimum MAF for cis-SNP inclusion.
 #'   Default 0.05.
 #' @param maf_max        Numeric. Maximum MAF for cis-SNP inclusion.
@@ -95,8 +98,11 @@
 #'     \code{"ok"} or \code{"no_model"} (\code{NA} if the method was not
 #'     requested or for \code{"no_input"} genes).}
 #'   \item{Z_grex_crocotel, Z_grex_cbc}{Numeric matrix
-#'     (n_individuals x n_contexts) of out-of-sample GReX predictions, or
-#'     \code{NULL} (method not run, or \code{"no_input"}/\code{"no_model"}).}
+#'     (n_individuals x n_contexts) of out-of-sample GReX predictions;
+#'     \code{NULL} when the method was not run or for \code{"no_input"}
+#'     genes. When the gene-level record is \code{"ok"} via ONE method, the
+#'     other method's matrix can be all-\code{NA} (its own
+#'     \code{status_*} then reads \code{"no_model"}).}
 #'   \item{ctx_gate_crocotel, ctx_gate_cbc}{Named character vector, one entry
 #'     per context: \code{"ok"} (predictor produced), \code{"low_n"}
 #'     (< \code{min_valid_n} measured), \code{"invariant"} (constant
@@ -104,19 +110,27 @@
 #'     \code{NULL} for \code{"no_input"} genes (no fit attempted).}
 #'   \item{r2}{Named list of adjusted R2 metrics from
 #'     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
-#'   \item{pvals}{Named list of per-context GReX significance LRT p-values
+#'   \item{pvals}{Named list of per-context GReX significance F-test p-values
 #'     (\code{p_full}, \code{p_shared}, \code{p_specific}, \code{p_cbc}) from
 #'     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
+#'   \item{effects}{Elastic-net effects from \code{fit_grex_doublecv()} --
+#'     per component and outer fold, the chosen \code{lambda},
+#'     \code{intercept}, support size \code{n_snps}, and the non-zero
+#'     \code{snp}/\code{beta} coefficients (see that function's docs).
+#'     \code{NULL} for non-\code{"ok"} records.}
+#'   \item{Z_grex_shared, Z_grex_specific}{The shared (n_individuals) and
+#'     specific (n_individuals x n_contexts) GReX sub-matrices. \code{NULL}
+#'     unless \code{return_components = TRUE} on an \code{"ok"} record.}
 #' }
 #'
 #' @examples
 #' \dontrun{
 #' fit_grex_gene(
 #'   gene_id        = "ENSG00000000001",
-#'   expr_dir       = "/u/scratch/b/bballiu/crocotel_gtex/expr_by_gene",
-#'   plink_prefix   = "/u/scratch/b/bballiu/crocotel_gtex/input/genotypes/gtex",
-#'   gene_locations = "/u/scratch/b/bballiu/crocotel_gtex/input/gene_locations.txt",
-#'   output_dir     = "/u/scratch/b/bballiu/crocotel_gtex/grex",
+#'   expr_dir       = "/path/to/project/expr_by_gene",
+#'   plink_prefix   = "/path/to/project/input/genotypes/gtex",
+#'   gene_locations = "/path/to/project/input/gene_locations.txt",
+#'   output_dir     = "/path/to/project/grex",
 #'   method         = "crocotel",
 #'   seed           = 1
 #' )
@@ -138,6 +152,7 @@ fit_grex_gene <- function(gene_id,
                            var_floor     = 1e-8,
                            dfmax         = NULL,
                            pmax          = NULL,
+                           return_components = FALSE,
                            maf_min       = 0.05,
                            maf_max       = 0.50,
                            n_snps        = NULL,
@@ -175,12 +190,14 @@ fit_grex_gene <- function(gene_id,
                           status_crocotel = NA_character_, status_cbc = NA_character_,
                           Z_grex_crocotel = NULL, Z_grex_cbc = NULL,
                           ctx_gate_crocotel = NULL, ctx_gate_cbc = NULL, r2 = NULL,
-                          pvals = NULL) {
+                          pvals = NULL, effects = NULL,
+                          Z_grex_shared = NULL, Z_grex_specific = NULL) {
     list(gene_id = gene_id, chr = chr, status = status, reason = reason,
          status_crocotel = status_crocotel, status_cbc = status_cbc,
          Z_grex_crocotel = Z_grex_crocotel, Z_grex_cbc = Z_grex_cbc,
+         Z_grex_shared = Z_grex_shared, Z_grex_specific = Z_grex_specific,
          ctx_gate_crocotel = ctx_gate_crocotel, ctx_gate_cbc = ctx_gate_cbc,
-         r2 = r2, pvals = pvals)
+         r2 = r2, pvals = pvals, effects = effects)
   }
 
   # Emit a no_input record (data problem, fit never attempted): write to disk
@@ -234,6 +251,15 @@ fit_grex_gene <- function(gene_id,
 
   if (!is.matrix(E) || !is.numeric(E))
     return(emit_skip("bad_expr", chr = chr))
+  # Individual IDs are the join key to the genotype fam file. Without them,
+  # load_genotypes keeps ALL fam samples and the E[G_ids, ] alignment below
+  # dies with a bare "subscript out of bounds" -- fail actionably instead.
+  if (is.null(rownames(E)))
+    stop("The expression matrix for gene '", gene_id, "' (", expr_file,
+         ") has no rownames. Per-gene expression must be an individuals x ",
+         "contexts matrix with individual IDs as rownames, matching the ",
+         "genotype fam sample IDs (preprocess_expression() writes this ",
+         "format).")
 
   all_na <- rowSums(!is.na(E)) == 0
   if (any(all_na)) {
@@ -311,7 +337,8 @@ fit_grex_gene <- function(gene_id,
                             min_full    = min_full,
                             var_floor   = var_floor,
                             dfmax       = dfmax,
-                            pmax        = pmax)
+                            pmax        = pmax,
+                            return_components = return_components)
 
   if (verbose)
     message(sprintf("  done: %s peak RAM %.0f Mb.", gene_id, fit$timing$peak_mb))
@@ -322,10 +349,12 @@ fit_grex_gene <- function(gene_id,
   has_crocotel <- "crocotel" %in% method && any(!is.na(fit$Z_full))
   has_cbc     <- "cbc"     %in% method && any(!is.na(fit$Z_cbc))
 
-  r2_summary <- list(r2_shared   = fit$r2_shared,
-                      r2_specific = fit$r2_specific,
-                      r2_full     = fit$r2_full,
-                      r2_cbc      = fit$r2_cbc)
+  r2_summary <- list(r2_shared        = fit$r2_shared,
+                      r2_specific      = fit$r2_specific,
+                      r2_shared_expr   = fit$r2_shared_expr,
+                      r2_specific_expr = fit$r2_specific_expr,
+                      r2_full          = fit$r2_full,
+                      r2_cbc           = fit$r2_cbc)
 
   pvals_summary <- list(p_full     = fit$p_full,
                         p_shared   = fit$p_shared,
@@ -351,7 +380,9 @@ fit_grex_gene <- function(gene_id,
                        Z_grex_crocotel = fit$Z_full, Z_grex_cbc = fit$Z_cbc,
                        ctx_gate_crocotel = fit$ctx_gate_crocotel,
                        ctx_gate_cbc = fit$ctx_gate_cbc, r2 = r2_summary,
-                       pvals = pvals_summary)
+                       pvals = pvals_summary, effects = fit$effects,
+                       Z_grex_shared = fit$Z_shared,
+                       Z_grex_specific = fit$Z_specific)
   }
 
   if (return_output) {

@@ -21,7 +21,11 @@ generate_genotypes(
 
 \item{maf_max}{Numeric. Maximum minor-allele frequency. Default 0.50.}
 
-\item{seed}{Integer or NULL. Random seed.}
+\item{seed}{Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+untouched: each call draws fresh randomness, so replicate loops give
+independent datasets. Pass a seed for a reproducible dataset -- and
+give each replicate its OWN seed (a fixed shared seed would make
+every replicate identical).}
 }
 \value{
 Numeric matrix (n_individuals x n_snps) of raw 0/1/2 dosages,
@@ -39,8 +43,11 @@ contains raw integer dosages \{0, 1, 2\}; downstream simulation and
 fitting code standardises columns when needed.
 }
 \details{
-The returned format matches \code{load_genotypes()} so that downstream
-functions are agnostic to whether genotypes are simulated or real.
+The returned matrix has the same raw 0/1/2 dosage layout as
+\code{load_genotypes()} (it carries fewer attributes -- no
+\code{snp_ids}/\code{sample_ids}/\code{window}); simulated genotypes
+reach the fitting pipeline via the PLINK round trip
+(\code{write_simulated_genotypes()}), which restores full parity.
 }
 \examples{
 G <- generate_genotypes(n_individuals = 300, n_snps = 200, seed = 1)

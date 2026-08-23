@@ -32,7 +32,8 @@ Invisibly, a character vector named by \code{gene_ids}: \code{"ok"}
 \description{
 Maps \code{\link{fit_grex_gene}} over \code{gene_ids}, running up to
 \code{mc.cores} genes concurrently via \code{parallel::mclapply()} (forked
-workers; Unix/macOS only - on Windows \code{mclapply} runs serially). The
+workers; Unix/macOS only - on Windows \code{mclapply} errors for
+\code{mc.cores > 1} and runs serially only at the default). The
 per-gene computation is byte-for-byte identical to calling
 \code{fit_grex_gene()} directly: this wrapper only parallelises \emph{across}
 genes and never touches the fold loop or the elastic-net fit, so GReX output
@@ -50,10 +51,10 @@ its slice of genes, spreading them over the cores the task requested (e.g.
 genes <- readLines("genes_chr21.txt")
 status <- fit_grex_batch(
   genes,
-  expr_dir       = "/u/scratch/.../expr_by_gene",
-  plink_prefix   = "/u/scratch/.../genotypes/gtex",
-  gene_locations = "/u/scratch/.../gene_locations.txt",
-  output_dir     = "/u/scratch/.../grex",
+  expr_dir       = "/path/to/project/expr_by_gene",
+  plink_prefix   = "/path/to/project/genotypes/geno",
+  gene_locations = "/path/to/project/gene_locations.txt",
+  output_dir     = "/path/to/project/grex",
   method         = "crocotel",
   seed           = 1,
   mc.cores       = as.integer(Sys.getenv("NSLOTS", "1"))

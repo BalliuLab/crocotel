@@ -39,7 +39,8 @@
 #'   (data-driven).
 #' @param max_pc      Numeric. Optional explicit ceiling on the number of
 #'   expression PCs. Default \code{Inf} (no cap - K is purely data-driven,
-#'   bounded only by the residual rank \code{n - #covariates}). Set a finite
+#'   bounded by the structural maximum
+#'   \code{min(n - #covariates - 2, n_genes - 1)}). Set a finite
 #'   value only to impose a hard ceiling.
 #' @param pa_B        Integer. Number of permutations for parallel analysis.
 #'   Default 20.
@@ -57,7 +58,8 @@
 #'   \item{individuals}{Character. Individual IDs retained (intersection).}
 #'   \item{eigenvalues}{Numeric. Observed leading eigenvalues examined.}
 #'   \item{null_quantile}{Numeric. Per-rank null quantiles from parallel
-#'     analysis (NA if \code{n_pc} was forced).}
+#'     analysis; length 0 when \code{n_pc} was forced (no null sweep run)
+#'     or when the structural maximum is 0.}
 #' }
 #' @export
 residualize_expression <- function(expr,
@@ -124,6 +126,14 @@ residualize_expression <- function(expr,
   null_q   <- rep(NA_real_, 0L)
 
   if (!is.null(n_pc)) {
+    if (length(n_pc) != 1L || is.na(n_pc) || n_pc < 0 ||
+        n_pc != as.integer(n_pc))
+      stop("n_pc must be a single non-negative integer (or NULL for ",
+           "data-driven selection); got: ", paste(n_pc, collapse = ", "))
+    if (n_pc > kmax)
+      message(sprintf(
+        "n_pc = %d exceeds the structural maximum kmax = %d; using %d.",
+        as.integer(n_pc), kmax, kmax))
     K <- min(as.integer(n_pc), kmax)
     if (kmax > 0L)
       obs_eig <- eigen(tcrossprod(Rs), symmetric = TRUE,

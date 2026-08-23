@@ -27,7 +27,11 @@
 #' Genotype values must be integer dosages: 0 (homozygous reference),
 #' 1 (heterozygous), 2 (homozygous alternate), or \code{NA} (missing). All
 #' matrices in \code{G_list} must share the same number of rows
-#' (individuals).
+#' (individuals). Dosages round-trip exactly through the written backing
+#' (load the result and you get the input back, NAs included). Note:
+#' backings written by pre-2026-08-21 package versions decode complemented
+#' (\code{2 - G}) and should be regenerated rather than mixed with new
+#' ones.
 #'
 #' @param G_list         List of numeric matrices (n_individuals x
 #'   n_snps_g), one per gene. A single matrix is also accepted and treated
@@ -60,13 +64,22 @@
 #'
 #' @examples
 #' \dontrun{
-#' sim <- simulate_expression(n_targets = 3,
-#'                            n_individuals = 200, n_snps = 100, seed = 1)
-#' write_simulated_genotypes(
+#' # One coherent flow with write_simulated_expression(): pass the SAME
+#' # explicit gene_ids to BOTH writers so the genotype fileset and the
+#' # per-gene expression files name the same genes (with defaults, the two
+#' # writers' auto-generated IDs need not match and fit_grex_gene() would
+#' # silently skip every gene).
+#' sim      <- simulate_expression(n_targets = 3, n_individuals = 200,
+#'                                 n_snps = 100, seed = 1)
+#' gene_ids <- c(sprintf("reg_%02d", seq_len(3)),
+#'               sprintf("tgt_%02d", seq_len(3)))
+#' gg <- write_simulated_genotypes(
 #'   G_list       = c(sim$G_list_reg, sim$G_list_tgt),
-#'   plink_prefix = "/u/scratch/b/bballiu/sim_genotypes/sim",
+#'   plink_prefix = "/path/to/sim_genotypes/sim",
+#'   gene_ids     = gene_ids,
 #'   chr_per_gene = c(sim$chr_per_reg, sim$chr_per_tgt)
 #' )
+#' # expression for the same genes: see ?write_simulated_expression
 #' }
 #' @export
 write_simulated_genotypes <- function(G_list,
@@ -83,6 +96,11 @@ write_simulated_genotypes <- function(G_list,
   if (is.matrix(G_list)) G_list <- list(G_list)
   if (!is.list(G_list) || length(G_list) == 0)
     stop("G_list must be a matrix or non-empty list of matrices.")
+  not_mat <- which(!vapply(G_list, is.matrix, logical(1)))
+  if (length(not_mat) > 0L)
+    stop("G_list element(s) ", paste(utils::head(not_mat, 5), collapse = ", "),
+         " are not matrices (individuals x SNPs). A bare vector must be ",
+         "wrapped: matrix(x, ncol = 1).")
 
   n_genes <- length(G_list)
   n_ind   <- nrow(G_list[[1]])
@@ -148,6 +166,16 @@ write_simulated_genotypes <- function(G_list,
 
   gene_pos_center <- as.integer(within_chr_rank * gene_spacing)
   gene_half       <- floor(n_snps_per_gene / 2L)
+  # gene_spacing must exceed the SNP span or windows collide / positions go
+  # non-positive (SNPs sit at 1-bp steps centred on the gene): the roxygen
+  # warns about this, now the code enforces it.
+  if (min(gene_pos_center - gene_half) < 1L)
+    stop(sprintf(paste0(
+      "gene_spacing = %.3g bp is too small for the SNP span (up to %d SNPs ",
+      "per gene at 1-bp steps): the first gene's window would start at ",
+      "position %d (< 1). Raise gene_spacing above the largest SNP count."),
+      gene_spacing, max(n_snps_per_gene),
+      min(gene_pos_center - gene_half)))
 
   snp_chr <- rep(chr_per_gene, n_snps_per_gene)
   snp_pos <- unlist(mapply(
@@ -198,14 +226,20 @@ write_simulated_genotypes <- function(G_list,
 
   # ------------------------------------------------------------------
   # 3. Write .bed (SNP-major, 2-bit per individual)
-  #    Encoding: 0->00, NA->01, 1->10, 2->11
-  #    Within a byte, 4 individuals packed LSB first.
+  #    PLINK bed 2-bit codes, as bigsnpr DECODES them:
+  #      00 = hom A1 (dosage 2), 01 = missing (NA, the format's reserved
+  #      missing-genotype code -- not imputation), 10 = het (1),
+  #      11 = hom A2 (dosage 0).
+  #    Within a byte, 4 individuals packed LSB first. (A pre-2026-08-21
+  #    version wrote dosage 0 as 00 and 2 as 11, so genotypes round-tripped
+  #    as 2 - G; backings written by that version decode complemented and
+  #    must be regenerated, not mixed with new ones.)
   # ------------------------------------------------------------------
   codes <- matrix(NA_integer_, nrow = n_ind, ncol = total_snps)
   codes[is.na(G_all)]    <- 1L
-  codes[!is.na(G_all) & G_all == 0L] <- 0L
+  codes[!is.na(G_all) & G_all == 0L] <- 3L
   codes[!is.na(G_all) & G_all == 1L] <- 2L
-  codes[!is.na(G_all) & G_all == 2L] <- 3L
+  codes[!is.na(G_all) & G_all == 2L] <- 0L
 
   pad_n <- (4 - n_ind %% 4) %% 4
   if (pad_n > 0)
@@ -224,9 +258,15 @@ write_simulated_genotypes <- function(G_list,
 
   bed_file <- paste0(plink_prefix, ".bed")
   con      <- file(bed_file, "wb")
-  on.exit(close(con), add = TRUE)
+  on.exit(try(close(con), silent = TRUE), add = TRUE)  # error-path cleanup only
   writeBin(as.raw(c(0x6c, 0x1b, 0x01)), con)   # SNP-major magic
   writeBin(as.raw(as.vector(bytes)),    con)   # column-major: SNP1 then SNP2 ...
+  # MUST close (flush) before prepare_genotypes() reads the file back below.
+  # R buffers connection writes in 8192-byte chunks and only complete chunks
+  # reach disk before close: reading now would see an EMPTY file for beds
+  # < 8 KB ("Wrong magic number") and a silently TRUNCATED tail (garbage in
+  # the final <= 8 KB of variants) for larger ones.
+  close(con)
 
   if (verbose) message("Done.")
 
@@ -237,6 +277,10 @@ write_simulated_genotypes <- function(G_list,
   #    individual fam. Saves ~half the per-cell scratch disk.
   #    Single writer here -> no race for downstream parallel callers.
   # ------------------------------------------------------------------
+  # Any pre-existing backing at this prefix is stale BY DEFINITION (a
+  # brand-new bed was just written): remove it so prepare_genotypes
+  # converts the new bed instead of keeping the previous run's genotypes.
+  unlink(paste0(plink_prefix, c(".rds", ".bk")))
   prepare_genotypes(plink_prefix)
 
   unlink(c(paste0(plink_prefix, ".bed"),

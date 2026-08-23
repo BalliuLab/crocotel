@@ -48,3 +48,4 @@ Explicitly supports four genetic architectures:
 \details{
 Stops with an informative message if any constraint is violated.
 }
+\keyword{internal}

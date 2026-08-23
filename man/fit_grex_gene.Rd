@@ -21,6 +21,7 @@ fit_grex_gene(
   var_floor = 1e-08,
   dfmax = NULL,
   pmax = NULL,
+  return_components = FALSE,
   maf_min = 0.05,
   maf_max = 0.5,
   n_snps = NULL,
@@ -63,8 +64,7 @@ Default 10.}
 
 \item{min_valid_n}{Integer. Minimum measured individuals a context must
 have (and it must be non-constant) for its specific / CBC / combination
-fit. Default \code{60}. Forwarded to \code{fit_grex_doublecv()}; shared
-with \code{run_cis_eqtl_lead_snp()} so both methods use one floor.}
+fit. Default \code{60}. Forwarded to \code{fit_grex_doublecv()}.}
 
 \item{min_train}{Integer. Minimum training individuals per elastic-net
 component fit within an outer fold. Default \code{15} (CONTENT parity).
@@ -84,6 +84,11 @@ fold-monomorphic columns below it are dropped before \code{cv.glmnet}
 \item{dfmax, pmax}{Integer or \code{NULL}. Optional \code{cv.glmnet}
 coefficient caps (OOM escape hatch); \code{NULL} (default) uses glmnet's
 defaults. Forwarded to \code{fit_grex_doublecv()}.}
+
+\item{return_components}{Logical. When \code{TRUE}, the saved record also
+carries the shared/specific GReX sub-matrices (\code{Z_grex_shared},
+\code{Z_grex_specific}). Default \code{FALSE} (roughly doubles per-gene
+storage). Forwarded to \code{fit_grex_doublecv()}.}
 
 \item{maf_min}{Numeric. Minimum MAF for cis-SNP inclusion.
 Default 0.05.}
@@ -129,8 +134,11 @@ Invisibly returns \code{NULL} (or the record if
     \code{"ok"} or \code{"no_model"} (\code{NA} if the method was not
     requested or for \code{"no_input"} genes).}
   \item{Z_grex_crocotel, Z_grex_cbc}{Numeric matrix
-    (n_individuals x n_contexts) of out-of-sample GReX predictions, or
-    \code{NULL} (method not run, or \code{"no_input"}/\code{"no_model"}).}
+    (n_individuals x n_contexts) of out-of-sample GReX predictions;
+    \code{NULL} when the method was not run or for \code{"no_input"}
+    genes. When the gene-level record is \code{"ok"} via ONE method, the
+    other method's matrix can be all-\code{NA} (its own
+    \code{status_*} then reads \code{"no_model"}).}
   \item{ctx_gate_crocotel, ctx_gate_cbc}{Named character vector, one entry
     per context: \code{"ok"} (predictor produced), \code{"low_n"}
     (< \code{min_valid_n} measured), \code{"invariant"} (constant
@@ -138,9 +146,17 @@ Invisibly returns \code{NULL} (or the record if
     \code{NULL} for \code{"no_input"} genes (no fit attempted).}
   \item{r2}{Named list of adjusted R2 metrics from
     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
-  \item{pvals}{Named list of per-context GReX significance LRT p-values
+  \item{pvals}{Named list of per-context GReX significance F-test p-values
     (\code{p_full}, \code{p_shared}, \code{p_specific}, \code{p_cbc}) from
     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
+  \item{effects}{Elastic-net effects from \code{fit_grex_doublecv()} --
+    per component and outer fold, the chosen \code{lambda},
+    \code{intercept}, support size \code{n_snps}, and the non-zero
+    \code{snp}/\code{beta} coefficients (see that function's docs).
+    \code{NULL} for non-\code{"ok"} records.}
+  \item{Z_grex_shared, Z_grex_specific}{The shared (n_individuals) and
+    specific (n_individuals x n_contexts) GReX sub-matrices. \code{NULL}
+    unless \code{return_components = TRUE} on an \code{"ok"} record.}
 }
 }
 \description{
@@ -158,10 +174,10 @@ once for the PLINK fileset to create the bigSNP backing files.
 \dontrun{
 fit_grex_gene(
   gene_id        = "ENSG00000000001",
-  expr_dir       = "/u/scratch/b/bballiu/crocotel_gtex/expr_by_gene",
-  plink_prefix   = "/u/scratch/b/bballiu/crocotel_gtex/input/genotypes/gtex",
-  gene_locations = "/u/scratch/b/bballiu/crocotel_gtex/input/gene_locations.txt",
-  output_dir     = "/u/scratch/b/bballiu/crocotel_gtex/grex",
+  expr_dir       = "/path/to/project/expr_by_gene",
+  plink_prefix   = "/path/to/project/input/genotypes/gtex",
+  gene_locations = "/path/to/project/input/gene_locations.txt",
+  output_dir     = "/path/to/project/grex",
   method         = "crocotel",
   seed           = 1
 )

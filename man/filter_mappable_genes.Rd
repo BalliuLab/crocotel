@@ -9,8 +9,12 @@ filter_mappable_genes(gene_ids, mappability_file, min = 0.8, verbose = TRUE)
 \arguments{
 \item{gene_ids}{Character vector of gene IDs to filter.}
 
-\item{mappability_file}{Character. \strong{Required} path to a 2-column
-(gene_id, score) TSV, optionally gzipped; score in [0, 1]. A user-invoked
+\item{mappability_file}{Character. \strong{Required} path to a TSV
+(optionally gzipped), either headerless with exactly two columns
+(gene_id, score) or headered with columns named \code{gene_id} and
+\code{score} (any order, extra columns ignored); score in [0, 1].
+Malformed files (wrong column count, unrecognized header, non-numeric
+scores) are rejected with an explanatory error. A user-invoked
 pre-fit filter: don't call it if you don't want to filter on mappability.}
 
 \item{min}{Numeric. Minimum mappability to retain. Default

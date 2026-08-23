@@ -16,3 +16,4 @@ Matrix with standardised columns. Columns with zero variance
 \description{
 Standardise columns of a matrix to zero mean and unit variance
 }
+\keyword{internal}

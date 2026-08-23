@@ -56,9 +56,13 @@
 #' @param n_tests         Data frame/data.table or \code{NULL}. The
 #'   design-based test universe with columns \code{gene, context, n_pairs}
 #'   (\code{n_pairs} = true number of candidate pairs per cell, used as the
-#'   BH multiplicity \code{m}). \code{NULL} (default) loads the sidecar
-#'   \code{trans_dir/n_tests_<method>.rds} written by \code{run_trans_eqtl()};
-#'   construct one directly with \code{build_n_tests_trans()}.
+#'   BH multiplicity \code{m}). \code{NULL} (default) loads the
+#'   orientation-named family-count file
+#'   \code{trans_dir/n_tests_<hierarchy>_<method>.rds} written by the
+#'   scanner (or by \code{write_n_tests()}); construct one directly with
+#'   \code{build_n_tests_trans()}. Auto-loaded or supplied, the table must
+#'   carry a \code{hierarchy} attribute matching the \code{hierarchy}
+#'   argument -- unstamped or mismatched tables are refused.
 #' @param crossmap        Cross-mappability enforcement. \code{NULL} (default)
 #'   requires \code{n_tests} to have been cross-map filtered by
 #'   \code{apply_crossmap_post()} (it stamps attr \code{crossmap_filtered});
@@ -94,6 +98,13 @@
 #'     \item{eGene_context}{Data frame: middle-level discoveries with
 #'       columns \code{gene}, \code{context}, \code{simes_p}, and the
 #'       within-gene BH-adjusted p-value.}
+#'     \item{per_gene_all, per_gc_all, all_pairs, n_tests}{Full internal
+#'       tables over the whole tested universe (selected or not): per-gene
+#'       cross-context Simes + q1, per-(gene, context) Simes + family size,
+#'       the raw pair-level p-values, and the validated \code{n_tests}.
+#'       Returned in memory only (never written); they exist so downstream
+#'       consumers (e.g. simulation truth-scoring) can reuse this
+#'       implementation rather than duplicating the hierarchy.}
 #'     \item{triplets}{Data frame: inner-level (regulator, target, context)
 #'       discoveries. Columns: \code{gene} (target), \code{snp} (regulator),
 #'       \code{context}, \code{pvalue} (raw trans p-value), \code{q3_g}
@@ -108,7 +119,9 @@
 #'   The same three data frames are also written to
 #'   \code{output_dir/eTargets_<method>.rds},
 #'   \code{output_dir/eTarget_context_<method>.rds},
-#'   \code{output_dir/triplets_<method>.rds}.
+#'   \code{output_dir/triplets_<method>.rds} (under
+#'   \code{hierarchy = "regulator"}, the first two are named
+#'   \code{eRegulators_} / \code{eRegulator_context_} instead).
 #' @export
 run_fdr <- function(trans_dir,
                      output_dir,
@@ -136,16 +149,36 @@ run_fdr <- function(trans_dir,
   if (is.null(level3)) level3 <- alpha
 
   # n_tests: required (the BH multiplicities must come from the true test
-  # universe, not the post-pv_threshold count). Auto-load from
-  # run_trans_eqtl()'s sidecar if not explicitly supplied.
+  # universe, not the post-pv_threshold count). Auto-load the ORIENTATION-NAMED
+  # sidecar matching `hierarchy` if not explicitly supplied. No legacy-name
+  # fallback: pre-rename n_tests_<method>.rds files are never read.
   if (is.null(n_tests)) {
-    sidecar <- file.path(trans_dir, paste0("n_tests_", method, ".rds"))
+    sidecar <- file.path(trans_dir,
+                         paste0("n_tests_", hierarchy, "_", method, ".rds"))
     if (!file.exists(sidecar))
-      stop("n_tests not supplied and sidecar not found at: ", sidecar,
-           ". Pass n_tests explicitly (see build_n_tests_trans()) or run ",
-           "run_trans_eqtl() first to write the sidecar.")
+      stop("n_tests not supplied and the family-count file was not found ",
+           "at:\n  ", sidecar,
+           "\nA scan writes ONE orientation's family-count file; to run ",
+           "the \"",
+           hierarchy, "\" hierarchy on this scan, generate it (no re-scan ",
+           "needed) and re-filter:\n",
+           "  write_n_tests(\"", trans_dir, "\", gene_locations, \"",
+           method, "\", hierarchy = \"", hierarchy, "\")\n",
+           "  apply_crossmap_post(\"", trans_dir, "\", \"", method,
+           "\", ...)   # real data only; simulations skip via crossmap = NA\n",
+           "  run_fdr(..., hierarchy = \"", hierarchy, "\")")
     n_tests <- readRDS(sidecar)
   }
+  # Orientation stamp check (auto-loaded AND user-supplied): family tables in
+  # the wrong orientation merge silently -- both orientations live in gene-ID
+  # space -- so an unstamped or mismatched table is refused, never guessed at.
+  if (!identical(attr(n_tests, "hierarchy"), hierarchy))
+    stop("n_tests orientation mismatch: run_fdr(hierarchy = \"", hierarchy,
+         "\") but the table's hierarchy stamp is ",
+         if (is.null(attr(n_tests, "hierarchy"))) "absent"
+         else paste0("\"", attr(n_tests, "hierarchy"), "\""),
+         ". Build family tables with build_n_tests_trans() / the scanner / ",
+         "write_n_tests() so they carry the stamp.")
   # Cross-mappability guard (checked BEFORE as.data.table below, which can strip
   # custom attributes). Real trans-eQTL analyses MUST remove cross-mappable +
   # LD-halo (regulator, target) pairs BEFORE FDR -- apply_crossmap_post() stamps
@@ -174,6 +207,13 @@ run_fdr <- function(trans_dir,
   # ------------------------------------------------------------------
   pat   <- paste0("^trans_", method, "_(.+)\\.tsv$")
   files <- list.files(trans_dir, pattern = pat, full.names = TRUE)
+  # Precision guard: in a snp_method = "both" directory the lead series'
+  # files (trans_snp_lead_<ctx>.tsv) ALSO match the genome-wide pattern and
+  # would be ingested as phantom contexts ("lead_<ctx>") -- a different
+  # method's p-values mixed into this run. Exclude them explicitly; the lead
+  # series is addressed as method = "snp_lead".
+  if (method == "snp")
+    files <- files[!grepl("^trans_snp_lead_", basename(files))]
   if (length(files) == 0)
     stop(sprintf("No trans_%s_*.tsv files found in: %s", method, trans_dir))
   contexts <- sub(pat, "\\1", basename(files))
@@ -207,8 +247,8 @@ run_fdr <- function(trans_dir,
 
   # If hierarchy is "regulator", swap roles: outer-level becomes the
   # current "snp" column. We rename so downstream logic always treats the
-  # "gene" column as the outer-level family. n_tests is expected to be
-  # supplied in the post-swap orientation already (gene = regulator id).
+  # "gene" column as the outer-level family. n_tests is in the post-swap
+  # orientation by construction (its hierarchy stamp was validated above).
   if (hierarchy == "regulator")
     data.table::setnames(all_pairs, c("snp", "gene"), c("gene", "snp"))
 
@@ -216,8 +256,15 @@ run_fdr <- function(trans_dir,
   # 2. Per-(gene, context) Simes p-value
   #    m comes from n_tests (true test universe), not .N (which only
   #    counts surviving p-values when pv_threshold < 1 upstream).
-  #    Cells in n_tests with no observed pairs in all_pairs (every
-  #    p-value filtered out by pv_threshold) get simes_p = 1.
+  #    Two distinct "no observed pairs" cases, handled differently:
+  #      * n_pairs > 0, no rows  -> the cell WAS tested but every p-value
+  #        exceeded pv_threshold  -> simes_p = 1 (tested, nothing there).
+  #      * n_pairs == 0          -> the cell was NOT tested at all (e.g.
+  #        zero gate-passing regulators, single-chromosome data, or full
+  #        cross-map exclusion). It is DROPPED as untested: multiplying an
+  #        empty family through Simes would yield simes_p = 0 * 1 = 0 -- a
+  #        guaranteed false discovery that also inflates R_G and loosens
+  #        the L2/L3 budgets for every other gene.
   # ------------------------------------------------------------------
   if (verbose) message("Computing per-(gene, context) Simes p-values...")
   pvalue <- gene <- context <- snp <- NULL  # quiet R CMD check
@@ -228,14 +275,22 @@ run_fdr <- function(trans_dir,
   per_gc <- merge(n_tests, per_gc_obs, by = c("gene", "context"),
                    all.x = TRUE)
   per_gc[is.na(simes_min_term), simes_min_term := 1]
+  n_zero <- sum(per_gc$n_pairs == 0L)
+  if (n_zero > 0L) {
+    if (verbose)
+      message(sprintf(
+        "  Dropping %d (gene, context) cell(s) with n_pairs = 0 (untested).",
+        n_zero))
+    per_gc <- per_gc[n_pairs > 0L]
+  }
   per_gc[, simes_p := pmin(n_pairs * simes_min_term, 1)]
   data.table::setnames(per_gc, "n_pairs", "m_tests")
   per_gc[, simes_min_term := NULL]
 
-  # universe of outer-level genes considered (from n_tests, not from
-  # observed pairs - a gene with all p > pv_threshold should still be
-  # in the multiplicity count)
-  M <- length(unique(n_tests$gene))
+  # universe of outer-level genes considered: genes with >= 1 TESTABLE
+  # (n_pairs > 0) cell. A gene with all p > pv_threshold still counts (its
+  # cells are testable); a gene with no testable cell is not in the study.
+  M <- length(unique(per_gc$gene))
 
   # ------------------------------------------------------------------
   # 3. Cross-context Simes per gene
@@ -274,10 +329,13 @@ run_fdr <- function(trans_dir,
       M = M, R_G = 0, R_GT = 0, R_triplets = 0,
       level1 = level1, level2 = level2, level3 = level3
     )
+    l1_tok <- if (hierarchy == "target") "eTargets"  else "eRegulators"
+    l2_tok <- if (hierarchy == "target") "eTarget_context"
+              else "eRegulator_context"
     saveRDS(as.data.frame(empty_g),  file.path(output_dir,
-              paste0("eTargets_", method, ".rds")))
+              paste0(l1_tok, "_", method, ".rds")))
     saveRDS(as.data.frame(empty_gc), file.path(output_dir,
-              paste0("eTarget_context_", method, ".rds")))
+              paste0(l2_tok, "_", method, ".rds")))
     saveRDS(empty_t,  file.path(output_dir,
               paste0("triplets_", method, ".rds")))
     return(invisible(list(
@@ -374,10 +432,14 @@ run_fdr <- function(trans_dir,
     empty
   }
 
+  # Orientation-aware names: a regulator-hierarchy run's L1 discoveries are
+  # eRegulators and must not be written under an "eTargets" filename.
+  l1_tok <- if (hierarchy == "target") "eTargets"  else "eRegulators"
+  l2_tok <- if (hierarchy == "target") "eTarget_context" else "eRegulator_context"
   saveRDS(out_eGenes,    file.path(output_dir,
-                                     paste0("eTargets_", method, ".rds")))
+                                     paste0(l1_tok, "_", method, ".rds")))
   saveRDS(out_eGene_ctx, file.path(output_dir,
-                                     paste0("eTarget_context_", method, ".rds")))
+                                     paste0(l2_tok, "_", method, ".rds")))
   saveRDS(out_triplets,  file.path(output_dir,
                                      paste0("triplets_", method, ".rds")))
 
@@ -405,6 +467,16 @@ run_fdr <- function(trans_dir,
     eGenes        = out_eGenes,
     eGene_context = out_eGene_ctx,
     triplets      = out_triplets,
-    summary       = summary_row
+    summary       = summary_row,
+    # Full internal tables (not written to disk). These let downstream
+    # consumers -- e.g. the simulation sweep's truth-scoring wrapper -- reuse
+    # THIS implementation instead of maintaining a parallel copy of the
+    # hierarchy: per-gene and per-(gene, context) Simes tables over the WHOLE
+    # tested universe (selected or not), the raw pair-level p-values, and the
+    # validated n_tests.
+    per_gene_all  = as.data.frame(per_g),
+    per_gc_all    = as.data.frame(per_gc),
+    all_pairs     = as.data.frame(all_pairs),
+    n_tests       = as.data.frame(n_tests)
   ))
 }

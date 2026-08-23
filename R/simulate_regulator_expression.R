@@ -46,7 +46,11 @@
 #'   \code{simulate_expression()} to ensure the regulator-side and target-cis
 #'   sides share one global specific-context set C (spec sec 4.2). Ignored for
 #'   \code{null} and \code{shared_only} architectures.
-#' @param seed       Integer or NULL. Random seed.
+#' @param seed       Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+#'   untouched: each call draws fresh randomness, so replicate loops give
+#'   independent datasets. Pass a seed for a reproducible dataset -- and
+#'   give each replicate its OWN seed (a fixed shared seed would make
+#'   every replicate identical).
 #'
 #' @return A named list:
 #' \describe{
@@ -137,6 +141,11 @@ simulate_regulator_expression <- function(G_list,
   #    instead of drawing internally. Not needed for null/shared_only.
   # ------------------------------------------------------------------
   if (arch %in% c("mixed", "pure_specific")) {
+    if (!is.null(sp_contexts_in) && length(sp_contexts_in) == 0L)
+      stop("sp_contexts is empty but the requested architecture (", arch,
+           ") has specific effects: an empty set would silently reassign ",
+           "the specific variance budget to shared. Pass NULL to draw the ",
+           "set internally, or a non-empty set of context indices.")
     if (is.null(sp_contexts_in)) {
       # validate_regulator_params already errors when this floors to 0.
       n_sp_ctx    <- as.integer(floor(pi_C * n_C))

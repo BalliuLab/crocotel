@@ -12,6 +12,7 @@ assemble_grex_matrices(
   contexts = NULL,
   grex_list = NULL,
   expr_dir = NULL,
+  min_obs_per_ctx = 30L,
   verbose = TRUE
 )
 }
@@ -32,7 +33,7 @@ include. \code{NULL} (default) uses all gene files found in
 
 \item{contexts}{Character vector or \code{NULL}. Subset of contexts
 (column names in the per-gene matrices). \code{NULL} (default) uses all
-contexts found in the first gene file.}
+contexts found in the records (union over "ok" records).}
 
 \item{grex_list}{Named list or \code{NULL}. In-memory alternative to
 \code{grex_dir}: a list of \code{fit_grex_gene()} records named by gene
@@ -46,6 +47,17 @@ one method-agnostic \code{expr_<ctx>.rds} of raw (observed) expression per
 context, which \code{run_trans_eqtl()} uses directly for the \code{"raw"}
 target and residualizes on the fly for the \code{"residualized"} target.}
 
+\item{min_obs_per_ctx}{Integer. Target-eligibility threshold: a gene is an
+admissible trans TARGET in a context only if it has at least this many
+observed expression values there. The decision is made here, once, and
+written to an \code{expressed_targets.rds} file (per-context eligible
+gene sets + the threshold) that every scanner
+(\code{run_trans_eqtl()}, \code{run_trans_eqtl_snp()},
+\code{run_trans_lmm()}) obeys for both its scan and its FDR family.
+Default \code{30L} -- below ~30 observations neither the LMM's
+\eqn{\Sigma_E} plug-in nor an OLS estimate is reliable. Eligibility does
+not affect a gene's REGULATOR role (GReX is genotype-predicted and dense).}
+
 \item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
 }
 \value{
@@ -57,19 +69,25 @@ Invisibly returns a named list:
   \item{method}{Character vector of methods assembled.}
   \item{output_dir}{The output directory path.}
 }
+Besides the per-context matrices, an \code{expressed_targets.rds} file
+is written to \code{output_dir}: the per-context eligible-target sets (see
+\code{min_obs_per_ctx}) that the trans scanners use for their scans and
+FDR families.
 }
 \description{
 Reads all per-gene RDS files produced by \code{fit_grex_gene()} and writes
 per-context matrices (genes x individuals) to \code{output_dir}. The
 matrices are the input to \code{run_trans_eqtl()}: regulator GReX
-predictions on the left-hand side and residualised target expression on
+predictions on the left-hand side and raw observed target expression on
+the right (the de-cis residual is reconstructed on the fly downstream) --
+GReX
 the right-hand side.
 }
 \examples{
 \dontrun{
 assemble_grex_matrices(
-  grex_dir   = "/u/scratch/b/bballiu/crocotel_gtex/grex",
-  output_dir = "/u/scratch/b/bballiu/crocotel_gtex/grex_matrices",
+  grex_dir   = "/path/to/project/grex",
+  output_dir = "/path/to/project/grex_matrices",
   method     = c("crocotel", "cbc")
 )
 }

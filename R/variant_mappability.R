@@ -21,8 +21,8 @@
 #' the table are KEPT (mappability unknown, not necessarily low), matching the
 #' gene-level convention in \code{filter_mappable_genes}.
 #'
-#' The filter is ON by default: \code{NULL} (the default) leaves it off but
-#' emits a \code{warning()}; \code{NA} acknowledges "no variant-mappability
+#' The filter is opt-in but LOUD when skipped: \code{NULL} (the default)
+#' leaves it off and emits a \code{warning()}; \code{NA} acknowledges "no variant-mappability
 #' data" and silences the warning (e.g. simulations, whose genotypes are
 #' simulated and have no mappability concept). In both non-path cases
 #' \code{variant_ids} is returned unchanged.
@@ -30,7 +30,10 @@
 #' @param variant_ids       Character vector of variant IDs to filter (matched
 #'   to the genotype IDs, e.g. bigSNP \code{$map$marker.ID}).
 #' @param mappability_file  Character, \code{NULL}, or \code{NA}. Path to a
-#'   2-column (variant_id, score) TSV, optionally gzipped; score in [0, 1].
+#'   TSV (optionally gzipped), either headerless with exactly two columns
+#'   (variant_id, score) or headered with columns named \code{variant_id}
+#'   and \code{score} (any order, extra columns ignored); score in [0, 1].
+#'   Malformed files are rejected with an explanatory error.
 #' @param min               Numeric. Minimum mappability to retain. Default
 #'   \code{1.0} (GTEx v8 trans-variant convention; a variant must be uniquely
 #'   mappable). Use a lower value (e.g. 0.8) to relax.
@@ -57,11 +60,11 @@ filter_mappable_variants <- function(variant_ids, mappability_file = NULL,
     return(variant_ids)                                     # acknowledged off
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required: install.packages('data.table')")
-  if (!file.exists(mappability_file))
-    stop("mappability_file not found: ", mappability_file)
 
-  m <- data.table::fread(mappability_file, header = FALSE,
-                         col.names = c("variant_id", "score"))
+  # Headerless (variant_id, score) OR headered file with those column names;
+  # strict format + numeric-score validation (see read_score_table.R).
+  m <- .read_score_table(mappability_file, c("variant_id", "score"),
+                         "mappability_file")
   score_of <- m$score
   names(score_of) <- m$variant_id
 

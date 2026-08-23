@@ -16,13 +16,15 @@ run_trans_eqtl_snp(
   maf_max = 0.5,
   variant_mappability_file = NULL,
   variant_mappability_min = 1,
+  min_obs_per_ctx = 30L,
+  hierarchy = c("target", "regulator"),
   pv_threshold = 0.05,
   verbose = TRUE
 )
 }
 \arguments{
-\item{matrix_dir}{Character. Directory with \code{expr_<ctx>.rds} (and
-\code{grex_cbc_<ctx>.rds} when \code{target_response = "residualized"}).}
+\item{matrix_dir}{Character. Directory with \code{expr_<ctx>.rds}
+(raw observed expression; this scanner has no residualized option).}
 
 \item{gene_locations}{Data frame or path to TSV with columns
 \code{gene_id, chr, start, end}.}
@@ -30,7 +32,11 @@ run_trans_eqtl_snp(
 \item{output_dir}{Character. Output directory. Created if absent.}
 
 \item{snp_method}{Character. \code{"genome_wide"} (default), \code{"lead"},
-or \code{"both"}.}
+or \code{"both"}. Note the lead mode's regulator universe differs from
+the gene-based methods' by design (mirroring the published GBAT/GTEx
+comparators): a gene needs only >= 3 shared individuals for its lead
+cis-SNP scan, whereas a GReX regulator must clear \code{fit_grex_gene}'s
+per-context \code{min_valid_n}.}
 
 \item{plink_prefix}{Character. bigSNP/PLINK prefix of the genome-wide
 genotypes (\code{prepare_genotypes()} must have been run). Required.}
@@ -49,6 +55,22 @@ variant mappability filter, applied to the genotype matrix before MatrixEQTL
 off with a \code{warning()}; \code{NA} = acknowledged off (simulations);
 default \code{min = 1.0} (GTEx v8 trans variants).}
 
+\item{min_obs_per_ctx}{Integer. Target-eligibility threshold: a gene is a
+TARGET in a context only with at least this many observed expression
+values there (default \code{30L}, shared by all methods). Read from the
+\code{expressed_targets.rds} file written by
+\code{assemble_grex_matrices()} when present; for a hand-built
+\code{matrix_dir} (e.g. a SNP-only analysis that never fits a GReX) the
+identical rule is computed on the fly from \code{expr_<ctx>.rds}.
+A conflict with that file's recorded threshold is an error.}
+
+\item{hierarchy}{\code{"target"} (default) or \code{"regulator"}:
+orientation of the FDR family-count file this run writes
+(\code{n_tests_<hierarchy>_snp*.rds}, one orientation per run).
+\code{"regulator"} is only supported for \code{snp_method = "lead"}
+(gene regulators); genome_wide refuses it (per-variant families are not
+supported). See \code{run_trans_eqtl()}.}
+
 \item{pv_threshold}{Numeric. Trans output threshold. Default \code{0.05}.}
 
 \item{verbose}{Logical. Default \code{TRUE}.}
@@ -56,15 +78,16 @@ default \code{min = 1.0} (GTEx v8 trans variants).}
 \value{
 Invisibly the character vector of contexts processed. Writes, per
   context, \code{trans_snp_<ctx>.tsv} (+ \code{trans_snp_lead_<ctx>.tsv} when
-  \code{both}) and the \code{n_tests_snp.rds} (+ \code{n_tests_snp_lead.rds})
-  sidecar(s).
+  \code{both}) and the \code{n_tests_<hierarchy>_snp.rds}
+  (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s).
 }
 \description{
 Unified SNP-based comparator to crocotel's GReX methods. MatrixEQTL is used
 for both cis (lead-SNP selection) and trans. \code{"genome_wide"} tests every
 variant, \code{"lead"} tests each gene's top cis-SNP, \code{"both"} runs both,
 each against every cross-chromosome target, writing MatrixEQTL output plus the
-\code{n_tests} sidecar consumed by \code{run_fdr()} (treeQTL hierarchy; the
+\code{n_tests} family-count file consumed by \code{run_fdr()} (treeQTL
+hierarchy; the
 level-3 regulator unit is a variant for genome_wide, a gene for lead).
 }
 \details{

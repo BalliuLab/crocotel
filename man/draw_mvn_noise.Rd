@@ -23,3 +23,4 @@ Draws n_individuals vectors of length n_contexts from
 MVN(0, sigma2 * Sigma), where Sigma has off-diagonal entries rho.
 Uses the pre-computed Cholesky factor L for efficiency.
 }
+\keyword{internal}

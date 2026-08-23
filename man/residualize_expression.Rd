@@ -30,7 +30,8 @@ many expression PCs and skip parallel analysis. Default \code{NULL}
 
 \item{max_pc}{Numeric. Optional explicit ceiling on the number of
 expression PCs. Default \code{Inf} (no cap - K is purely data-driven,
-bounded only by the residual rank \code{n - #covariates}). Set a finite
+bounded by the structural maximum
+\code{min(n - #covariates - 2, n_genes - 1)}). Set a finite
 value only to impose a hard ceiling.}
 
 \item{pa_B}{Integer. Number of permutations for parallel analysis.
@@ -53,7 +54,8 @@ A list:
   \item{individuals}{Character. Individual IDs retained (intersection).}
   \item{eigenvalues}{Numeric. Observed leading eigenvalues examined.}
   \item{null_quantile}{Numeric. Per-rank null quantiles from parallel
-    analysis (NA if \code{n_pc} was forced).}
+    analysis; length 0 when \code{n_pc} was forced (no null sweep run)
+    or when the structural maximum is 0.}
 }
 }
 \description{

@@ -8,7 +8,8 @@ prepare_genotypes(
   plink_prefix,
   format = c("bed", "dosage"),
   dosage_file = NULL,
-  chunk_size = 20000L
+  chunk_size = 20000L,
+  verbose = TRUE
 )
 }
 \arguments{
@@ -24,9 +25,19 @@ this is also the input PLINK prefix (reads \code{<plink_prefix>.bed}).}
 \item{chunk_size}{Integer. Number of variants read per chunk in the dosage
 path. Default 20000 (~\code{chunk_size} x n_individuals doubles in memory
 at a time). Only used for \code{format = "dosage"}.}
+
+\item{verbose}{Logical. Print the "backing already exists" skip
+message. Rebuild/broken-backing messages always print. Default
+\code{TRUE}.}
 }
 \value{
-Invisibly returns the path to the .rds backing file.
+Invisibly returns the path to the .rds backing file. An existing
+  backing is reused only when it is complete (\code{.rds} and
+  \code{.bk}) and not older than the genotype source; a source
+  regenerated after the backing was built triggers an automatic rebuild
+  (so a stale backing can never silently serve outdated genotypes), and
+  a broken backing is rebuilt when the source is available or reported
+  with instructions when it is not.
 }
 \description{
 Converts a genotype source to the bigSNP backing files (.rds and .bk)

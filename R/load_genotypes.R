@@ -2,8 +2,8 @@
 # -----------------
 # Layer 1b: Load raw cis-genotype dosages from a bigSNP backing built by
 # prepare_genotypes() - either hardcalls (0/1/2) from PLINK bed, or fractional
-# imputed dosages (0..2) from a plink2 .traw. Format-agnostic here (e.g. GTEx,
-# GTEx). Requires the bigsnpr package.
+# imputed dosages (0..2) from a plink2 .traw. Cohort-agnostic (GTEx, UKBB,
+# simulated). Requires the bigsnpr package.
 #
 # The returned matrix has the same format as generate_genotypes() - raw
 # 0/1/2 dosages - so downstream functions are agnostic to the genotype
@@ -25,7 +25,9 @@
 #' @param plink_prefix Character. Path prefix for PLINK files
 #'   (without .bed/.bim/.fam extension), e.g. \code{"data/ukbb_chr1"}.
 #' @param chrom        Character or Integer. Chromosome of the cis-window,
-#'   e.g. \code{"1"} or \code{1}.
+#'   e.g. \code{"1"} or \code{1}. A leading \code{"chr"} prefix (either
+#'   here or in the genotype fileset) is ignored, so \code{"chr1"} and
+#'   \code{"1"} are interchangeable.
 #' @param start_pos    Integer. Start position of the cis-window (bp).
 #' @param end_pos      Integer. End position of the cis-window (bp).
 #' @param sample_ids   Character vector or NULL. Sample IDs to retain
@@ -37,9 +39,14 @@
 #' @param seed         Integer or NULL. Seed for subsampling (only used when
 #'   \code{n_snps} is not NULL).
 #'
-#' @return Numeric matrix (n_individuals x n_snps) of raw dosages (0/1/2 for
+#' @return \code{NULL} (with a warning) when the window holds no SNPs, the
+#'   chromosome is absent from the fileset, or nothing passes the MAF filter
+#'   -- callers must handle it. Otherwise a
+#'   numeric matrix (n_individuals x n_snps) of raw dosages (0/1/2 for
 #'   hardcalls, fractional 0..2 for imputed)
-#'   (with mean-imputed missing values), with attributes:
+#'   (with mean-imputed missing values). Columns are named by marker ID, so
+#'   downstream artifacts (e.g. the elastic-net effects' SNP support) carry
+#'   real variant names. Attributes:
 #'   \describe{
 #'     \item{maf}{Numeric vector of per-SNP MAFs.}
 #'     \item{maf_range}{Numeric vector c(maf_min, maf_max).}
@@ -89,17 +96,16 @@ load_genotypes <- function(plink_prefix,
   bed_file <- paste0(plink_prefix, ".bed")
   rds_file <- paste0(plink_prefix, ".rds")
 
-  # Once .rds (+ .bk) exist, .bed/.bim/.fam are dead weight - bigsnpr
-  # holds genotypes in .bk and metadata in .rds. We require .bed only
-  # for the initial conversion when .rds is missing.
-  if (!file.exists(rds_file)) {
-    if (!file.exists(bed_file))
-      stop("Neither bigSNP backing file (.rds) nor PLINK .bed found at: ",
-           plink_prefix)
-    message("Converting PLINK bed to bigSNP format (one-time operation)...")
-    bigsnpr::snp_readBed(bed_file,
-                         backingfile = sub("\\.bed$", "", bed_file))
-  }
+  if (!file.exists(rds_file) && !file.exists(bed_file))
+    stop("Neither bigSNP backing file (.rds) nor PLINK .bed found at: ",
+         plink_prefix)
+  # Ensure a VALID, CURRENT backing via the single guard in
+  # prepare_genotypes(): first-time conversion, broken backings (missing
+  # .bk), and a bed regenerated after the backing was built are all
+  # handled there instead of silently attaching stale genotypes.
+  # verbose = FALSE: this runs once per gene; only rebuild/broken
+  # messages (always printed) matter.
+  prepare_genotypes(plink_prefix, verbose = FALSE)
 
   obj   <- bigsnpr::snp_attach(rds_file)
   G_big <- obj$genotypes
@@ -109,15 +115,33 @@ load_genotypes <- function(plink_prefix,
   # ------------------------------------------------------------------
   # 2. Filter SNPs to cis-window
   # ------------------------------------------------------------------
-  chrom_col <- as.character(map$chromosome)
-  snp_mask  <- chrom_col == as.character(chrom) &
+  # Chromosome codings differ across filesets ("1" vs "chr1"): normalize
+  # BOTH sides by stripping a leading "chr", so either convention works.
+  # Without this, a coding mismatch makes EVERY gene "no_cis_snps" with
+  # no hard error (the known silent-empty-run bug class).
+  norm_chr  <- function(x) sub("^chr", "", as.character(x),
+                               ignore.case = TRUE)
+  chrom_col <- norm_chr(map$chromosome)
+  chrom_n   <- norm_chr(chrom)
+  snp_mask  <- chrom_col == chrom_n &
                map$physical.pos >= start_pos &
                map$physical.pos <= end_pos
   snp_idx   <- which(snp_mask)
 
   if (length(snp_idx) == 0) {
-    warning(sprintf("No SNPs found in window chr%s:%d-%d; skipping gene.",
-                    chrom, start_pos, end_pos))
+    if (!chrom_n %in% unique(chrom_col)) {
+      warning(sprintf(paste0(
+        "Chromosome '%s' is not present in the genotype fileset at all ",
+        "(available: %s). Every gene on this chromosome will be skipped ",
+        "(no_cis_snps) -- if that is unexpected, check the chromosome ",
+        "coding of gene_locations against the genotype .bim/.traw."),
+        as.character(chrom),
+        paste(utils::head(sort(unique(as.character(map$chromosome))), 30),
+              collapse = ", ")))
+    } else {
+      warning(sprintf("No SNPs found in window chr%s:%d-%d; skipping gene.",
+                      chrom, start_pos, end_pos))
+    }
     return(NULL)
   }
 
@@ -138,7 +162,9 @@ load_genotypes <- function(plink_prefix,
   # ------------------------------------------------------------------
   # 4. Extract genotype matrix
   # ------------------------------------------------------------------
-  G_raw <- G_big[ind_idx, snp_idx]   # (I x P_window) base matrix
+  # drop = FALSE: a single-SNP window must stay a 1-column matrix (a bare
+  # vector crashes ncol/colMeans below with an unrelated-looking error).
+  G_raw <- G_big[ind_idx, snp_idx, drop = FALSE]   # (I x P_window)
 
   # Impute missing values with column mean (simple mean imputation)
   for (p in seq_len(ncol(G_raw))) {
@@ -154,7 +180,11 @@ load_genotypes <- function(plink_prefix,
   mafs      <- col_means / 2
   mafs      <- pmin(mafs, 1 - mafs)   # minor allele frequency
 
-  maf_mask <- mafs >= maf_min & mafs <= maf_max
+  # is.finite: a variant with NO observed genotypes among the selected
+  # samples has NaN mean -> NaN MAF; without the guard the NA leaks into
+  # the logical mask and injects a phantom all-NA column with an NA marker
+  # name (same guard as the genome-wide loader in run_trans_eqtl_snp).
+  maf_mask <- is.finite(mafs) & mafs >= maf_min & mafs <= maf_max
   if (!any(maf_mask)) {
     warning(sprintf("No SNPs pass MAF filter [%.2f, %.2f] in window chr%s:%d-%d; skipping gene.",
                     maf_min, maf_max, chrom, start_pos, end_pos))
@@ -168,6 +198,11 @@ load_genotypes <- function(plink_prefix,
   # ------------------------------------------------------------------
   # 6. Optionally subsample to n_snps
   # ------------------------------------------------------------------
+  if (!is.null(n_snps) && n_snps > ncol(G_raw))
+    warning(sprintf(paste0(
+      "n_snps = %d requested but only %d SNP(s) pass the window + MAF ",
+      "filters; returning all %d (SNP counts will not match across genes ",
+      "that hit this shortfall)."), n_snps, ncol(G_raw), ncol(G_raw)))
   if (!is.null(n_snps) && n_snps < ncol(G_raw)) {
     if (!is.null(seed)) set.seed(seed)
     sel     <- sample.int(ncol(G_raw), size = n_snps, replace = FALSE)
@@ -180,6 +215,12 @@ load_genotypes <- function(plink_prefix,
   # 7. Return raw 0/1/2 dosages (consumers standardise on demand)
   # ------------------------------------------------------------------
   G <- G_raw
+
+  # Marker IDs go ON the matrix, not only in an attribute: every consumer
+  # (and anything they save, e.g. the elastic-net effects' SNP support)
+  # then carries real, resolvable variant names instead of positional
+  # fallbacks. The snp_ids attribute is kept for back-compatibility.
+  colnames(G) <- map$marker.ID[snp_idx]
 
   attr(G, "maf")        <- mafs
   attr(G, "maf_range")  <- c(maf_min, maf_max)

@@ -50,11 +50,19 @@ context names as column names.
 }
 \examples{
 \dontrun{
-G_list <- replicate(100, generate_genotypes(500, 200), simplify = FALSE)
-reg    <- simulate_regulator_expression(G_list, n_contexts = 20, seed = 1)
-write_simulated_expression(
-  E_array    = reg$E,
-  output_dir = "/u/scratch/b/bballiu/sim_expr_by_gene"
-)
+# One coherent flow with write_simulated_genotypes(): the SAME explicit
+# gene_ids are passed to BOTH writers, so the per-gene expression files
+# and the genotype fileset name the same genes (with defaults, the two
+# writers' auto-generated IDs need not match and fit_grex_gene() would
+# silently skip every gene).
+sim     <- simulate_expression(n_targets = 3, n_individuals = 200,
+                               n_snps = 100, seed = 1)
+reg_ids <- sprintf("reg_\%02d", seq_len(3))
+tgt_ids <- sprintf("tgt_\%02d", seq_len(3))
+write_simulated_expression(sim$regulator$E, "/path/to/expr_by_gene",
+                           gene_ids = reg_ids)
+write_simulated_expression(sim$target$Y,    "/path/to/expr_by_gene",
+                           gene_ids = tgt_ids)
+# genotypes for the same genes: see ?write_simulated_genotypes
 }
 }

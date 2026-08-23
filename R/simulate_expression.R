@@ -46,7 +46,9 @@
 #' @param pi_C_tgt     Numeric. Proportion of specific contexts for target. Default 1.0.
 #'
 #' @param h2_Y         Numeric. Trans heritability from regulator GReX. Default 0.2.
-#' @param pi_Y         Numeric. Active contexts per regulator-target pair. Default 0.2.
+#' @param n_active_contexts Integer >= 1. Number of contexts in which each
+#'   regulator-target pair carries the trans signal (a count, not a
+#'   fraction; must not exceed \code{n_contexts}). Default \code{1L}.
 #' @param rho_E_tgt    Numeric. Target residual correlation across contexts.
 #'   Default 0.4. Same role as \code{rho_E_reg} but for the target side.
 #' @param frac_true_targets Numeric in [0, 1]. Fraction of targets that
@@ -61,7 +63,11 @@
 #'   blocks make every (regulator, target) pair cross-chromosome by
 #'   construction; set both to 1 for the all-regs-chr1 / all-tgts-chr2 layout.
 #'
-#' @param seed Integer or NULL. Master random seed.
+#' @param seed Integer or NULL. Master random seed. \code{NULL} (default) leaves the RNG
+#'   untouched: each call draws fresh randomness, so replicate loops give
+#'   independent datasets. Pass a seed for a reproducible dataset -- and
+#'   give each replicate its OWN seed (a fixed shared seed would make
+#'   every replicate identical).
 #'
 #' @return Named list:
 #' \describe{
@@ -87,7 +93,7 @@
 #'   n_snps          = 500,
 #'   h2_sh_reg = 0.3, h2_sp_reg = 0.1, rho_E_reg = 0.4,
 #'   h2_sh_tgt = 0.3, h2_sp_tgt = 0.1,
-#'   h2_Y = 0.2, pi_Y = 0.2, rho_E_tgt = 0.4,
+#'   h2_Y = 0.2, n_active_contexts = 4, rho_E_tgt = 0.4,
 #'   seed = 1
 #' )
 #' dim(sim$regulator$E)     # 500 x 3 x 20
@@ -118,7 +124,7 @@ simulate_expression <- function(n_targets,
                                 pi_C_tgt          = 1.0,
                                 # trans effect params
                                 h2_Y              = 0.2,
-                                pi_Y              = 0.2,
+                                n_active_contexts = 1L,
                                 rho_E_tgt         = 0.4,
                                 frac_true_targets = 1.0,
                                 # chromosome layout: regs on chrs 1..n_chrs_reg,
@@ -141,6 +147,23 @@ simulate_expression <- function(n_targets,
   if (n_chrs_tgt < 1) stop("n_chrs_tgt must be >= 1.")
   if (missing(n_individuals) || is.null(n_individuals))
     stop("n_individuals must be specified.")
+  # Cheap target-side checks HERE, before minutes of genotype generation
+  # (simulate_target_expression re-validates identically at step 6).
+  if (h2_sh_tgt + h2_sp_tgt + h2_Y >= 1)
+    stop("h2_sh_tgt + h2_sp_tgt + h2_Y must be < 1 (residual variance ",
+         "would be <= 0).")
+  if (frac_true_targets < 0 || frac_true_targets > 1)
+    stop("frac_true_targets must be in [0, 1].")
+  if (length(n_active_contexts) != 1L || is.na(n_active_contexts) ||
+      n_active_contexts < 1 ||
+      n_active_contexts != as.integer(n_active_contexts))
+    stop("n_active_contexts must be a single positive integer (>= 1); got: ",
+         paste(n_active_contexts, collapse = ", "))
+  if (n_active_contexts > n_contexts)
+    stop(sprintf(
+      "n_active_contexts = %d exceeds n_contexts = %d: a trans signal ",
+      as.integer(n_active_contexts), n_contexts),
+      "cannot be active in more contexts than exist.")
 
   # ------------------------------------------------------------------
   # 1. Derive per-gene seeds from master seed
@@ -213,7 +236,13 @@ simulate_expression <- function(n_targets,
     # require different set sizes, so fall back to an independent draw and
     # warn that the spec assumes equality.
     if (isTRUE(all.equal(pi_C_reg, pi_C_tgt))) {
-      shared_sp_contexts <- reg$sp_contexts
+      # Forward the shared set only when the regulator HAS one: a shared_only
+      # or null regulator carries an EMPTY sp_contexts, and forwarding that
+      # would silently strip the target's specific effects (its specific cis
+      # budget would be folded into shared with no warning). With no
+      # regulator-side set to share, the target draws its own.
+      shared_sp_contexts <- if (length(reg$sp_contexts) > 0L)
+        reg$sp_contexts else NULL
     } else {
       warning(sprintf(
         paste0("pi_C_reg (%.3g) != pi_C_tgt (%.3g): regulator and target-cis ",
@@ -250,7 +279,7 @@ simulate_expression <- function(n_targets,
     h2_sh_tgt         = h2_sh_tgt,
     h2_sp_tgt         = h2_sp_tgt,
     h2_Y              = h2_Y,
-    pi_Y              = pi_Y,
+    n_active_contexts = n_active_contexts,
     rho_E_tgt         = rho_E_tgt,
     frac_true_targets = frac_true_targets,
     seed              = tgt_trans_seed
@@ -296,7 +325,7 @@ simulate_expression <- function(n_targets,
     pi_C_tgt          = pi_C_tgt,
     # trans
     h2_Y              = h2_Y,
-    pi_Y              = pi_Y,
+    n_active_contexts = n_active_contexts,
     rho_E_tgt         = rho_E_tgt,
     frac_true_targets = frac_true_targets,
     seed              = seed

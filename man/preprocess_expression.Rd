@@ -46,7 +46,11 @@ basenames by stripping extensions.}
 suffixes from gene IDs (\code{ENSG00000000001.5} ->
 \code{ENSG00000000001}). Default \code{FALSE}.}
 
-\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.}
+\item{verbose}{Logical. Print progress messages. Default \code{TRUE}.
+
+Note the full \code{individuals x contexts x genes} array is held in
+memory during assembly (the size is printed up front); at biobank scale
+run per-chromosome subsets via \code{genes}.}
 }
 \value{
 Invisibly returns a named list:
@@ -77,7 +81,7 @@ tissue_files <- list.files("/path/to/gtex/expression",
                             pattern = "\\\\.gz$", full.names = TRUE)
 meta <- preprocess_expression(
   expr_files    = tissue_files,
-  output_dir    = "/u/scratch/b/bballiu/crocotel_gtex/expr_by_gene",
+  output_dir    = "/path/to/project/expr_by_gene",
   strip_version = TRUE
 )
 # Each gene file: n_individuals x n_contexts matrix

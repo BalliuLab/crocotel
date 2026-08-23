@@ -10,7 +10,7 @@ simulate_target_expression(
   h2_sh_tgt = 0.3,
   h2_sp_tgt = 0.1,
   h2_Y = 0.2,
-  pi_Y = 0.2,
+  n_active_contexts = 1L,
   rho_E_tgt = 0.4,
   frac_true_targets = 1,
   seed = NULL
@@ -37,11 +37,14 @@ target. Default 0.1.}
 \item{h2_Y}{Numeric in (0,1). Trans heritability of target from
 the paired regulator GReX. Default 0.2.}
 
-\item{pi_Y}{Numeric in (0,1]. Proportion of contexts in which
-each regulator-target pair is active. Default 0.2. Active contexts are
+\item{n_active_contexts}{Integer >= 1. Number of contexts in which each
+regulator-target pair is active (a COUNT, not a fraction: a fractional
+spec silently floored to zero active contexts at small
+\code{n_contexts}). Must not exceed \code{n_contexts}. Default
+\code{1L}. Active contexts are
 drawn from the subset of contexts where the paired regulator has nonzero
 GReX variance, so every active context carries a planted trans signal.
-If that subset has fewer than \code{floor(pi_Y * n_contexts)} contexts,
+If that subset has fewer than \code{n_active_contexts} contexts,
 the active count is capped and a warning is emitted.}
 
 \item{rho_E_tgt}{Numeric. Intra-individual residual correlation of
@@ -54,7 +57,11 @@ null at the eTarget level. Default 1.0 (all targets are true). Use < 1
 to plant null targets for testing eTarget-level FDR control (e.g. via
 treeQTL); set to 0 for an all-null run.}
 
-\item{seed}{Integer or NULL. Random seed.}
+\item{seed}{Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+untouched: each call draws fresh randomness, so replicate loops give
+independent datasets. Pass a seed for a reproducible dataset -- and
+give each replicate its OWN seed (a fixed shared seed would make
+every replicate identical).}
 }
 \value{
 A named list:

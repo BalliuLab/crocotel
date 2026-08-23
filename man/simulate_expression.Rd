@@ -25,7 +25,7 @@ simulate_expression(
   k_pure_sp_tgt = 0L,
   pi_C_tgt = 1,
   h2_Y = 0.2,
-  pi_Y = 0.2,
+  n_active_contexts = 1L,
   rho_E_tgt = 0.4,
   frac_true_targets = 1,
   n_chrs_reg = 11L,
@@ -74,7 +74,9 @@ simulate_expression(
 
 \item{h2_Y}{Numeric. Trans heritability from regulator GReX. Default 0.2.}
 
-\item{pi_Y}{Numeric. Active contexts per regulator-target pair. Default 0.2.}
+\item{n_active_contexts}{Integer >= 1. Number of contexts in which each
+regulator-target pair carries the trans signal (a count, not a
+fraction; must not exceed \code{n_contexts}). Default \code{1L}.}
 
 \item{rho_E_tgt}{Numeric. Target residual correlation across contexts.
 Default 0.4. Same role as \code{rho_E_reg} but for the target side.}
@@ -93,7 +95,11 @@ across, round-robin over the block above the regulators,
 blocks make every (regulator, target) pair cross-chromosome by
 construction; set both to 1 for the all-regs-chr1 / all-tgts-chr2 layout.}
 
-\item{seed}{Integer or NULL. Master random seed.}
+\item{seed}{Integer or NULL. Master random seed. \code{NULL} (default) leaves the RNG
+untouched: each call draws fresh randomness, so replicate loops give
+independent datasets. Pass a seed for a reproducible dataset -- and
+give each replicate its OWN seed (a fixed shared seed would make
+every replicate identical).}
 }
 \value{
 Named list:
@@ -125,7 +131,7 @@ sim <- simulate_expression(
   n_snps          = 500,
   h2_sh_reg = 0.3, h2_sp_reg = 0.1, rho_E_reg = 0.4,
   h2_sh_tgt = 0.3, h2_sp_tgt = 0.1,
-  h2_Y = 0.2, pi_Y = 0.2, rho_E_tgt = 0.4,
+  h2_Y = 0.2, n_active_contexts = 4, rho_E_tgt = 0.4,
   seed = 1
 )
 dim(sim$regulator$E)     # 500 x 3 x 20

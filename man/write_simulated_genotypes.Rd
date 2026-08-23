@@ -61,16 +61,29 @@ frame. The output is consumed by \code{prepare_genotypes()} and
 Genotype values must be integer dosages: 0 (homozygous reference),
 1 (heterozygous), 2 (homozygous alternate), or \code{NA} (missing). All
 matrices in \code{G_list} must share the same number of rows
-(individuals).
+(individuals). Dosages round-trip exactly through the written backing
+(load the result and you get the input back, NAs included). Note:
+backings written by pre-2026-08-21 package versions decode complemented
+(\code{2 - G}) and should be regenerated rather than mixed with new
+ones.
 }
 \examples{
 \dontrun{
-sim <- simulate_expression(n_targets = 3,
-                           n_individuals = 200, n_snps = 100, seed = 1)
-write_simulated_genotypes(
+# One coherent flow with write_simulated_expression(): pass the SAME
+# explicit gene_ids to BOTH writers so the genotype fileset and the
+# per-gene expression files name the same genes (with defaults, the two
+# writers' auto-generated IDs need not match and fit_grex_gene() would
+# silently skip every gene).
+sim      <- simulate_expression(n_targets = 3, n_individuals = 200,
+                                n_snps = 100, seed = 1)
+gene_ids <- c(sprintf("reg_\%02d", seq_len(3)),
+              sprintf("tgt_\%02d", seq_len(3)))
+gg <- write_simulated_genotypes(
   G_list       = c(sim$G_list_reg, sim$G_list_tgt),
-  plink_prefix = "/u/scratch/b/bballiu/sim_genotypes/sim",
+  plink_prefix = "/path/to/sim_genotypes/sim",
+  gene_ids     = gene_ids,
   chr_per_gene = c(sim$chr_per_reg, sim$chr_per_tgt)
 )
+# expression for the same genes: see ?write_simulated_expression
 }
 }

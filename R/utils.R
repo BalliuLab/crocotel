@@ -20,6 +20,7 @@ resample <- function(x, ...) x[sample.int(length(x), ...)]
 #' @param n_contexts Integer. Dimension of the matrix.
 #' @param rho        Numeric. Off-diagonal correlation.
 #' @return Lower-triangular matrix (n_contexts x n_contexts).
+#' @keywords internal
 make_equicor_chol <- function(n_contexts, rho) {
   Sigma      <- matrix(rho, n_contexts, n_contexts)
   diag(Sigma) <- 1.0
@@ -38,6 +39,7 @@ make_equicor_chol <- function(n_contexts, rho) {
 #' @param sigma2        Numeric. Residual variance.
 #' @param L             Matrix. Lower-triangular Cholesky factor of Sigma.
 #' @return Matrix (n_individuals x n_contexts).
+#' @keywords internal
 draw_mvn_noise <- function(n_individuals, n_contexts, sigma2, L) {
   Z <- matrix(rnorm(n_individuals * n_contexts), nrow = n_individuals, ncol = n_contexts)
   sqrt(sigma2) * (Z %*% t(L))
@@ -49,6 +51,7 @@ draw_mvn_noise <- function(n_individuals, n_contexts, sigma2, L) {
 #' @param X Numeric matrix.
 #' @return Matrix with standardised columns. Columns with zero variance
 #'   are left as-is with a warning.
+#' @keywords internal
 standardise_cols <- function(X) {
   mu  <- colMeans(X)
   sds <- apply(X, 2, sd)
@@ -82,6 +85,7 @@ standardise_cols <- function(X) {
 #' @param n_snps      Integer.
 #'
 #' @return Character string naming the detected architecture, invisibly.
+#' @keywords internal
 validate_regulator_params <- function(n_contexts, h2_sh, h2_sp, rho,
                                       k_sh, k_sp, k_pure_sp, pi_C, n_snps) {
 

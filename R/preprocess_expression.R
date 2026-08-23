@@ -51,6 +51,10 @@
 #'   \code{ENSG00000000001}). Default \code{FALSE}.
 #' @param verbose       Logical. Print progress messages. Default \code{TRUE}.
 #'
+#' Note the full \code{individuals x contexts x genes} array is held in
+#' memory during assembly (the size is printed up front); at biobank scale
+#' run per-chromosome subsets via \code{genes}.
+#'
 #' @return Invisibly returns a named list:
 #' \describe{
 #'   \item{genes}{Character vector of gene IDs written.}
@@ -66,7 +70,7 @@
 #'                             pattern = "\\.gz$", full.names = TRUE)
 #' meta <- preprocess_expression(
 #'   expr_files    = tissue_files,
-#'   output_dir    = "/u/scratch/b/bballiu/crocotel_gtex/expr_by_gene",
+#'   output_dir    = "/path/to/project/expr_by_gene",
 #'   strip_version = TRUE
 #' )
 #' # Each gene file: n_individuals x n_contexts matrix
@@ -135,11 +139,35 @@ preprocess_expression <- function(expr_files,
       e[[gene_id_col]] <- NULL
     }
 
-    if (strip_version)
-      rownames(e) <- sub("\\.[0-9]+$", "", rownames(e))
+    if (strip_version) {
+      # Two annotation versions of one gene (ENSG000123.4 / ENSG000123.7)
+      # collapse to the same ID. Check BEFORE assigning: on a data.frame the
+      # assignment itself errors cryptically ("duplicate 'row.names'"), and
+      # on a matrix duplicates are legal but later name-indexing silently
+      # picks the FIRST match -- the other version's data would vanish.
+      stripped <- sub("\\.[0-9]+$", "", rownames(e))
+      dup <- unique(stripped[duplicated(stripped)])
+      if (length(dup) > 0L)
+        stop("strip_version = TRUE collapsed multiple entries to the same ",
+             "gene ID in ", basename(expr_files[j]), ": ",
+             paste(utils::head(dup, 5), collapse = ", "),
+             if (length(dup) > 5) sprintf(" (and %d more)", length(dup) - 5)
+             else "",
+             ". Deduplicate the input (one row per gene) before preprocessing.")
+      rownames(e) <- stripped
+    }
 
     e <- as.matrix(e)
-    storage.mode(e) <- "double"
+    n_na_pre <- sum(is.na(e))
+    suppressWarnings(storage.mode(e) <- "double")
+    # Non-numeric cells (stray annotation column, wrong `sep`) coerce to NA
+    # with only a warning -- and then flow downstream as plausible-looking
+    # "missing data" instead of an input-format error. Fail loudly.
+    if (sum(is.na(e)) > n_na_pre)
+      stop("Coercing ", basename(expr_files[j]), " to numeric introduced ",
+           sum(is.na(e)) - n_na_pre, " new NA(s): the file contains ",
+           "non-numeric values (stray annotation column? wrong sep?). ",
+           "Fix the input format; expression values must be numeric.")
     expr_list[[j]] <- e          # (n_genes x n_individuals)
   }
 

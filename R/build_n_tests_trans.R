@@ -31,7 +31,10 @@
 #'   regulators. \code{"regulator"} flips it.
 #'
 #' @return A \code{data.table} with columns \code{gene, context, n_pairs}.
-#'   Number of rows = number of outer-level genes x number of contexts.
+#'   Number of rows = number of outer-level genes x number of contexts. The
+#'   result carries \code{attr(, "hierarchy")} recording its orientation;
+#'   \code{run_fdr()} and \code{apply_crossmap_post()} validate this stamp,
+#'   so build family tables with this function rather than by hand.
 #' @export
 build_n_tests_trans <- function(snpspos, genepos, contexts,
                                  hierarchy = c("target", "regulator")) {
@@ -64,8 +67,95 @@ build_n_tests_trans <- function(snpspos, genepos, contexts,
     names(n_per_outer) <- snpspos$snp
   }
 
-  data.table::CJ(gene = names(n_per_outer), context = contexts,
-                 sorted = FALSE)[
+  out <- data.table::CJ(gene = names(n_per_outer), context = contexts,
+                        sorted = FALSE)[
     , n_pairs := as.integer(n_per_outer[gene])
   ][]
+  # Orientation stamp: family tables are self-describing so a consumer can
+  # never silently merge the wrong orientation (both live in gene-ID space).
+  data.table::setattr(out, "hierarchy", hierarchy)
+  out
+}
+
+
+#' Regenerate a scan's FDR family table in either orientation (no re-scan)
+#'
+#' The trans scanners write ONE orientation-named family-count file per run
+#' (\code{n_tests_<hierarchy>_<method>.rds}). The scan output itself (the
+#' per-context TSVs) is orientation-independent, so the OTHER orientation can
+#' be reconstructed from artifacts already on disk instead of re-running a
+#' scan: the tested regulators per context come from the
+#' scan metadata file (\code{n_tests_meta_<method>.rds}), the eligible
+#' targets per context
+#' are recorded there too, and chromosomes come from \code{gene_locations}.
+#' Typical use: a completed \code{hierarchy = "target"} run, followed later by
+#' \code{write_n_tests(..., hierarchy = "regulator")} +
+#' \code{apply_crossmap_post()} + \code{run_fdr(hierarchy = "regulator")}
+#' to obtain eRegulators.
+#'
+#' @param trans_dir      Character. The scan output directory (holds the
+#'   scan metadata file \code{n_tests_meta_<method>.rds}; the new
+#'   family-count file is written here).
+#' @param gene_locations Data frame or path to TSV with columns
+#'   \code{gene_id, chr, start, end}.
+#' @param method         Character. File-name token (\code{"crocotel"},
+#'   \code{"cbc"}, \code{"lmm"}, \code{"snp"}, \code{"snp_lead"}).
+#' @param hierarchy      \code{"target"} or \code{"regulator"}. The
+#'   regulator orientation requires gene regulators; a scan whose regulators
+#'   are variants (SNP \code{genome_wide}) is refused.
+#' @param verbose        Logical. Default \code{TRUE}.
+#'
+#' @return Invisibly the stamped family \code{data.table} (also written to
+#'   \code{trans_dir/n_tests_<hierarchy>_<method>.rds}). The written table is
+#'   RAW (not cross-map filtered): run \code{apply_crossmap_post()} on it
+#'   before \code{run_fdr()}, exactly as after a scan.
+#' @export
+write_n_tests <- function(trans_dir, gene_locations, method,
+                          hierarchy = c("target", "regulator"),
+                          verbose = TRUE) {
+  hierarchy <- match.arg(hierarchy)
+  if (is.character(gene_locations))
+    gene_locations <- read.table(gene_locations, header = TRUE,
+                                 stringsAsFactors = FALSE, check.names = FALSE)
+  gene_locations$chr <- as.character(gene_locations$chr)
+  chr_of <- stats::setNames(gene_locations$chr, gene_locations$gene_id)
+
+  meta_file <- file.path(trans_dir, paste0("n_tests_meta_", method, ".rds"))
+  if (!file.exists(meta_file))
+    stop("Scan metadata file not found: ", meta_file,
+         " (written by the trans scanner alongside its output).")
+  meta <- readRDS(meta_file)
+
+  nt_list <- vector("list", length(meta))
+  for (i in seq_along(meta)) {
+    m <- meta[[i]]
+    if (!is.list(m) || !all(c("snpspos", "tgt_ids") %in% names(m)))
+      stop("n_tests_meta_", method, ".rds does not carry per-context ",
+           "{snpspos, tgt_ids}; regenerate it by re-running the scan with ",
+           "the current package version.")
+    if (hierarchy == "regulator" &&
+        !all(m$snpspos$snp %in% gene_locations$gene_id))
+      stop("hierarchy = 'regulator' needs gene regulators, but the meta ",
+           "scan's regulators are not gene IDs (SNP genome_wide scan). ",
+           "A per-variant family table is not supported.")
+    tchr <- chr_of[m$tgt_ids]
+    if (anyNA(tchr))
+      stop("Some target genes in the scan metadata file lack a ",
+           "gene_locations entry.")
+    genepos <- data.frame(geneid = m$tgt_ids, chr = as.character(tchr),
+                          stringsAsFactors = FALSE)
+    nt_list[[i]] <- build_n_tests_trans(m$snpspos, genepos,
+                                        contexts = names(meta)[i],
+                                        hierarchy = hierarchy)
+  }
+  nt <- data.table::rbindlist(nt_list)
+  data.table::setattr(nt, "hierarchy", hierarchy)   # rbindlist drops attrs
+  out_file <- file.path(trans_dir,
+                        paste0("n_tests_", hierarchy, "_", method, ".rds"))
+  saveRDS(nt, out_file)
+  if (verbose)
+    message(sprintf("Wrote %s (%d rows, hierarchy = %s, RAW: run ",
+                    out_file, nrow(nt), hierarchy),
+            "apply_crossmap_post() before run_fdr() on real data.")
+  invisible(nt)
 }

@@ -9,6 +9,14 @@ Expression}
 \description{
 Builds cross-validated genetically regulated expression (GReX) predictors using a CONTENT-style shared/context-specific decomposition and an elastic net, then maps trans-eQTLs by testing regulator GReX against target expression with hierarchical (treeQTL-style) FDR control. Includes simulation utilities, memory-mapped (bigSNP) genotype ingest, and MatrixEQTL-based association scans.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://github.com/BalliuLab/crocotel}
+  \item Report bugs at \url{https://github.com/BalliuLab/crocotel/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Brunilda Balliu \email{bballiu@g.ucla.edu}
 

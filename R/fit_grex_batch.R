@@ -8,11 +8,34 @@
 # allocated (outer parallelism = array tasks; inner = mclapply over genes).
 
 
+# Normalise per-worker mclapply outcomes into a clean status vector. A worker
+# killed outright (OOM-killer, segfault) yields NULL -- not a condition
+# object -- because the child died before producing anything; some failure
+# modes surface as a try-error with or without an attached condition; anything
+# else non-string is normalised defensively. Internal; unit-tested directly
+# because a real SIGKILL cannot be simulated portably under R CMD check.
+.batch_status <- function(res) {
+  vapply(res, function(x) {
+    if (is.null(x)) {
+      "fail: worker died before returning (killed? likely OOM)"
+    } else if (inherits(x, "try-error")) {
+      cnd <- attr(x, "condition")
+      if (is.null(cnd)) "fail: worker error"
+      else paste0("fail: ", conditionMessage(cnd))
+    } else if (!is.character(x) || length(x) != 1L) {
+      "fail: worker returned an unexpected object"
+    } else {
+      x
+    }
+  }, character(1))
+}
+
 #' Fit GReX models for a batch of genes in parallel
 #'
 #' Maps \code{\link{fit_grex_gene}} over \code{gene_ids}, running up to
 #' \code{mc.cores} genes concurrently via \code{parallel::mclapply()} (forked
-#' workers; Unix/macOS only - on Windows \code{mclapply} runs serially). The
+#' workers; Unix/macOS only - on Windows \code{mclapply} errors for
+#' \code{mc.cores > 1} and runs serially only at the default). The
 #' per-gene computation is byte-for-byte identical to calling
 #' \code{fit_grex_gene()} directly: this wrapper only parallelises \emph{across}
 #' genes and never touches the fold loop or the elastic-net fit, so GReX output
@@ -49,10 +72,10 @@
 #' genes <- readLines("genes_chr21.txt")
 #' status <- fit_grex_batch(
 #'   genes,
-#'   expr_dir       = "/u/scratch/.../expr_by_gene",
-#'   plink_prefix   = "/u/scratch/.../genotypes/gtex",
-#'   gene_locations = "/u/scratch/.../gene_locations.txt",
-#'   output_dir     = "/u/scratch/.../grex",
+#'   expr_dir       = "/path/to/project/expr_by_gene",
+#'   plink_prefix   = "/path/to/project/genotypes/geno",
+#'   gene_locations = "/path/to/project/gene_locations.txt",
+#'   output_dir     = "/path/to/project/grex",
 #'   method         = "crocotel",
 #'   seed           = 1,
 #'   mc.cores       = as.integer(Sys.getenv("NSLOTS", "1"))
@@ -64,6 +87,15 @@ fit_grex_batch <- function(gene_ids, ..., mc.cores = 1L,
                            mc.preschedule = FALSE) {
   if (!length(gene_ids))
     stop("gene_ids is empty.")
+  # return_output = TRUE would make fit_grex_gene return records in memory --
+  # which this wrapper cannot pass back (it reports a status vector) and
+  # which also disables file writing, so the user would silently get NEITHER
+  # files NOR records. Refuse loudly instead.
+  if (isTRUE(list(...)[["return_output"]]))
+    stop("return_output = TRUE is not supported by fit_grex_batch(): it ",
+         "returns a per-gene status vector, not records. Call ",
+         "fit_grex_gene() directly for in-memory records, or read the ",
+         "written per-gene RDS files.")
   gene_ids <- as.character(gene_ids)
 
   res <- parallel::mclapply(
@@ -78,18 +110,7 @@ fit_grex_batch <- function(gene_ids, ..., mc.cores = 1L,
     mc.preschedule = mc.preschedule
   )
 
-  # A forked worker that is killed (e.g. OOM) or segfaults comes back as a
-  # try-error rather than our tryCatch string; normalise so the batch always
-  # returns a clean status vector instead of throwing.
-  status <- vapply(res, function(x) {
-    if (inherits(x, "try-error")) {
-      cnd <- attr(x, "condition")
-      if (is.null(cnd)) "fail: worker error"
-      else paste0("fail: ", conditionMessage(cnd))
-    } else {
-      as.character(x)
-    }
-  }, character(1))
+  status <- .batch_status(res)
   names(status) <- gene_ids
 
   n_fail <- sum(startsWith(status, "fail"))

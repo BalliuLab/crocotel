@@ -25,8 +25,12 @@
 #' reported - matching common GTEx practice.
 #'
 #' @param gene_ids          Character vector of gene IDs to filter.
-#' @param mappability_file  Character. \strong{Required} path to a 2-column
-#'   (gene_id, score) TSV, optionally gzipped; score in [0, 1]. A user-invoked
+#' @param mappability_file  Character. \strong{Required} path to a TSV
+#'   (optionally gzipped), either headerless with exactly two columns
+#'   (gene_id, score) or headered with columns named \code{gene_id} and
+#'   \code{score} (any order, extra columns ignored); score in [0, 1].
+#'   Malformed files (wrong column count, unrecognized header, non-numeric
+#'   scores) are rejected with an explanatory error. A user-invoked
 #'   pre-fit filter: don't call it if you don't want to filter on mappability.
 #' @param min               Numeric. Minimum mappability to retain. Default
 #'   \code{0.8} (Saha & Battle / GTEx convention).
@@ -43,13 +47,13 @@ filter_mappable_genes <- function(gene_ids, mappability_file, min = 0.8,
     stop("mappability_file is required")
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required: install.packages('data.table')")
-  if (!file.exists(mappability_file))
-    stop("mappability_file not found: ", mappability_file)
 
   strip_ver <- function(x) sub("\\.[0-9]+$", "", x)
 
-  m <- data.table::fread(mappability_file, header = FALSE,
-                         col.names = c("gene_id", "score"))
+  # Headerless (gene_id, score) OR headered file with those column names;
+  # strict format + numeric-score validation (see read_score_table.R).
+  m <- .read_score_table(mappability_file, c("gene_id", "score"),
+                         "mappability_file")
   score_of <- m$score
   names(score_of) <- strip_ver(m$gene_id)
 

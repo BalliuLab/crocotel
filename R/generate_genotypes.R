@@ -16,14 +16,21 @@
 #' contains raw integer dosages \{0, 1, 2\}; downstream simulation and
 #' fitting code standardises columns when needed.
 #'
-#' The returned format matches \code{load_genotypes()} so that downstream
-#' functions are agnostic to whether genotypes are simulated or real.
+#' The returned matrix has the same raw 0/1/2 dosage layout as
+#' \code{load_genotypes()} (it carries fewer attributes -- no
+#' \code{snp_ids}/\code{sample_ids}/\code{window}); simulated genotypes
+#' reach the fitting pipeline via the PLINK round trip
+#' (\code{write_simulated_genotypes()}), which restores full parity.
 #'
 #' @param n_individuals Integer. Number of individuals (I).
 #' @param n_snps        Integer. Number of cis-SNPs (P). Default 500.
 #' @param maf_min       Numeric. Minimum minor-allele frequency. Default 0.05.
 #' @param maf_max       Numeric. Maximum minor-allele frequency. Default 0.50.
-#' @param seed          Integer or NULL. Random seed.
+#' @param seed          Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+#'   untouched: each call draws fresh randomness, so replicate loops give
+#'   independent datasets. Pass a seed for a reproducible dataset -- and
+#'   give each replicate its OWN seed (a fixed shared seed would make
+#'   every replicate identical).
 #'
 #' @return Numeric matrix (n_individuals x n_snps) of raw 0/1/2 dosages,
 #'   with attributes:

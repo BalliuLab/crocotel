@@ -35,9 +35,13 @@ call per method.}
 \item{n_tests}{Data frame/data.table or \code{NULL}. The
 design-based test universe with columns \code{gene, context, n_pairs}
 (\code{n_pairs} = true number of candidate pairs per cell, used as the
-BH multiplicity \code{m}). \code{NULL} (default) loads the sidecar
-\code{trans_dir/n_tests_<method>.rds} written by \code{run_trans_eqtl()};
-construct one directly with \code{build_n_tests_trans()}.}
+BH multiplicity \code{m}). \code{NULL} (default) loads the
+orientation-named family-count file
+\code{trans_dir/n_tests_<hierarchy>_<method>.rds} written by the
+scanner (or by \code{write_n_tests()}); construct one directly with
+\code{build_n_tests_trans()}. Auto-loaded or supplied, the table must
+carry a \code{hierarchy} attribute matching the \code{hierarchy}
+argument -- unstamped or mismatched tables are refused.}
 
 \item{crossmap}{Cross-mappability enforcement. \code{NULL} (default)
 requires \code{n_tests} to have been cross-map filtered by
@@ -80,6 +84,13 @@ Invisibly returns a named list:
     \item{eGene_context}{Data frame: middle-level discoveries with
       columns \code{gene}, \code{context}, \code{simes_p}, and the
       within-gene BH-adjusted p-value.}
+    \item{per_gene_all, per_gc_all, all_pairs, n_tests}{Full internal
+      tables over the whole tested universe (selected or not): per-gene
+      cross-context Simes + q1, per-(gene, context) Simes + family size,
+      the raw pair-level p-values, and the validated \code{n_tests}.
+      Returned in memory only (never written); they exist so downstream
+      consumers (e.g. simulation truth-scoring) can reuse this
+      implementation rather than duplicating the hierarchy.}
     \item{triplets}{Data frame: inner-level (regulator, target, context)
       discoveries. Columns: \code{gene} (target), \code{snp} (regulator),
       \code{context}, \code{pvalue} (raw trans p-value), \code{q3_g}
@@ -94,7 +105,9 @@ Invisibly returns a named list:
   The same three data frames are also written to
   \code{output_dir/eTargets_<method>.rds},
   \code{output_dir/eTarget_context_<method>.rds},
-  \code{output_dir/triplets_<method>.rds}.
+  \code{output_dir/triplets_<method>.rds} (under
+  \code{hierarchy = "regulator"}, the first two are named
+  \code{eRegulators_} / \code{eRegulator_context_} instead).
 }
 \description{
 Reads the per-context TSV files produced by \code{run_trans_eqtl()} and

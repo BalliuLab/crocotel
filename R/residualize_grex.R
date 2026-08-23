@@ -2,9 +2,9 @@
 # ------------------
 # Regression-based cis de-residualization: remove the cis-GReX contribution
 # from measured expression, per column, by single-predictor regression (NOT
-# E - Z). Shared by the GReX fit (fit_grex_doublecv, at fit time) and the trans
-# scan (run_trans_eqtl, when save_resid = FALSE and the residual is
-# reconstructed on the fly) so both paths produce byte-identical residuals.
+# E - Z). Used by the trans scanners (run_trans_eqtl / run_trans_lmm) to
+# reconstruct the de-cis residual on the fly from the assembled raw
+# expression + GReX; fit_grex_doublecv does NOT compute or store residuals.
 #
 # NB: distinct from residualize_expression() (real-data covariate/PC adjustment)
 # - this one regresses expression on its own cis-GReX prediction.

@@ -40,7 +40,17 @@
 #'   path. Default 20000 (~\code{chunk_size} x n_individuals doubles in memory
 #'   at a time). Only used for \code{format = "dosage"}.
 #'
-#' @return Invisibly returns the path to the .rds backing file.
+#' @param verbose      Logical. Print the "backing already exists" skip
+#'   message. Rebuild/broken-backing messages always print. Default
+#'   \code{TRUE}.
+#'
+#' @return Invisibly returns the path to the .rds backing file. An existing
+#'   backing is reused only when it is complete (\code{.rds} and
+#'   \code{.bk}) and not older than the genotype source; a source
+#'   regenerated after the backing was built triggers an automatic rebuild
+#'   (so a stale backing can never silently serve outdated genotypes), and
+#'   a broken backing is rebuilt when the source is available or reported
+#'   with instructions when it is not.
 #'
 #' @examples
 #' \dontrun{
@@ -55,18 +65,56 @@
 prepare_genotypes <- function(plink_prefix,
                               format      = c("bed", "dosage"),
                               dosage_file = NULL,
-                              chunk_size  = 20000L) {
+                              chunk_size  = 20000L,
+                              verbose     = TRUE) {
 
   format <- match.arg(format)
 
   if (!requireNamespace("bigsnpr", quietly = TRUE))
     stop("Package 'bigsnpr' is required: install.packages('bigsnpr')")
 
+  # ------------------------------------------------------------------
+  # Backing validity + currency guard (THE single authority; the loaders
+  # call this instead of converting inline). A backing is served only when
+  # it is COMPLETE (.rds AND .bk) and NOT older than the genotype source:
+  #   * source newer than backing -> the genotypes were regenerated; the
+  #     old backing would silently serve OUTDATED genotypes -> rebuild.
+  #   * one backing file missing (scratch purge, partial copy) -> broken;
+  #     rebuild when a source exists, otherwise stop with instructions.
+  # ------------------------------------------------------------------
   rds_file <- paste0(plink_prefix, ".rds")
-  if (file.exists(rds_file)) {
-    message("bigSNP backing files already exist, skipping conversion: ",
-            rds_file)
-    return(invisible(rds_file))
+  bk_file  <- paste0(plink_prefix, ".bk")
+  src_file <- if (format == "bed") paste0(plink_prefix, ".bed")
+              else dosage_file
+  has_src  <- !is.null(src_file) && file.exists(src_file)
+  have_rds <- file.exists(rds_file)
+  have_bk  <- file.exists(bk_file)
+
+  if (have_rds && have_bk) {
+    if (has_src && file.mtime(src_file) > file.mtime(rds_file)) {
+      message("Genotype source (", basename(src_file), ") is newer than ",
+              "the bigSNP backing; rebuilding the backing (the old one ",
+              "would silently serve outdated genotypes).")
+      unlink(c(rds_file, bk_file))
+    } else {
+      if (verbose)
+        message("bigSNP backing files already exist, skipping conversion: ",
+                rds_file)
+      return(invisible(rds_file))
+    }
+  } else if (have_rds || have_bk) {
+    missing_f <- if (have_rds) bk_file else rds_file
+    if (has_src) {
+      message("Broken bigSNP backing (missing ", basename(missing_f),
+              "); rebuilding from ", basename(src_file), ".")
+      unlink(c(rds_file, bk_file))
+    } else {
+      stop("Broken bigSNP backing at ", plink_prefix, ": ",
+           basename(missing_f), " is missing (scratch purge or partial ",
+           "copy?) and no genotype source (.bed / dosage file) is ",
+           "available to rebuild from. Delete the leftover backing file ",
+           "and regenerate the genotypes.")
+    }
   }
 
   if (format == "bed") {
@@ -88,9 +136,6 @@ prepare_genotypes <- function(plink_prefix,
     stop("format = 'dosage' requires an existing dosage_file (plink2 .traw).")
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required for the dosage path.")
-  if (file.exists(paste0(plink_prefix, ".bk")))
-    stop("Backing file already exists: ", plink_prefix, ".bk (remove to rebuild).")
-
   code <- bigsnpr::CODE_DOSAGE
   # dosage value -> byte code: nearest representable value; NA -> an NA byte.
   keepv   <- which(!is.na(code)); cv <- code[keepv]; cb <- keepv - 1L
@@ -103,14 +148,40 @@ prepare_genotypes <- function(plink_prefix,
     as.integer(b)
   }
 
+  # Compressed dosage files are rejected outright: the chunked fread(skip=)
+  # ingest below addresses byte offsets in the DEcompressed stream while any
+  # line count on the raw file would see compressed bytes -- silently
+  # inconsistent. Decompress first.
+  if (grepl("\\.(gz|bz2|xz|zst)$", dosage_file, ignore.case = TRUE))
+    stop("dosage_file appears to be compressed (", dosage_file, "). ",
+         "Decompress it first (e.g. `gunzip`) -- the chunked ingest reads ",
+         "the file by line offsets and does not support compressed input.")
+
   # header: CHR SNP (C)M POS COUNTED ALT <sample1> ...
   hdr      <- strsplit(readLines(dosage_file, n = 1L), "\t")[[1]]
   sample_ids <- hdr[-(1:6)]
   n_ind    <- length(sample_ids)
   if (n_ind < 1L) stop("No sample columns found in dosage_file header.")
-  # variant count = data lines (wc reads stdin so output is just the number)
-  n_var    <- as.integer(system2("wc", "-l", stdin = dosage_file,
-                                 stdout = TRUE)) - 1L
+  # Variant count = data lines. Counted in R (streamed 64 MB chunks,
+  # newline bytes) rather than `wc -l`: portable, and correct for a file
+  # without a trailing newline (wc would silently drop the last variant).
+  n_lines <- local({
+    con <- file(dosage_file, "rb")
+    on.exit(close(con))
+    n <- 0L
+    last <- as.raw(10L)
+    repeat {
+      chunk <- readBin(con, "raw", n = 64L * 1024L * 1024L)
+      if (length(chunk) == 0L) break
+      n <- n + sum(chunk == as.raw(10L))
+      last <- chunk[length(chunk)]
+    }
+    if (last != as.raw(10L)) n <- n + 1L   # no trailing newline: count it
+    n
+  })
+  n_var <- as.integer(n_lines) - 1L
+  if (n_var < 1L)
+    stop("dosage_file has no data lines after the header: ", dosage_file)
 
   message(sprintf("Ingesting dosages: %d variants x %d individuals (chunk %d)...",
                   n_var, n_ind, chunk_size))

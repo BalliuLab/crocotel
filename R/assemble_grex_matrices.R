@@ -11,6 +11,10 @@
 #                                 p-values + r2 for the B12 regulator gate
 #   expr_<ctx>.rds              - matrix (n_genes x n_individuals) of raw
 #                                 (observed) expression, from expr_dir
+#   expressed_targets.rds       - target-eligibility sidecar: list(min_obs,
+#                                 targets = ctx -> eligible target gene IDs).
+#                                 THE single decision point all scanners obey
+#                                 (see trans_scan_shared.R).
 #
 # The de-cis residual is NOT stored: run_trans_eqtl reconstructs it on the fly
 # from expr_<ctx> + grex_<method>_<ctx> (raw = expr directly). One file per
@@ -22,7 +26,9 @@
 #' Reads all per-gene RDS files produced by \code{fit_grex_gene()} and writes
 #' per-context matrices (genes x individuals) to \code{output_dir}. The
 #' matrices are the input to \code{run_trans_eqtl()}: regulator GReX
-#' predictions on the left-hand side and residualised target expression on
+#' predictions on the left-hand side and raw observed target expression on
+#' the right (the de-cis residual is reconstructed on the fly downstream) --
+#' GReX
 #' the right-hand side.
 #'
 #' @param grex_dir   Character. Directory containing per-gene RDS files
@@ -47,7 +53,17 @@
 #'   \code{grex_dir}.
 #' @param contexts   Character vector or \code{NULL}. Subset of contexts
 #'   (column names in the per-gene matrices). \code{NULL} (default) uses all
-#'   contexts found in the first gene file.
+#'   contexts found in the records (union over "ok" records).
+#' @param min_obs_per_ctx Integer. Target-eligibility threshold: a gene is an
+#'   admissible trans TARGET in a context only if it has at least this many
+#'   observed expression values there. The decision is made here, once, and
+#'   written to an \code{expressed_targets.rds} file (per-context eligible
+#'   gene sets + the threshold) that every scanner
+#'   (\code{run_trans_eqtl()}, \code{run_trans_eqtl_snp()},
+#'   \code{run_trans_lmm()}) obeys for both its scan and its FDR family.
+#'   Default \code{30L} -- below ~30 observations neither the LMM's
+#'   \eqn{\Sigma_E} plug-in nor an OLS estimate is reliable. Eligibility does
+#'   not affect a gene's REGULATOR role (GReX is genotype-predicted and dense).
 #' @param verbose    Logical. Print progress messages. Default \code{TRUE}.
 #'
 #' @return Invisibly returns a named list:
@@ -58,12 +74,16 @@
 #'   \item{method}{Character vector of methods assembled.}
 #'   \item{output_dir}{The output directory path.}
 #' }
+#' Besides the per-context matrices, an \code{expressed_targets.rds} file
+#' is written to \code{output_dir}: the per-context eligible-target sets (see
+#' \code{min_obs_per_ctx}) that the trans scanners use for their scans and
+#' FDR families.
 #'
 #' @examples
 #' \dontrun{
 #' assemble_grex_matrices(
-#'   grex_dir   = "/u/scratch/b/bballiu/crocotel_gtex/grex",
-#'   output_dir = "/u/scratch/b/bballiu/crocotel_gtex/grex_matrices",
+#'   grex_dir   = "/path/to/project/grex",
+#'   output_dir = "/path/to/project/grex_matrices",
 #'   method     = c("crocotel", "cbc")
 #' )
 #' }
@@ -75,6 +95,7 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
                                     contexts  = NULL,
                                     grex_list = NULL,
                                     expr_dir  = NULL,
+                                    min_obs_per_ctx = 30L,
                                     verbose   = TRUE) {
 
   # ------------------------------------------------------------------
@@ -139,27 +160,42 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   }
 
   # ------------------------------------------------------------------
-  # 2. Discover individual IDs and context names from the first "ok" record.
+  # 2. Discover individual IDs and context names as the UNION over ALL
+  #    "ok" records. Only ok records carry Z matrices, so only they can
+  #    define the frame; genes legitimately differ in their individual
+  #    sets (per-gene all-NA-expression individuals are dropped at fit
+  #    time), so the frame must be the union -- anchoring it to any single
+  #    record would silently drop the others' individuals. This pre-scan
+  #    reads each record once more than strictly necessary; assemble runs
+  #    once per analysis, so correctness wins over the extra read.
   # ------------------------------------------------------------------
-  first <- NULL
+  ind_ids <- character(0)
+  ctx_names <- character(0)
+  n_ok <- 0L
+  first_roster <- NULL
+  roster_mismatch <- FALSE
   for (i in seq_len(n_genes)) {
     candidate <- get_record(i)
-    if (!identical(candidate$status, "no_model")) {
-      first <- candidate
-      break
-    }
+    if (!identical(candidate$status, "ok")) next
+    Z <- candidate$Z_grex_crocotel %||% candidate$Z_grex_cbc
+    if (is.null(Z)) next
+    n_ok <- n_ok + 1L
+    if (is.null(first_roster)) first_roster <- rownames(Z)
+    else if (!setequal(first_roster, rownames(Z))) roster_mismatch <- TRUE
+    ind_ids   <- union(ind_ids,   rownames(Z))
+    ctx_names <- union(ctx_names, colnames(Z))
   }
-  if (is.null(first))
-    stop("All gene records are 'no_model' - nothing to assemble.")
-
-  ind_ids <- rownames(first$Z_grex_crocotel %||% first$Z_grex_cbc)
-  if (is.null(ind_ids))
-    stop("Cannot determine individual IDs from gene files. ",
-         "Check that ok files contain Z_grex_crocotel or Z_grex_cbc.")
-
-  ctx_names <- colnames(first$Z_grex_crocotel %||% first$Z_grex_cbc)
-  if (is.null(ctx_names))
-    stop("Cannot determine context names from gene files.")
+  if (n_ok == 0L)
+    stop("No 'ok' gene records found - nothing to assemble. ",
+         "(no_model / no_input records carry no GReX matrices.)")
+  if (length(ind_ids) == 0L || length(ctx_names) == 0L)
+    stop("Cannot determine individual/context IDs: the ok records' ",
+         "Z_grex matrices carry no dimnames.")
+  if (roster_mismatch)
+    warning("Gene records differ in their individual sets; matrices are ",
+            "union-padded (", length(ind_ids), " individuals total; a gene's ",
+            "absent individuals are NA in its rows). No individuals were ",
+            "dropped.")
 
   if (!is.null(contexts)) {
     missing_ctx <- setdiff(contexts, ctx_names)
@@ -225,6 +261,7 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   # ------------------------------------------------------------------
   # 4. Fill matrices gene by gene (single pass over files)
   # ------------------------------------------------------------------
+  n_expr_hits <- 0L   # genes whose expr_dir file exists (guard below)
   for (i in seq_len(n_genes)) {
 
     if (verbose && i %% 500 == 0)
@@ -233,8 +270,16 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     g <- get_record(i)
     gid <- all_gene_ids[i]
 
-    # Skip lightweight "no_model" records (no Z_grex matrices to read)
-    if (identical(g$status, "no_model")) next
+    # Roles decouple by design:
+    #   * GReX (regulator side): only "ok" records carry Z matrices.
+    #   * Raw expression (TARGET side): filled for EVERY gene whose
+    #     expression file exists, regardless of fit status -- a target
+    #     needs observed expression, not a GReX. (A pre-2026-08-21 version
+    #     skipped no_model genes before this fill, silently deleting them
+    #     from the trans target universe while keeping no_input genes.)
+    #   * QC: filled from ANY record carrying pvals -- ok AND no_model
+    #     (the fit ran; "tested, not significant" is real information).
+    #     no_input records have pvals = NULL and are skipped naturally.
 
     # helper: fill one context matrix row-by-row, handling individual mismatch
     fill_row <- function(mat_list, src_mat) {
@@ -248,13 +293,20 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
       mat_list
     }
 
-    if (run_crocotel) grex_crocotel <- fill_row(grex_crocotel, g$Z_grex_crocotel)
-    if (run_cbc)      grex_cbc      <- fill_row(grex_cbc,      g$Z_grex_cbc)
+    if (identical(g$status, "ok")) {
+      if (run_crocotel)
+        grex_crocotel <- fill_row(grex_crocotel, g$Z_grex_crocotel)
+      if (run_cbc)
+        grex_cbc      <- fill_row(grex_cbc,      g$Z_grex_cbc)
+    }
 
     # Raw expression from expr_dir (one file per gene, individuals x contexts)
     # into the method-agnostic per-context expr matrices.
     ef <- file.path(expr_dir, paste0(gid, ".rds"))
-    if (file.exists(ef)) expr_ctx <- fill_row(expr_ctx, readRDS(ef))
+    if (file.exists(ef)) {
+      expr_ctx    <- fill_row(expr_ctx, readRDS(ef))
+      n_expr_hits <- n_expr_hits + 1L
+    }
 
     # QC fill: pull per-context p-values / r2 by context NAME (robust to
     # per-gene context ordering). getv returns NA if the vector is absent or
@@ -274,6 +326,20 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     }
   }
 
+  # A wrong expr_dir must fail HERE, not as empty all-NA matrices that
+  # surface far downstream as "No eligible targets" skips (and an empty
+  # eligibility file). Zero hits = the path is wrong; majority-missing is
+  # legitimate for subset assemblies but deserves a loud count.
+  if (n_expr_hits == 0L)
+    stop("expr_dir contains an expression file for NONE of the ", n_genes,
+         " gene(s) (expected <gene_id>.rds): ", expr_dir,
+         " -- check the path.")
+  if (n_expr_hits < n_genes / 2)
+    warning(sprintf(paste0(
+      "expr_dir has expression files for only %d / %d genes; the rest get ",
+      "all-NA expression rows (never eligible as targets). Check expr_dir ",
+      "if this is unexpected: %s"), n_expr_hits, n_genes, expr_dir))
+
   # ------------------------------------------------------------------
   # 5. Save per-context matrices
   # ------------------------------------------------------------------
@@ -292,6 +358,21 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   save_ctx(qc_crocotel,   "qc_crocotel")
   save_ctx(qc_cbc,        "qc_cbc")
   save_ctx(expr_ctx,      "expr")     # canonical raw per-context expression
+
+  # ------------------------------------------------------------------
+  # 6. Target eligibility, decided HERE (once, for every method): per
+  #    context, the genes with >= min_obs_per_ctx observed expression
+  #    values. Written as the expressed_targets.rds sidecar that all
+  #    scanners obey for their scan + FDR family (.get_eligible_targets).
+  # ------------------------------------------------------------------
+  eligible <- lapply(expr_ctx, function(M)
+    rownames(M)[.eligible_targets(M, min_obs_per_ctx)])
+  if (verbose)
+    for (ctx in ctx_names)
+      message(sprintf(
+        "  [%s] eligible targets (>= %d observed): %d/%d genes.",
+        ctx, as.integer(min_obs_per_ctx), length(eligible[[ctx]]), n_genes))
+  .write_eligible_sidecar(output_dir, eligible, min_obs_per_ctx)
 
   if (verbose) message("Done. ", n_ctx, " context(s) written.")
 

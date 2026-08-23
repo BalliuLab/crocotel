@@ -41,14 +41,20 @@ Named list:
   \item{sigma2_ctx}{Numeric vector (n_contexts). Per-context residual
     variance; constant (= \code{sigma2}) under \code{"cs"}, per-context
     under \code{"het_cs"}. NA for dropped contexts.}
-  \item{rho}{Numeric scalar.}
+  \item{rho}{Numeric scalar. When NO individual has two or more
+    observed contexts, \eqn{\rho} is unidentifiable; the reported value
+    is then arbitrary (\code{"cs"}) or 0 (\code{"het_cs"}) but UNUSED:
+    single-context blocks invert as \eqn{1/\sigma^2} regardless.}
   \item{form}{Character. The fitted covariance form (\code{"cs"} or
     \code{"het_cs"}).}
   \item{sigma_E_inv}{Function. Takes an integer vector \code{O} of
     observed-context indices and returns the |O| x |O| matrix
-    \eqn{\Sigma_E[O,O]^{-1}}. Cheap (analytic for CS).}
+    \eqn{\Sigma_E[O,O]^{-1}}. Cheap (analytic for CS). \code{O} must
+    exclude \code{dropped_contexts}: for a dropped index \code{"cs"}
+    silently returns finite values while \code{"het_cs"} returns NAs.}
   \item{loglik}{Numeric scalar. Profile log-likelihood at the
-    converged \code{(sigma2, rho)} (constant terms dropped).}
+    converged \code{(sigma2, rho)} (constant terms dropped); \code{NA}
+    under \code{form = "het_cs"} (method-of-moments fit, no likelihood).}
   \item{n_individuals}{Integer.}
   \item{n_contexts}{Integer.}
   \item{dropped_contexts}{Integer vector of context indices excluded
@@ -61,3 +67,4 @@ after subtracting the target's own cis-GReX), allowing missing
 entries.  \code{form} selects compound symmetry (\code{"cs"}) or
 heterogeneous compound symmetry (\code{"het_cs"}).
 }
+\keyword{internal}

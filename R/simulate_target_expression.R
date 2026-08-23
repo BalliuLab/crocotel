@@ -16,7 +16,9 @@
 #       sparse context-varying effect sizes.
 #   (3) Correlated residual noise across contexts.
 #
-# Variance budget (total = 1 by construction):
+# Variance budget (total = 1 by construction IN TRANS-ACTIVE contexts;
+# inactive contexts have variance 1 - h2_Y, and the realized trans slice is
+# alpha^2 with mean h2_Y -- see the per-target comment below):
 #   h2_sh_tgt + h2_sp_tgt  : target cis heritability (shared + specific)
 #   h2_Y                   : trans heritability from the paired regulator
 #   sigma2_Y               = 1 - h2_sh_tgt - h2_sp_tgt - h2_Y
@@ -43,11 +45,14 @@
 #'   target. Default 0.1.
 #' @param h2_Y           Numeric in (0,1). Trans heritability of target from
 #'   the paired regulator GReX. Default 0.2.
-#' @param pi_Y           Numeric in (0,1]. Proportion of contexts in which
-#'   each regulator-target pair is active. Default 0.2. Active contexts are
+#' @param n_active_contexts Integer >= 1. Number of contexts in which each
+#'   regulator-target pair is active (a COUNT, not a fraction: a fractional
+#'   spec silently floored to zero active contexts at small
+#'   \code{n_contexts}). Must not exceed \code{n_contexts}. Default
+#'   \code{1L}. Active contexts are
 #'   drawn from the subset of contexts where the paired regulator has nonzero
 #'   GReX variance, so every active context carries a planted trans signal.
-#'   If that subset has fewer than \code{floor(pi_Y * n_contexts)} contexts,
+#'   If that subset has fewer than \code{n_active_contexts} contexts,
 #'   the active count is capped and a warning is emitted.
 #' @param rho_E_tgt      Numeric. Intra-individual residual correlation of
 #'   target expression across contexts. Default 0.4.
@@ -57,7 +62,11 @@
 #'   null at the eTarget level. Default 1.0 (all targets are true). Use < 1
 #'   to plant null targets for testing eTarget-level FDR control (e.g. via
 #'   treeQTL); set to 0 for an all-null run.
-#' @param seed           Integer or NULL. Random seed.
+#' @param seed           Integer or NULL. Random seed. \code{NULL} (default) leaves the RNG
+#'   untouched: each call draws fresh randomness, so replicate loops give
+#'   independent datasets. Pass a seed for a reproducible dataset -- and
+#'   give each replicate its OWN seed (a fixed shared seed would make
+#'   every replicate identical).
 #'
 #' @return A named list:
 #' \describe{
@@ -88,7 +97,7 @@ simulate_target_expression <- function(GReX_std_reg,
                                        h2_sh_tgt         = 0.3,
                                        h2_sp_tgt         = 0.1,
                                        h2_Y              = 0.2,
-                                       pi_Y              = 0.2,
+                                       n_active_contexts = 1L,
                                        rho_E_tgt         = 0.4,
                                        frac_true_targets = 1.0,
                                        seed              = NULL) {
@@ -133,8 +142,12 @@ simulate_target_expression <- function(GReX_std_reg,
       "h2_sh_tgt (%.3f) + h2_sp_tgt (%.3f) + h2_Y (%.3f) = %.3f >= 1.",
       h2_sh_tgt, h2_sp_tgt, h2_Y,
       h2_sh_tgt + h2_sp_tgt + h2_Y))
-  if (pi_Y <= 0 || pi_Y > 1)
-    stop("pi_Y must be in (0, 1].")
+  if (length(n_active_contexts) != 1L || is.na(n_active_contexts) ||
+      n_active_contexts < 1 ||
+      n_active_contexts != as.integer(n_active_contexts))
+    stop("n_active_contexts must be a single positive integer (>= 1); got: ",
+         paste(n_active_contexts, collapse = ", "))
+  n_active_contexts <- as.integer(n_active_contexts)
   if (rho_E_tgt <= -1 / (n_C - 1) || rho_E_tgt >= 1)
     stop(sprintf("rho_E_tgt = %.3f invalid for n_contexts = %d.", rho_E_tgt, n_C))
   if (frac_true_targets < 0 || frac_true_targets > 1)
@@ -143,12 +156,12 @@ simulate_target_expression <- function(GReX_std_reg,
   if (!is.null(seed)) set.seed(seed)
 
   sigma2_Y <- 1 - h2_sh_tgt - h2_sp_tgt - h2_Y
-  n_active <- as.integer(floor(pi_Y * n_C))
-  if (n_active < 1L)
+  if (n_active_contexts > n_C)
     stop(sprintf(
-      "floor(pi_Y * n_contexts) = floor(%.3g * %d) = 0; no active contexts. ",
-      pi_Y, n_C),
-      "Raise pi_Y or n_contexts.")
+      "n_active_contexts = %d exceeds n_contexts = %d: a trans signal ",
+      n_active_contexts, n_C),
+      "cannot be active in more contexts than exist.")
+  n_active <- n_active_contexts
   sd_alpha <- sqrt(h2_Y)
 
   # Decide which targets carry a true trans effect (the rest are null --
@@ -203,9 +216,10 @@ simulate_target_expression <- function(GReX_std_reg,
 
   if (n_capped > 0L)
     warning(sprintf(
-      paste0("Trans-active contexts capped below floor(pi_Y * n_C) = %d for ",
-             "%d / %d targets (smallest heritable set: %d contexts). Lower pi_Y, ",
-             "raise pi_C_reg, or use an architecture with more heritable contexts."),
+      paste0("Trans-active contexts capped below n_active_contexts = %d for ",
+             "%d / %d targets (smallest heritable set: %d contexts). Lower ",
+             "n_active_contexts, raise pi_C_reg, or use an architecture with ",
+             "more heritable contexts."),
       n_active, n_capped, n_T, smallest_H))
 
   # ------------------------------------------------------------------
@@ -246,7 +260,7 @@ simulate_target_expression <- function(GReX_std_reg,
     h2_sh_tgt         = h2_sh_tgt,
     h2_sp_tgt         = h2_sp_tgt,
     h2_Y              = h2_Y,
-    pi_Y              = pi_Y,
+    n_active_contexts = n_active_contexts,
     rho_E_tgt         = rho_E_tgt,
     frac_true_targets = frac_true_targets,
     n_active_per_tgt  = n_active,

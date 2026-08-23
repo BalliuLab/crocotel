@@ -19,3 +19,4 @@ Sigma_cc = 1, Sigma_cc' = rho (c != c').
 Returns the lower-triangular Cholesky factor L such that Sigma = L L^T.
 Valid for rho in (-1/(n_contexts - 1), 1).
 }
+\keyword{internal}

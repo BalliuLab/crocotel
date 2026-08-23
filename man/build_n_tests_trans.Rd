@@ -28,7 +28,10 @@ regulators. \code{"regulator"} flips it.}
 }
 \value{
 A \code{data.table} with columns \code{gene, context, n_pairs}.
-  Number of rows = number of outer-level genes x number of contexts.
+  Number of rows = number of outer-level genes x number of contexts. The
+  result carries \code{attr(, "hierarchy")} recording its orientation;
+  \code{run_fdr()} and \code{apply_crossmap_post()} validate this stamp,
+  so build family tables with this function rather than by hand.
 }
 \description{
 For each (gene, context) cell, computes the number of (snp, gene) pairs

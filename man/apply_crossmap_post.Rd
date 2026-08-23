@@ -9,7 +9,7 @@ apply_crossmap_post(
   method,
   regulator = c("gene", "variant"),
   cross_map_file = NULL,
-  gene_locations = NULL,
+  gene_locations,
   cis_window = 1e+06,
   cross_map_min_strength = 0,
   direct_min_strength = 0,
@@ -19,7 +19,8 @@ apply_crossmap_post(
 }
 \arguments{
 \item{output_dir}{Character. Directory holding the method's
-\code{trans_<method>_<ctx>.tsv}, \code{n_tests_<method>.rds}, and
+\code{trans_<method>_<ctx>.tsv}, the orientation-named
+\code{n_tests_<hierarchy>_<method>.rds} family-count file(s), and
 \code{n_tests_meta_<method>.rds}.}
 
 \item{method}{Character. File-name token, e.g. \code{"crocotel"},
@@ -31,11 +32,15 @@ series of a \code{snp_method = "both"} run).}
 
 \item{cross_map_file}{Cross-mappability table; ON by default (\code{NULL} =
 off with a \code{warning()}; \code{NA} = acknowledged off; a path enables).
-See \code{resolve_cross_map}.}
+Either headerless with exactly three columns (g1, g2, strength) -- the
+published Saha & Battle 2018 format -- or headered with columns named
+\code{g1}, \code{g2}, \code{strength} (any order, extra columns
+ignored). Malformed files are rejected with an explanatory error.}
 
 \item{gene_locations}{Data frame or path to TSV with columns
-\code{gene_id, chr, start, end}. Required; also supplies the regulator
-cis-window interval anchoring the gene proximity filter.}
+\code{gene_id, chr, start, end}. \strong{Required} (no default); also
+supplies the regulator cis-window interval anchoring the gene proximity
+filter.}
 
 \item{cis_window}{Integer. Regulator cis-window (bp): the SNP->local-gene
 lookup for \code{regulator = "variant"} AND the interval anchor (gene body
@@ -55,9 +60,11 @@ editable (robustness is reported across 100/200/500).}
 \item{verbose}{Logical. Default \code{TRUE}.}
 }
 \value{
-Invisibly the adjusted \code{n_tests} \code{data.table} (also written
-  back to \code{n_tests_<method>.rds}). No-op returning \code{NULL} when the
-  filter is off (\code{cross_map_file} \code{NULL}/\code{NA}).
+Invisibly the adjusted \code{n_tests} \code{data.table} (also
+  written back to its \code{n_tests_<hierarchy>_<method>.rds}); when both
+  orientations are present, a named list of the two adjusted tables. No-op
+  returning \code{NULL} when the filter is off (\code{cross_map_file}
+  \code{NULL}/\code{NA}).
 }
 \description{
 Method-agnostic post-scan step. GReX methods (crocotel/cbc/lmm,
@@ -69,7 +76,8 @@ signal through LD; strength >= \code{proximity_min_strength}, anchored on the
 regulator's cis-window interval). The SNP-based method
 (\code{regulator = "variant"}) uses the GTEx v8 SNP->local-gene(+-
 \code{cis_window}) proximity rule (>= \code{proximity_min_strength}) for BOTH
-genome_wide and lead (for lead the meta sidecar supplies each gene's lead-SNP
+genome_wide and lead (for lead the scan metadata file supplies each gene's
+lead-SNP
 position). Cross-mappable (regulator, target) pairs are dropped from the
 output and subtracted from the FDR family, keeping treeQTL consistent.
 }

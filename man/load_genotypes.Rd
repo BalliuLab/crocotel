@@ -21,7 +21,9 @@ load_genotypes(
 (without .bed/.bim/.fam extension), e.g. \code{"data/ukbb_chr1"}.}
 
 \item{chrom}{Character or Integer. Chromosome of the cis-window,
-e.g. \code{"1"} or \code{1}.}
+e.g. \code{"1"} or \code{1}. A leading \code{"chr"} prefix (either
+here or in the genotype fileset) is ignored, so \code{"chr1"} and
+\code{"1"} are interchangeable.}
 
 \item{start_pos}{Integer. Start position of the cis-window (bp).}
 
@@ -41,9 +43,14 @@ many SNPs after MAF filtering. Useful for matching P across genes.}
 \code{n_snps} is not NULL).}
 }
 \value{
-Numeric matrix (n_individuals x n_snps) of raw dosages (0/1/2 for
+\code{NULL} (with a warning) when the window holds no SNPs, the
+  chromosome is absent from the fileset, or nothing passes the MAF filter
+  -- callers must handle it. Otherwise a
+  numeric matrix (n_individuals x n_snps) of raw dosages (0/1/2 for
   hardcalls, fractional 0..2 for imputed)
-  (with mean-imputed missing values), with attributes:
+  (with mean-imputed missing values). Columns are named by marker ID, so
+  downstream artifacts (e.g. the elastic-net effects' SNP support) carry
+  real variant names. Attributes:
   \describe{
     \item{maf}{Numeric vector of per-SNP MAFs.}
     \item{maf_range}{Numeric vector c(maf_min, maf_max).}

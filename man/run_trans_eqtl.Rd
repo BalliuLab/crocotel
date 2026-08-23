@@ -16,6 +16,10 @@ run_trans_eqtl(
   grex_gate_pval = c("full", "shared", "specific"),
   grex_gate_q = 0.05,
   grex_gate_r2_min = 0,
+  grex_gate_mode = c("pval", "r2", "both"),
+  min_obs_per_ctx = 30L,
+  min_reg_obs = 5L,
+  hierarchy = c("target", "regulator"),
   verbose = TRUE
 )
 }
@@ -49,7 +53,7 @@ survive hierarchical FDR is retained, tight enough to keep files
 manageable. Set to \code{1} to retain all pairs (large files; useful
 for benchmarking).}
 
-\item{grex_gate}{Logical. B12 regulator GReX-quality gate. When
+\item{grex_gate}{Logical. Regulator GReX-quality gate. When
 \code{TRUE} (default), a gene is admitted as a REGULATOR in a context only
 if its GReX is significantly predictive there (within-context BH on the
 assembled p-values, \code{q < grex_gate_q}). Applied before the scan, so
@@ -65,14 +69,42 @@ for \code{method="cbc"} (which gates on its single \code{p_cbc}).}
 gate. Default \code{0.05}.}
 
 \item{grex_gate_r2_min}{Numeric. Optional adjusted-R2 floor applied on top
-  of significance (significance is not usefulness at large n). Default
-  \code{0} = significance-only (no R2 filtering).
+of significance (significance is not usefulness at large n). Default
+\code{0} = significance-only (no R2 filtering).}
 
-  Cross-mappability filtering is DECOUPLED (Task B): this function writes raw
-  output + \code{n_tests_<method>.rds} + an \code{n_tests_meta_<method>.rds}
-  sidecar; run \code{apply_crossmap_post(regulator = "gene", ...)} afterward to
-  filter. The upstream low-mappability gene filter is
-  \code{filter_mappable_genes} (applied to the gene universe before fitting).}
+\item{grex_gate_mode}{Character. Gate criterion: \code{"pval"} (default,
+the historical behavior) admits regulators with within-context BH
+q < \code{grex_gate_q} (plus the R2 floor when
+\code{grex_gate_r2_min > 0}); \code{"r2"} admits on the R2 floor ALONE
+with no significance test (the GBAT-paper criterion -- note that
+\code{grex_gate_q = 1} can NOT emulate this: BH returns exactly q = 1
+for some genes and \code{q < 1} silently drops them); \code{"both"}
+requires both criteria. One shared implementation serves
+\code{run_trans_eqtl()} and \code{run_trans_lmm()} identically.}
+
+\item{min_obs_per_ctx}{Integer. Target-eligibility threshold: a gene is a
+TARGET in a context only with at least this many observed expression
+values there (default \code{30L}, shared by all methods). The decision
+is made once by \code{assemble_grex_matrices()} and read from its
+\code{expressed_targets.rds} file; this argument is used to compute
+the identical rule on the fly only when \code{matrix_dir} lacks that
+file (hand-built directories), and a conflict with its recorded
+threshold is an error.}
+
+\item{min_reg_obs}{Integer. A gene is a REGULATOR in a context only
+with at least this many observed GReX values there (plus the gate and a
+positive-variance requirement); the shared rule with
+\code{run_trans_lmm()}. Default \code{5L}.}
+
+\item{hierarchy}{\code{"target"} (default) or \code{"regulator"}:
+orientation of the FDR family-count file this run writes
+(\code{n_tests_<hierarchy>_<method>.rds}, one orientation per run).
+\code{"target"}: one family per (target, context), counting cross-chr
+regulators -- L1 discoveries are eTargets. \code{"regulator"}: one
+family per (regulator, context), counting cross-chr targets -- L1
+discoveries are eRegulators. The scan TSVs are identical either way;
+\code{write_n_tests()} can regenerate the other orientation later
+without re-scanning.}
 
 \item{verbose}{Logical. Print progress messages. Default
 \code{TRUE}.}
@@ -82,9 +114,10 @@ Invisibly returns the character vector of contexts processed.
   Per-context output is written by MatrixEQTL's native writer to
   \code{output_dir/trans_<method>_<context>.tsv} - a tab-separated file
   with MatrixEQTL's standard columns
-  (\code{SNP, gene, beta, t-stat, p-value, FDR}). This format is
-  directly consumable by treeQTL's \code{get_eGenes_*} family in
-  Phase 4, with no renaming required.
+  (\code{SNP, gene, beta, t-stat, p-value, FDR}), consumed by
+  \code{apply_crossmap_post()} and then \code{run_fdr()}. Use a fresh
+  \code{output_dir} per run: files from a previous run with a different
+  context set are not cleared.
 }
 \description{
 Loads the per-context GReX and residualised expression matrices produced
@@ -97,13 +130,20 @@ Default response is the residualised target expression (cis component
 removed). Set \code{target_response = "raw"} to use observed expression
 instead - useful for sensitivity analyses or when the target's GReX is
 poorly estimated.
+
+
+  Cross-mappability filtering is DECOUPLED: this function writes raw
+  output + \code{n_tests_<method>.rds} + an \code{n_tests_meta_<method>.rds}
+  file; run \code{apply_crossmap_post(regulator = "gene", ...)} afterward to
+  filter. The upstream low-mappability gene filter is
+  \code{filter_mappable_genes} (applied to the gene universe before fitting).
 }
 \examples{
 \dontrun{
 run_trans_eqtl(
-  matrix_dir     = "/u/scratch/b/bballiu/crocotel_gtex/grex_matrices",
-  gene_locations = "/u/scratch/b/bballiu/crocotel_gtex/input/gene_locations.txt",
-  output_dir     = "/u/scratch/b/bballiu/crocotel_gtex/trans_eqtl",
+  matrix_dir     = "/path/to/project/grex_matrices",
+  gene_locations = "/path/to/project/input/gene_locations.txt",
+  output_dir     = "/path/to/project/trans_eqtl",
   method         = "crocotel"
 )
 }

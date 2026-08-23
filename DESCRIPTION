@@ -12,7 +12,11 @@ Description: Builds cross-validated genetically regulated expression (GReX)
     simulation utilities, memory-mapped (bigSNP) genotype ingest, and
     MatrixEQTL-based association scans.
 License: MIT + file LICENSE
+URL: https://github.com/BalliuLab/crocotel
+BugReports: https://github.com/BalliuLab/crocotel/issues
 Encoding: UTF-8
+Depends:
+    R (>= 4.1)
 Imports:
     MatrixEQTL,
     bigsnpr,

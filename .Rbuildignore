@@ -2,4 +2,4 @@
 ^install_deps\.sh$
 ^LICENSE\.md$
 ^\.git$
-^\.DS_Store$
+(^|/)\.DS_Store$

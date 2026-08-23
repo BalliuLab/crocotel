@@ -14,6 +14,6 @@ fi
 # 2. Install R package deps (bigsnpr pulls bigstatsr; data.table listed
 #    explicitly since the sweep scripts use it directly).
 conda install -n crocotel -c conda-forge -y \
-  r-bigsnpr r-matrixeqtl r-glmnet r-data.table
+  r-bigsnpr r-matrixeqtl r-glmnet r-data.table r-testthat
 
 echo "Done. Activate with: conda activate crocotel"

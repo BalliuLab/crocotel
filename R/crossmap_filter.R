@@ -29,10 +29,10 @@ load_cross_map <- function(cross_map_file, universe, min_strength = 0,
                            verbose = TRUE) {
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required for the cross-mappability filter.")
-  if (!file.exists(cross_map_file))
-    stop("cross_map_file not found: ", cross_map_file)
-  cm <- data.table::fread(cross_map_file, header = FALSE,
-                          col.names = c("g1", "g2", "strength"))
+  # Headerless canonical (Saha & Battle) OR headered (g1, g2, strength) file;
+  # strict format + numeric-score validation (see read_score_table.R).
+  cm <- .read_score_table(cross_map_file, c("g1", "g2", "strength"),
+                          "cross_map_file")
   uni <- unique(.cm_strip_ver(universe))
   cm[, `:=`(g1 = .cm_strip_ver(g1), g2 = .cm_strip_ver(g2))]
   cm <- cm[strength >= min_strength & g1 %in% uni & g2 %in% uni]
@@ -151,42 +151,48 @@ crossmap_excluded_pairs_gene_proximity <- function(cm, reg_ids, tgt_ids,
   unique(hit[!is.na(tchr) & rchr != tchr, .(reg, tgt)])  # cross-chr reg vs tgt
 }
 
-# Shared apply step given a precomputed excluded-pairs table (columns reg, tgt):
-# subtract per-target excluded regulators from the family count (n_tests_dt:
-# gene, context, n_pairs) and drop them from the trans output tsv (columns
-# SNP=regulator, gene=target). Returns the adjusted n_tests_dt. Used by both the
-# gene-level (lead) and variant-level (genome_wide) SNP-scan paths.
-.apply_crossmap_excl <- function(out_file, n_tests_dt, excl) {
-  if (nrow(excl) == 0L) return(n_tests_dt)
-
-  # (b) family count: subtract per-target excluded regulators
-  nsub <- excl[, .(sub = .N), by = .(gene = tgt)]
-  nt <- merge(n_tests_dt, nsub, by = "gene", all.x = TRUE)
-  nt[is.na(sub), sub := 0L]
-  nt[, n_pairs := pmax(n_pairs - sub, 0L)][, sub := NULL]
-
-  # (a) output: drop excluded (regulator, target) rows
+# Drop a precomputed excluded-pairs table (columns reg, tgt) from a trans
+# output tsv (columns SNP=regulator, gene=target). Idempotent; done ONCE per
+# context regardless of how many family sidecars exist for the run.
+.crossmap_filter_tsv <- function(out_file, excl) {
+  if (nrow(excl) == 0L) return(invisible(NULL))
   if (file.exists(out_file) && file.info(out_file)$size > 0) {
     o <- data.table::fread(out_file)
     if (nrow(o) && all(c("SNP", "gene") %in% names(o)))
       o <- o[!excl, on = c("SNP" = "reg", "gene" = "tgt")]
     data.table::fwrite(o, out_file, sep = "\t")
   }
+  invisible(NULL)
+}
+
+# Subtract a precomputed excluded-pairs table from one context's family counts,
+# in the family's own orientation (its "hierarchy" stamp): a target-oriented
+# family loses excluded REGULATORS per target; a regulator-oriented family
+# loses excluded TARGETS per regulator. Same exclusion set either way -- the
+# two orientations of one run can never drift apart.
+.crossmap_decrement <- function(n_tests_dt, excl, orientation) {
+  if (nrow(excl) == 0L) return(n_tests_dt)
+  nsub <- if (orientation == "target")
+    excl[, .(sub = .N), by = .(gene = tgt)]
+  else
+    excl[, .(sub = .N), by = .(gene = reg)]
+  nt <- merge(n_tests_dt, nsub, by = "gene", all.x = TRUE)
+  nt[is.na(sub), sub := 0L]
+  nt[, n_pairs := pmax(n_pairs - sub, 0L)][, sub := NULL]
   nt[]
 }
 
-# Apply the filter for one context (GENE regulator = crocotel GReX methods and
+# Exclusion set for one context (GENE regulator = crocotel GReX methods and
 # the SNP `lead` mode, whose regulator is the gene its lead cis-SNP belongs to).
 # Gene methods get BOTH the direct rule (mutually cross-mappable reg<->tgt, >
 # direct_min_strength) AND the proximity/LD-halo rule (partner-of-target within
 # the regulator cis-window, >= proximity_min_strength); the two exclusion sets
 # are unioned. gene_locations must be supplied to enable the proximity filter;
 # if NULL, only the direct filter is applied (backward-compatible).
-apply_crossmap_filter <- function(out_file, n_tests_dt, cm,
-                                  reg_ids, tgt_ids, chr_of,
-                                  gene_locations = NULL, cis_window = 1e6,
-                                  direct_min_strength = 0,
-                                  proximity_min_strength = 100) {
+crossmap_excl_gene <- function(cm, reg_ids, tgt_ids, chr_of,
+                               gene_locations = NULL, cis_window = 1e6,
+                               direct_min_strength = 0,
+                               proximity_min_strength = 100) {
   excl <- crossmap_excluded_pairs(cm, reg_ids, tgt_ids, chr_of,
                                   min_strength = direct_min_strength)
   if (!is.null(gene_locations)) {
@@ -195,7 +201,7 @@ apply_crossmap_filter <- function(out_file, n_tests_dt, cm,
       window = 1e6, chr_of = chr_of, min_strength = proximity_min_strength)
     excl <- unique(data.table::rbindlist(list(excl, excl_prox)))
   }
-  .apply_crossmap_excl(out_file, n_tests_dt, excl)
+  excl
 }
 
 # ------------------------------------------------------------------------
@@ -252,15 +258,13 @@ crossmap_excluded_pairs_snp <- function(cm, snpspos, tgt_ids, gene_locations,
   unique(excl[!is.na(tchr) & rchr != tchr, .(reg, tgt)])
 }
 
-# Apply the variant-regulator cross-map filter for one context (genome_wide).
-apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
-                                      tgt_ids, gene_locations,
-                                      window = 1e6, chr_of,
-                                      min_strength = 100) {
-  excl <- crossmap_excluded_pairs_snp(cm, snpspos, tgt_ids, gene_locations,
-                                      window = window, chr_of = chr_of,
-                                      min_strength = min_strength)
-  .apply_crossmap_excl(out_file, n_tests_dt, excl)
+# Exclusion set for one context, variant regulators (genome_wide).
+crossmap_excl_variant <- function(cm, snpspos, tgt_ids, gene_locations,
+                                  window = 1e6, chr_of,
+                                  min_strength = 100) {
+  crossmap_excluded_pairs_snp(cm, snpspos, tgt_ids, gene_locations,
+                              window = window, chr_of = chr_of,
+                              min_strength = min_strength)
 }
 
 # ------------------------------------------------------------------------
@@ -268,10 +272,11 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 # Runs AFTER a trans method has written its raw output + n_tests, so the four
 # methods (crocotel, cbc, lmm, snp) filter identically instead of each wiring
 # the filter inline. Reads the method's per-context output tsvs, its
-# n_tests_<method>.rds, and the n_tests_meta_<method>.rds sidecar (the exact
-# snpspos each context tested), applies the cross-map exclusion, drops excluded
-# pairs from the tsvs, subtracts them from the family count, and overwrites
-# n_tests_<method>.rds.
+# orientation-named n_tests_<hierarchy>_<method>.rds family sidecar(s), and the
+# n_tests_meta_<method>.rds sidecar (the exact snpspos + eligible target IDs
+# each context tested), applies the cross-map exclusion, drops excluded pairs
+# from the tsvs, subtracts them from each family count (in its own stamped
+# orientation), and overwrites the family sidecar(s) in place.
 # ------------------------------------------------------------------------
 
 #' Apply the cross-mappability filter to a method's trans output (post-scan)
@@ -285,12 +290,14 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 #' regulator's cis-window interval). The SNP-based method
 #' (\code{regulator = "variant"}) uses the GTEx v8 SNP->local-gene(+-
 #' \code{cis_window}) proximity rule (>= \code{proximity_min_strength}) for BOTH
-#' genome_wide and lead (for lead the meta sidecar supplies each gene's lead-SNP
+#' genome_wide and lead (for lead the scan metadata file supplies each gene's
+#' lead-SNP
 #' position). Cross-mappable (regulator, target) pairs are dropped from the
 #' output and subtracted from the FDR family, keeping treeQTL consistent.
 #'
 #' @param output_dir     Character. Directory holding the method's
-#'   \code{trans_<method>_<ctx>.tsv}, \code{n_tests_<method>.rds}, and
+#'   \code{trans_<method>_<ctx>.tsv}, the orientation-named
+#'   \code{n_tests_<hierarchy>_<method>.rds} family-count file(s), and
 #'   \code{n_tests_meta_<method>.rds}.
 #' @param method         Character. File-name token, e.g. \code{"crocotel"},
 #'   \code{"cbc"}, \code{"lmm"}, \code{"snp"} (or \code{"snp_lead"} for the lead
@@ -299,7 +306,10 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 #'   \code{"variant"} (SNP method).
 #' @param cross_map_file Cross-mappability table; ON by default (\code{NULL} =
 #'   off with a \code{warning()}; \code{NA} = acknowledged off; a path enables).
-#'   See \code{resolve_cross_map}.
+#'   Either headerless with exactly three columns (g1, g2, strength) -- the
+#'   published Saha & Battle 2018 format -- or headered with columns named
+#'   \code{g1}, \code{g2}, \code{strength} (any order, extra columns
+#'   ignored). Malformed files are rejected with an explanatory error.
 #' @param cross_map_min_strength Strength floor applied at LOAD time. Default
 #'   \code{0} (keep all non-zero pairs) so each filter can threshold itself; the
 #'   direct and proximity floors below are what actually gate exclusion.
@@ -309,21 +319,24 @@ apply_crossmap_filter_snp <- function(out_file, n_tests_dt, cm, snpspos,
 #'   filter, applied to gene methods AND the SNP method. Default \code{100};
 #'   editable (robustness is reported across 100/200/500).
 #' @param gene_locations Data frame or path to TSV with columns
-#'   \code{gene_id, chr, start, end}. Required; also supplies the regulator
-#'   cis-window interval anchoring the gene proximity filter.
+#'   \code{gene_id, chr, start, end}. \strong{Required} (no default); also
+#'   supplies the regulator cis-window interval anchoring the gene proximity
+#'   filter.
 #' @param cis_window     Integer. Regulator cis-window (bp): the SNP->local-gene
 #'   lookup for \code{regulator = "variant"} AND the interval anchor (gene body
 #'   +- \code{cis_window}) for the gene proximity filter. Default \code{1e6}.
 #' @param verbose        Logical. Default \code{TRUE}.
 #'
-#' @return Invisibly the adjusted \code{n_tests} \code{data.table} (also written
-#'   back to \code{n_tests_<method>.rds}). No-op returning \code{NULL} when the
-#'   filter is off (\code{cross_map_file} \code{NULL}/\code{NA}).
+#' @return Invisibly the adjusted \code{n_tests} \code{data.table} (also
+#'   written back to its \code{n_tests_<hierarchy>_<method>.rds}); when both
+#'   orientations are present, a named list of the two adjusted tables. No-op
+#'   returning \code{NULL} when the filter is off (\code{cross_map_file}
+#'   \code{NULL}/\code{NA}).
 #' @export
 apply_crossmap_post <- function(output_dir, method,
                                 regulator = c("gene", "variant"),
                                 cross_map_file = NULL,
-                                gene_locations = NULL,
+                                gene_locations,
                                 cis_window = 1e6,
                                 cross_map_min_strength = 0,
                                 direct_min_strength = 0,
@@ -332,8 +345,9 @@ apply_crossmap_post <- function(output_dir, method,
   regulator <- match.arg(regulator)
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required.")
-  if (is.null(gene_locations))
-    stop("gene_locations is required.")
+  if (missing(gene_locations) || is.null(gene_locations))
+    stop("gene_locations is required (gene_id, chr, start, end): it anchors ",
+         "the regulator cis-window for the proximity/LD-halo filter.")
   if (is.character(gene_locations))
     gene_locations <- read.table(gene_locations, header = TRUE,
                                   stringsAsFactors = FALSE, check.names = FALSE)
@@ -346,50 +360,85 @@ apply_crossmap_post <- function(output_dir, method,
   chr_of <- stats::setNames(gene_locations$chr,
                             .cm_strip_ver(gene_locations$gene_id))
 
-  nt_file   <- file.path(output_dir, paste0("n_tests_", method, ".rds"))
+  # Family sidecars: discover whichever orientation(s) exist for the method
+  # (n_tests_target_<method>.rds and/or n_tests_regulator_<method>.rds --
+  # normally exactly one; both after write_n_tests()). Each is decremented
+  # from the SAME exclusion set, in its own stamped orientation.
+  nt_files <- Filter(file.exists, stats::setNames(
+    file.path(output_dir,
+              paste0("n_tests_", c("target", "regulator"), "_", method, ".rds")),
+    c("target", "regulator")))
   meta_file <- file.path(output_dir, paste0("n_tests_meta_", method, ".rds"))
-  if (!file.exists(nt_file))
-    stop("n_tests not found: ", nt_file)
+  if (length(nt_files) == 0L)
+    stop("No family-count file found for method '", method, "' in ", output_dir,
+         " (expected n_tests_target_", method, ".rds and/or n_tests_regulator_",
+         method, ".rds). Run the trans scanner first; to add the other ",
+         "orientation to an existing scan without re-scanning, use ",
+         "write_n_tests().")
   if (!file.exists(meta_file))
-    stop("cross-map metadata sidecar not found: ", meta_file,
-         " (the method must write n_tests_meta_<method>.rds).")
+    stop("Scan metadata file not found: ", meta_file,
+         " (the trans scanner writes n_tests_meta_<method>.rds alongside ",
+         "its output).")
 
-  nt_raw <- readRDS(nt_file)
-  # Idempotency guard: subtracting from an already-filtered family would
-  # double-count (the tsv anti-join IS idempotent, but n_pairs - sub is not).
-  if (isTRUE(attr(nt_raw, "crossmap_filtered")))
-    stop("n_tests_", method, ".rds is already cross-map filtered; ",
-         "re-run the trans scan to regenerate the raw family before filtering again.")
-  nt   <- data.table::as.data.table(nt_raw)
-  meta <- readRDS(meta_file)                         # list: ctx -> snpspos df
+  nts <- list()
+  for (h in names(nt_files)) {
+    nt_raw <- readRDS(nt_files[[h]])
+    # Idempotency guard: subtracting from an already-filtered family would
+    # double-count (the tsv anti-join IS idempotent, but n_pairs - sub is not).
+    if (isTRUE(attr(nt_raw, "crossmap_filtered")))
+      stop(basename(nt_files[[h]]), " is already cross-map filtered; ",
+           "regenerate the raw family (re-run the scan, or write_n_tests()) ",
+           "before filtering again.")
+    if (!identical(attr(nt_raw, "hierarchy"), h))
+      stop(basename(nt_files[[h]]), " lacks a matching hierarchy stamp ",
+           "(expected \"", h, "\"); build family tables with ",
+           "build_n_tests_trans()/write_n_tests(), not by hand.")
+    nts[[h]] <- data.table::as.data.table(nt_raw)
+  }
+  meta <- readRDS(meta_file)             # list: ctx -> list(snpspos, tgt_ids)
 
-  out <- list()
+  out <- stats::setNames(vector("list", length(nts)), names(nts))
   for (ctx in names(meta)) {
     out_file <- file.path(output_dir, paste0("trans_", method, "_", ctx, ".tsv"))
-    nt_ctx   <- nt[nt$context == ctx, ]
-    snpspos  <- meta[[ctx]]
-    tgt_ids  <- unique(nt_ctx$gene)
-    if (regulator == "gene") {
-      out[[ctx]] <- apply_crossmap_filter(out_file, nt_ctx, cm,
-                                          snpspos$snp, tgt_ids, chr_of,
-                                          gene_locations = gene_locations,
-                                          cis_window = cis_window,
-                                          direct_min_strength = direct_min_strength,
-                                          proximity_min_strength = proximity_min_strength)
+    m <- meta[[ctx]]
+    if (!is.list(m) || !all(c("snpspos", "tgt_ids") %in% names(m)))
+      stop("n_tests_meta_", method, ".rds does not carry per-context ",
+           "{snpspos, tgt_ids}; regenerate it by re-running the scan with ",
+           "the current package version.")
+    snpspos <- m$snpspos
+    tgt_ids <- m$tgt_ids
+    # ONE exclusion set per context, applied to the tsv once and to every
+    # family sidecar present (in its own orientation).
+    excl <- if (regulator == "gene") {
+      crossmap_excl_gene(cm, snpspos$snp, tgt_ids, chr_of,
+                         gene_locations = gene_locations,
+                         cis_window = cis_window,
+                         direct_min_strength = direct_min_strength,
+                         proximity_min_strength = proximity_min_strength)
     } else {
       if (!("pos" %in% names(snpspos)))
-        stop("regulator = \"variant\" needs a 'pos' column in the meta sidecar ",
-             "(SNP positions for the SNP->local-gene rule); method '", method,
+        stop("regulator = \"variant\" needs a 'pos' column in the scan ",
+             "metadata file (SNP positions for the SNP->local-gene rule); ",
+             "method '", method,
              "' did not provide one.")
-      out[[ctx]] <- apply_crossmap_filter_snp(out_file, nt_ctx, cm, snpspos,
-                                              tgt_ids, gene_locations,
-                                              window = cis_window, chr_of = chr_of,
-                                              min_strength = proximity_min_strength)
+      crossmap_excl_variant(cm, snpspos, tgt_ids, gene_locations,
+                            window = cis_window, chr_of = chr_of,
+                            min_strength = proximity_min_strength)
     }
+    .crossmap_filter_tsv(out_file, excl)
+    for (h in names(nts))
+      out[[h]][[ctx]] <- .crossmap_decrement(nts[[h]][context == ctx], excl, h)
   }
-  other  <- nt[!(nt$context %in% names(meta)), ]
-  nt_new <- data.table::rbindlist(c(out, list(other)), use.names = TRUE)
-  attr(nt_new, "crossmap_filtered") <- TRUE          # mark so re-runs are refused
-  saveRDS(nt_new, nt_file)
-  invisible(nt_new)
+  res <- list()
+  for (h in names(nts)) {
+    other  <- nts[[h]][!(context %in% names(meta))]
+    nt_new <- data.table::rbindlist(c(out[[h]], list(other)), use.names = TRUE)
+    data.table::setattr(nt_new, "hierarchy", h)      # rbindlist drops attrs
+    data.table::setattr(nt_new, "crossmap_filtered", TRUE)  # refuse re-runs
+    saveRDS(nt_new, nt_files[[h]])
+    res[[h]] <- nt_new
+  }
+  # Back-compat return shape: a single-orientation run returns its table
+  # directly; a dual run returns the named list.
+  invisible(if (length(res) == 1L) res[[1L]] else res)
 }
