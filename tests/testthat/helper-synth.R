@@ -20,7 +20,7 @@ rmvn_cs <- function(I, C, sigma2, rho, mu) {
 # (explicit per-individual loop; (mu, sigma2) at fit_sigma_E's CS output,
 # rho = 0). Mirrors simulation_study/test_lmm.R.
 brute_pair <- function(Y_t, z_r, ctx_idx, min_obs = 30L) {
-  fit    <- fit_sigma_E(Y_t, min_obs_per_ctx = min_obs)
+  fit    <- fit_sigma_E(Y_t, form = "cs", min_obs_per_ctx = min_obs)
   sigma2 <- fit$sigma2
   mu     <- fit$mu
   if (is.na(mu[ctx_idx])) return(NA_real_)

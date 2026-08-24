@@ -119,10 +119,8 @@ load_genotypes <- function(plink_prefix,
   # BOTH sides by stripping a leading "chr", so either convention works.
   # Without this, a coding mismatch makes EVERY gene "no_cis_snps" with
   # no hard error (the known silent-empty-run bug class).
-  norm_chr  <- function(x) sub("^chr", "", as.character(x),
-                               ignore.case = TRUE)
-  chrom_col <- norm_chr(map$chromosome)
-  chrom_n   <- norm_chr(chrom)
+  chrom_col <- .norm_chr(map$chromosome)   # shared rule (trans_scan_shared.R)
+  chrom_n   <- .norm_chr(chrom)
   snp_mask  <- chrom_col == chrom_n &
                map$physical.pos >= start_pos &
                map$physical.pos <= end_pos

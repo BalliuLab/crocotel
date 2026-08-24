@@ -351,3 +351,57 @@ test_that("dosage ingest: R-native line count (trailing newline or not); gz reje
                       dosage_file = f3, verbose = FALSE),
     "compressed")
 })
+
+test_that("mixed chr codings ('chr1' gene file vs numeric bim) work in every scanner", {
+  # the GTEx-pilot scenario: plink-derived bim is numeric, annotation is
+  # chr-prefixed. All scanners + crossmap normalize to one coding.
+  gl_chr <- gx_gl
+  gl_chr$chr <- paste0("chr", gl_chr$chr)
+  d <- file.path(gx_work, "chrmix"); unlink(d, recursive = TRUE)
+  run_trans_eqtl_snp(matrix_dir = file.path(gx_work, "mat"),
+                     gene_locations = gl_chr, output_dir = d,
+                     snp_method = "lead", plink_prefix = gx_plink,
+                     variant_mappability_file = NA, pv_threshold = 1,
+                     verbose = FALSE)
+  nt <- as.data.frame(readRDS(file.path(d, "n_tests_target_snp.rds")))
+  expect_gt(nrow(nt), 0L)
+  expect_true(all(nt$n_pairs > 0L))          # cross-chr universe intact
+  d2 <- file.path(gx_work, "chrmix_lite"); unlink(d2, recursive = TRUE)
+  run_trans_eqtl(matrix_dir = file.path(gx_work, "mat"),
+                 gene_locations = gl_chr, output_dir = d2,
+                 method = "crocotel", target_response = "raw",
+                 pv_threshold = 1, verbose = FALSE)
+  expect_true(file.exists(file.path(d2, "n_tests_target_crocotel.rds")))
+})
+
+test_that("expression-only assembly serves the SNP scanner without GReX", {
+  mat_eo <- file.path(gx_work, "mat_expronly")
+  res <- assemble_grex_matrices(output_dir = mat_eo, expr_dir = gx_expr,
+                                verbose = FALSE)
+  expect_identical(res$method, character(0))
+  ctxs <- sprintf("ctx%d", seq_len(gx_params$n_contexts))
+  for (ctx in ctxs) {
+    expect_true(file.exists(file.path(mat_eo, paste0("expr_", ctx, ".rds"))))
+    expect_false(file.exists(file.path(mat_eo,
+                                       paste0("grex_crocotel_", ctx, ".rds"))))
+    expect_false(file.exists(file.path(mat_eo,
+                                       paste0("qc_crocotel_", ctx, ".rds"))))
+  }
+  # the eligibility sidecar must be IDENTICAL to the GReX-derived assembly's
+  # on the same data (same decision point, same code path)
+  sc_eo <- readRDS(file.path(mat_eo, "expressed_targets.rds"))
+  sc_gx <- readRDS(file.path(gx_work, "mat", "expressed_targets.rds"))
+  expect_identical(sc_eo$min_obs, sc_gx$min_obs)
+  for (ctx in names(sc_gx$targets))
+    expect_setequal(sc_eo$targets[[ctx]], sc_gx$targets[[ctx]])
+  # SNP comparator end-to-end on the expr-only matrix_dir (lead = default)
+  sd <- file.path(gx_work, "trans_snp_expronly")
+  run_trans_eqtl_snp(matrix_dir = mat_eo, gene_locations = gx_gl,
+                     output_dir = sd, plink_prefix = gx_plink,
+                     pv_threshold = 1, verbose = FALSE)
+  nt <- readRDS(file.path(sd, "n_tests_target_snp.rds"))
+  expect_true(all(c("gene", "context", "n_pairs") %in% names(nt)))
+  # neither grex_dir nor grex_list nor expr_dir is an error
+  expect_error(assemble_grex_matrices(output_dir = mat_eo, verbose = FALSE),
+               "expression-only")
+})

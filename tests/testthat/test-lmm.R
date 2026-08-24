@@ -2,13 +2,18 @@
 # scanners' shared response-missingness handling. Synthetic data + helpers come
 # from helper-synth.R. Fast (seconds); runs under R CMD check.
 
+# run_trans_lmm here is the INTERNAL impl: these tests exercise the CS
+# likelihood path and the force_iid OLS-collapse hook, which the exported
+# wrapper deliberately pins (het_cs, no iid; PI decision 2026-08-24).
+run_trans_lmm <- crocotel:::.run_trans_lmm_impl
+
 # ---- tests ----------------------------------------------------------------
 
 test_that("fit_sigma_E recovers compound symmetry (sigma2, rho)", {
   set.seed(11)
   sigma2 <- 2.0; rho <- 0.6
   Y   <- rmvn_cs(3000L, 8L, sigma2, rho, mu = seq_len(8L) * 0.3)
-  fit <- fit_sigma_E(Y)
+  fit <- fit_sigma_E(Y, form = "cs")
   expect_lt(abs(fit$sigma2 - sigma2), 0.1 * sigma2)
   expect_lt(abs(fit$rho - rho), 0.04)
 })
@@ -460,4 +465,30 @@ test_that("grex_gate_mode: 'r2' gates on the R2 floor alone; 'pval' stays defaul
   nt_l <- as.data.frame(readRDS(file.path(d21, "lmm_r2", "n_tests_target_lmm.rds")))
   key <- function(d) d[order(d$gene, d$context), c("gene", "context", "n_pairs")]
   expect_equal(unname(key(nt_e)), unname(key(nt_l)), ignore_attr = TRUE)
+})
+
+test_that("exported run_trans_lmm: no diagnostic args, rho guardrail", {
+  dw <- file.path(tempdir(), "lmm_wrap"); unlink(dw, recursive = TRUE)
+  gl <- write_synth(dw, gene_ids, chr, z_arr, y_arr, contexts)
+  # the diagnostic arguments are gone from the exported API
+  expect_error(crocotel::run_trans_lmm(matrix_dir = dw, gene_locations = gl,
+    output_dir = dw, sigma_E_form = "cs", verbose = FALSE),
+    "unused argument")
+  expect_error(crocotel::run_trans_lmm(matrix_dir = dw, gene_locations = gl,
+    output_dir = dw, force_iid = TRUE, verbose = FALSE),
+    "unused argument")
+  # rho = 0.4 fixture: end-to-end with NO correlation warning
+  expect_warning(crocotel::run_trans_lmm(matrix_dir = dw, gene_locations = gl,
+    output_dir = file.path(dw, "o1"), pv_threshold = 1, verbose = FALSE),
+    regexp = NA)
+  # high-correlation targets (rho = 0.85 > verified 0.5): guardrail fires
+  y_hi <- lapply(seq_along(gene_ids), function(g) {
+    m <- rmvn_cs(I, C, sigma2 = 1.5, rho = 0.85, mu = rnorm(C, sd = 0.5))
+    rownames(m) <- ind_ids; m
+  }); names(y_hi) <- gene_ids
+  dh <- file.path(tempdir(), "lmm_wrap_hi"); unlink(dh, recursive = TRUE)
+  glh <- write_synth(dh, gene_ids, chr, z_arr, y_hi, contexts)
+  expect_warning(crocotel::run_trans_lmm(matrix_dir = dh, gene_locations = glh,
+    output_dir = file.path(dh, "o1"), pv_threshold = 1, verbose = FALSE),
+    "triplet-level")
 })

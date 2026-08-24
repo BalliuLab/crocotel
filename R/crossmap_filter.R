@@ -351,7 +351,7 @@ apply_crossmap_post <- function(output_dir, method,
   if (is.character(gene_locations))
     gene_locations <- read.table(gene_locations, header = TRUE,
                                   stringsAsFactors = FALSE, check.names = FALSE)
-  gene_locations$chr <- as.character(gene_locations$chr)
+  gene_locations$chr <- .norm_chr(gene_locations$chr)  # "chr1" == "1"
 
   cm <- resolve_cross_map(cross_map_file, universe = gene_locations$gene_id,
                           min_strength = cross_map_min_strength, verbose = verbose)

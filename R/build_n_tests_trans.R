@@ -117,7 +117,7 @@ write_n_tests <- function(trans_dir, gene_locations, method,
   if (is.character(gene_locations))
     gene_locations <- read.table(gene_locations, header = TRUE,
                                  stringsAsFactors = FALSE, check.names = FALSE)
-  gene_locations$chr <- as.character(gene_locations$chr)
+  gene_locations$chr <- .norm_chr(gene_locations$chr)  # "chr1" == "1"
   chr_of <- stats::setNames(gene_locations$chr, gene_locations$gene_id)
 
   meta_file <- file.path(trans_dir, paste0("n_tests_meta_", method, ".rds"))

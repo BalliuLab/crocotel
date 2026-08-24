@@ -17,14 +17,23 @@ assemble_grex_matrices(
 )
 }
 \arguments{
-\item{grex_dir}{Character. Directory containing per-gene RDS files
-produced by \code{fit_grex_gene()}.}
+\item{grex_dir}{Character or \code{NULL}. Directory containing per-gene
+RDS files produced by \code{fit_grex_gene()}. When BOTH \code{grex_dir}
+and \code{grex_list} are \code{NULL}, the function runs in
+\strong{expression-only mode}: no GReX or QC matrices are written, the
+gene universe is every gene found in \code{expr_dir} (optionally
+intersected with \code{gene_ids}), and the output is exactly what the
+SNP-based scanners (\code{run_trans_eqtl_snp()}) need -- the
+\code{expr_<ctx>.rds} matrices plus the \code{expressed_targets.rds}
+eligibility sidecar, produced by the same code path the GReX assembly
+uses.}
 
 \item{output_dir}{Character. Directory where output files are written.
 Created if it does not exist.}
 
 \item{method}{Character vector. One or both of \code{"crocotel"} and
 \code{"cbc"}. Only methods present in the gene files are assembled.
+Ignored in expression-only mode (no GReX to assemble).
 Default \code{c("crocotel", "cbc")}.}
 
 \item{gene_ids}{Character vector or \code{NULL}. Subset of gene IDs to
@@ -37,7 +46,8 @@ contexts found in the records (union over "ok" records).}
 
 \item{grex_list}{Named list or \code{NULL}. In-memory alternative to
 \code{grex_dir}: a list of \code{fit_grex_gene()} records named by gene
-ID. Provide exactly one of \code{grex_dir} or \code{grex_list}.
+ID. Provide at most one of \code{grex_dir} or \code{grex_list}
+(neither = expression-only mode, see \code{grex_dir}).
 \code{NULL} (default) reads from \code{grex_dir}.}
 
 \item{expr_dir}{Character. Directory of per-gene raw expression RDS
@@ -66,7 +76,8 @@ Invisibly returns a named list:
   \item{gene_ids}{Character vector of gene IDs assembled.}
   \item{individual_ids}{Character vector of individual IDs (column names).}
   \item{contexts}{Character vector of context names assembled.}
-  \item{method}{Character vector of methods assembled.}
+  \item{method}{Character vector of methods assembled (empty in
+    expression-only mode).}
   \item{output_dir}{The output directory path.}
 }
 Besides the per-context matrices, an \code{expressed_targets.rds} file

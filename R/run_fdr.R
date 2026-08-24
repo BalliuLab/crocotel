@@ -77,15 +77,13 @@
 #'   Default 0.05.
 #' @param level1,level2,level3 Numeric or \code{NULL}. Per-level FDR
 #'   targets; \code{NULL} (default) inherits \code{alpha}.
-#' @param dependence      Character. Cut-off rule at levels 2 and 3:
-#'   \code{"BY"} (default) applies the Benjamini-Yekutieli correction,
-#'   valid under arbitrary dependence; \code{"BH"} is the uncorrected
-#'   Benjamini-Hochberg rule. \strong{Level 1 is always BH regardless of
-#'   this setting} (see the file header for why). \code{"BY"} is the
-#'   default because the intended use -- multi-context data in which the
-#'   same individuals recur across contexts -- guarantees cross-context
-#'   residual correlation, under which BH is anti-conservative at the
-#'   cell and triplet levels; the measured cost is 1-3 power points.
+#' @section Levels 2-3 cut-off rule:
+#'   Levels 2 and 3 use the Benjamini-Yekutieli correction. It is fixed
+#'   rather than an argument: the intended use is multi-context data in
+#'   which the same individuals recur across contexts, and under that
+#'   dependence the plain Benjamini-Hochberg rule is anti-conservative.
+#'   Level 1 is BH by design of the hierarchical procedure (see the file
+#'   header).
 #' @param hierarchy       \code{"target"} (default) puts target genes on
 #'   the outer level (eTargets first). \code{"regulator"} flips: outer
 #'   level becomes "eRegulators".
@@ -124,6 +122,31 @@
 #'   \code{eRegulators_} / \code{eRegulator_context_} instead).
 #' @export
 run_fdr <- function(trans_dir,
+                    output_dir,
+                    method,
+                    n_tests        = NULL,
+                    crossmap       = NULL,
+                    alpha          = 0.05,
+                    level1         = NULL,
+                    level2         = NULL,
+                    level3         = NULL,
+                    hierarchy      = c("target", "regulator"),
+                    verbose        = TRUE) {
+  # BY at levels 2-3 is pinned, not an argument (PI decision 2026-08-24):
+  # under the cross-context dependence this procedure exists for, BH
+  # reached triplet FDP 0.26 at a 0.05 target in the simulation grid.
+  # The BH path survives on .run_fdr_impl() for the conservatism unit
+  # test and dependence diagnostics only.
+  .run_fdr_impl(trans_dir = trans_dir, output_dir = output_dir,
+                method = method, n_tests = n_tests, crossmap = crossmap,
+                alpha = alpha, level1 = level1, level2 = level2,
+                level3 = level3, dependence = "BY",
+                hierarchy = hierarchy, verbose = verbose)
+}
+
+# Internal implementation. `dependence` ("BY"/"BH") is retained here as a
+# diagnostic hook; the exported wrapper pins BY.
+.run_fdr_impl <- function(trans_dir,
                      output_dir,
                      method,
                      n_tests        = NULL,

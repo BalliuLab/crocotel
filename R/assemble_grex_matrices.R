@@ -31,11 +31,20 @@
 #' GReX
 #' the right-hand side.
 #'
-#' @param grex_dir   Character. Directory containing per-gene RDS files
-#'   produced by \code{fit_grex_gene()}.
+#' @param grex_dir   Character or \code{NULL}. Directory containing per-gene
+#'   RDS files produced by \code{fit_grex_gene()}. When BOTH \code{grex_dir}
+#'   and \code{grex_list} are \code{NULL}, the function runs in
+#'   \strong{expression-only mode}: no GReX or QC matrices are written, the
+#'   gene universe is every gene found in \code{expr_dir} (optionally
+#'   intersected with \code{gene_ids}), and the output is exactly what the
+#'   SNP-based scanners (\code{run_trans_eqtl_snp()}) need -- the
+#'   \code{expr_<ctx>.rds} matrices plus the \code{expressed_targets.rds}
+#'   eligibility sidecar, produced by the same code path the GReX assembly
+#'   uses.
 #' @param grex_list  Named list or \code{NULL}. In-memory alternative to
 #'   \code{grex_dir}: a list of \code{fit_grex_gene()} records named by gene
-#'   ID. Provide exactly one of \code{grex_dir} or \code{grex_list}.
+#'   ID. Provide at most one of \code{grex_dir} or \code{grex_list}
+#'   (neither = expression-only mode, see \code{grex_dir}).
 #'   \code{NULL} (default) reads from \code{grex_dir}.
 #' @param expr_dir   Character. Directory of per-gene raw expression RDS
 #'   (\code{<gene_id>.rds}, individuals x contexts) - the same expression that
@@ -47,6 +56,7 @@
 #'   Created if it does not exist.
 #' @param method     Character vector. One or both of \code{"crocotel"} and
 #'   \code{"cbc"}. Only methods present in the gene files are assembled.
+#'   Ignored in expression-only mode (no GReX to assemble).
 #'   Default \code{c("crocotel", "cbc")}.
 #' @param gene_ids   Character vector or \code{NULL}. Subset of gene IDs to
 #'   include. \code{NULL} (default) uses all gene files found in
@@ -71,7 +81,8 @@
 #'   \item{gene_ids}{Character vector of gene IDs assembled.}
 #'   \item{individual_ids}{Character vector of individual IDs (column names).}
 #'   \item{contexts}{Character vector of context names assembled.}
-#'   \item{method}{Character vector of methods assembled.}
+#'   \item{method}{Character vector of methods assembled (empty in
+#'     expression-only mode).}
 #'   \item{output_dir}{The output directory path.}
 #' }
 #' Besides the per-context matrices, an \code{expressed_targets.rds} file
@@ -106,22 +117,49 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     stop("method must contain one or both of: 'crocotel', 'cbc'.")
   method <- unique(method)
 
-  if (is.null(grex_dir) && is.null(grex_list))
-    stop("Provide one of grex_dir (read RDS files) or grex_list ",
-         "(named list of fit_grex_gene outputs in memory).")
+  # Expression-only mode (no GReX at all): supported so the SNP-based
+  # scanners can be run without ever fitting GReX -- they only need the
+  # expr_<ctx>.rds matrices + the expressed_targets.rds eligibility sidecar,
+  # both of which this function is the single writer of (PI-approved fix of
+  # HANDOFF_snp_only_matrix_dir.md, 2026-08-24).
+  expr_only <- is.null(grex_dir) && is.null(grex_list)
+  if (expr_only && is.null(expr_dir))
+    stop("Provide grex_dir or grex_list (GReX assembly), or expr_dir alone ",
+         "(expression-only assembly: writes expr_<ctx>.rds + the ",
+         "target-eligibility sidecar for the SNP-based scanners).")
   if (!is.null(grex_dir) && !is.null(grex_list))
     stop("Provide grex_dir OR grex_list, not both.")
   use_list <- !is.null(grex_list)
 
-  if (!use_list && !dir.exists(grex_dir))
+  if (!expr_only && !use_list && !dir.exists(grex_dir))
     stop("grex_dir not found: ", grex_dir)
+  if (!is.null(expr_dir) && !dir.exists(expr_dir))
+    stop("expr_dir not found: ", expr_dir)
 
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 
   # ------------------------------------------------------------------
   # 1. Discover gene records (from disk or from in-memory list)
   # ------------------------------------------------------------------
-  if (use_list) {
+  if (expr_only) {
+    # Gene universe = every gene present in expr_dir (optionally intersected
+    # with gene_ids) -- there are no GReX records to derive it from.
+    all_files <- list.files(expr_dir, pattern = "\\.rds$", full.names = TRUE)
+    if (length(all_files) == 0)
+      stop("No .rds files found in expr_dir: ", expr_dir)
+    all_gene_ids <- sub("\\.rds$", "", basename(all_files))
+    if (!is.null(gene_ids)) {
+      keep <- all_gene_ids %in% gene_ids
+      all_files <- all_files[keep]
+      all_gene_ids <- all_gene_ids[keep]
+      if (length(all_files) == 0)
+        stop("None of the requested gene_ids were found in expr_dir.")
+    }
+    n_genes <- length(all_files)
+    if (verbose)
+      message("Expression-only assembly: ", n_genes, " gene(s) from ",
+              expr_dir, " (no GReX / QC matrices will be written).")
+  } else if (use_list) {
     if (is.null(names(grex_list)))
       stop("grex_list must be a named list (names = gene IDs).")
     all_gene_ids <- names(grex_list)
@@ -174,6 +212,22 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   n_ok <- 0L
   first_roster <- NULL
   roster_mismatch <- FALSE
+  if (expr_only) {
+    # Frame from the expression files themselves (individuals x contexts).
+    for (i in seq_len(n_genes)) {
+      E <- readRDS(all_files[i])
+      if (!is.matrix(E) || is.null(rownames(E)) || is.null(colnames(E))) next
+      n_ok <- n_ok + 1L
+      if (is.null(first_roster)) first_roster <- rownames(E)
+      else if (!setequal(first_roster, rownames(E))) roster_mismatch <- TRUE
+      ind_ids   <- union(ind_ids,   rownames(E))
+      ctx_names <- union(ctx_names, colnames(E))
+    }
+    if (n_ok == 0L)
+      stop("No usable expression matrices found in expr_dir (each ",
+           "<gene_id>.rds must be an individuals x contexts matrix with ",
+           "dimnames).")
+  } else {
   for (i in seq_len(n_genes)) {
     candidate <- get_record(i)
     if (!identical(candidate$status, "ok")) next
@@ -188,6 +242,7 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   if (n_ok == 0L)
     stop("No 'ok' gene records found - nothing to assemble. ",
          "(no_model / no_input records carry no GReX matrices.)")
+  }
   if (length(ind_ids) == 0L || length(ctx_names) == 0L)
     stop("Cannot determine individual/context IDs: the ok records' ",
          "Z_grex matrices carry no dimnames.")
@@ -207,8 +262,10 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
       stop("No requested contexts are present in the gene files.")
   }
 
-  run_crocotel <- "crocotel" %in% method
-  run_cbc     <- "cbc"     %in% method
+  # In expression-only mode `method` is meaningless (there is no GReX to
+  # assemble) and is ignored rather than validated against.
+  run_crocotel <- !expr_only && "crocotel" %in% method
+  run_cbc     <- !expr_only && "cbc"     %in% method
 
   # Raw per-context expression (expr_<ctx>.rds) is the canonical target store:
   # run_trans_eqtl uses it directly for the "raw" target and residualizes it on
@@ -267,8 +324,8 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     if (verbose && i %% 500 == 0)
       message(sprintf("  [%d/%d] genes processed", i, n_genes))
 
-    g <- get_record(i)
-    gid <- all_gene_ids[i]
+    g <- if (expr_only) NULL else get_record(i)   # expr-only: no GReX record;
+    gid <- all_gene_ids[i]                        # all g-fills are guarded off
 
     # Roles decouple by design:
     #   * GReX (regulator side): only "ok" records carry Z matrices.
@@ -380,7 +437,7 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     gene_ids       = all_gene_ids,
     individual_ids = ind_ids,
     contexts       = ctx_names,
-    method         = method,
+    method         = if (expr_only) character(0) else method,
     output_dir     = output_dir
   ))
 }

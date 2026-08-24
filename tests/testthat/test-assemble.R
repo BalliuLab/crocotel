@@ -189,10 +189,19 @@ test_that("a wrong expr_dir fails loudly, not as silent all-NA expression", {
   recs2 <- list(g1 = .ok_rec("g1", inds, seed = 71),
                 g2 = .ok_rec("g2", inds, seed = 72),
                 g3 = .ok_rec("g3", inds, seed = 73))
-  # zero hits (nonexistent dir) -> stop
+  # nonexistent dir -> stops up front (existence check added with the
+  # expression-only mode, 2026-08-24; previously caught later as zero hits)
   expect_error(
     assemble_grex_matrices(grex_list = recs2, output_dir = od,
                            expr_dir = file.path(tempdir(), "no_such_dir"),
+                           method = "crocotel", verbose = FALSE),
+    "expr_dir not found")
+  # existing but EMPTY dir -> the zero-hits guard still fires
+  emptyd <- file.path(tempdir(), "asm_f", "empty_expr")
+  dir.create(emptyd, recursive = TRUE, showWarnings = FALSE)
+  expect_error(
+    assemble_grex_matrices(grex_list = recs2, output_dir = od,
+                           expr_dir = emptyd,
                            method = "crocotel", verbose = FALSE),
     "NONE of the")
   # majority missing (1 of 3) -> loud warning with the count

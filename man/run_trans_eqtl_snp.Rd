@@ -8,7 +8,7 @@ run_trans_eqtl_snp(
   matrix_dir,
   gene_locations,
   output_dir,
-  snp_method = c("genome_wide", "lead", "both"),
+  snp_method = c("lead", "genome_wide", "both"),
   plink_prefix,
   contexts = NULL,
   cis_window = 1e+06,
@@ -31,7 +31,7 @@ run_trans_eqtl_snp(
 
 \item{output_dir}{Character. Output directory. Created if absent.}
 
-\item{snp_method}{Character. \code{"genome_wide"} (default), \code{"lead"},
+\item{snp_method}{Character. \code{"lead"} (default), \code{"genome_wide"},
 or \code{"both"}. Note the lead mode's regulator universe differs from
 the gene-based methods' by design (mirroring the published GBAT/GTEx
 comparators): a gene needs only >= 3 shared individuals for its lead

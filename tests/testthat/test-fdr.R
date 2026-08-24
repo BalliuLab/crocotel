@@ -43,10 +43,11 @@ test_that("run_fdr accepts a crossmap-filtered sidecar without the NA waiver", {
 
 test_that("run_fdr: BY is at least as conservative as BH at every level", {
   d <- .make_scan("fdr_dep")
-  run_fdr(trans_dir = d, output_dir = file.path(d, "by"),
+  # dependence lives on the internal impl only (exported run_fdr pins BY)
+  crocotel:::.run_fdr_impl(trans_dir = d, output_dir = file.path(d, "by"),
           method = "crocotel", crossmap = NA, dependence = "BY",
           verbose = FALSE)
-  run_fdr(trans_dir = d, output_dir = file.path(d, "bh"),
+  crocotel:::.run_fdr_impl(trans_dir = d, output_dir = file.path(d, "bh"),
           method = "crocotel", crossmap = NA, dependence = "BH",
           verbose = FALSE)
   for (f in c("eTargets_crocotel.rds", "eTarget_context_crocotel.rds",
@@ -111,4 +112,10 @@ test_that("run_fdr(method='snp') never ingests the lead series from a both-mode 
                  method = "snp", n_tests = nt, crossmap = NA, verbose = FALSE)
   expect_identical(unique(res$all_pairs$context), "ctx01")   # no "lead_ctx01"
   expect_false("rLEAD" %in% res$all_pairs$snp)               # lead pair absent
+})
+
+test_that("exported run_fdr has no dependence argument (BY pinned)", {
+  expect_error(run_fdr(trans_dir = tempdir(), output_dir = tempdir(),
+                       method = "crocotel", dependence = "BH"),
+               "unused argument")
 })

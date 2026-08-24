@@ -1,5 +1,6 @@
 ^load_all\.R$
 ^install_deps\.sh$
+^check_pkg\.sh$
 ^LICENSE\.md$
 ^\.git$
 (^|/)\.DS_Store$

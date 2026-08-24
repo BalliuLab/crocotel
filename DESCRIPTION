@@ -1,7 +1,7 @@
 Package: crocotel
 Type: Package
 Title: Context-Resolved Trans-eQTL Mapping via Genetically Regulated Expression
-Version: 0.1.0
+Version: 0.2.0
 Authors@R:
     person("Brunilda", "Balliu", email = "bballiu@g.ucla.edu",
            role = c("aut", "cre"))

@@ -44,6 +44,7 @@
   obj   <- bigsnpr::snp_attach(rds_file)
   G_big <- obj$genotypes
   map   <- obj$map
+  map$chromosome <- .norm_chr(map$chromosome)   # "chr1" == "1"
   fam   <- obj$fam
 
   ind_idx <- if (!is.null(sample_ids)) which(fam$sample.ID %in% sample_ids)
@@ -225,7 +226,7 @@
 #' @param gene_locations   Data frame or path to TSV with columns
 #'   \code{gene_id, chr, start, end}.
 #' @param output_dir       Character. Output directory. Created if absent.
-#' @param snp_method       Character. \code{"genome_wide"} (default), \code{"lead"},
+#' @param snp_method       Character. \code{"lead"} (default), \code{"genome_wide"},
 #'   or \code{"both"}. Note the lead mode's regulator universe differs from
 #'   the gene-based methods' by design (mirroring the published GBAT/GTEx
 #'   comparators): a gene needs only >= 3 shared individuals for its lead
@@ -268,7 +269,7 @@
 run_trans_eqtl_snp <- function(matrix_dir,
                                gene_locations,
                                output_dir,
-                               snp_method      = c("genome_wide", "lead", "both"),
+                               snp_method      = c("lead", "genome_wide", "both"),
                                plink_prefix,
                                contexts        = NULL,
                                cis_window      = 1e6,
@@ -308,7 +309,7 @@ run_trans_eqtl_snp <- function(matrix_dir,
   if (length(missing_cols) > 0)
     stop("gene_locations missing required column(s): ",
          paste(missing_cols, collapse = ", "))
-  gene_locations$chr <- as.character(gene_locations$chr)
+  gene_locations$chr <- .norm_chr(gene_locations$chr)  # "chr1" == "1"
 
   dir.create(output_dir, showWarnings = FALSE, recursive = TRUE)
 

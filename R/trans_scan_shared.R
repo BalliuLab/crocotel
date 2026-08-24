@@ -154,3 +154,11 @@
       where))
   invisible(TRUE)
 }
+
+
+# Chromosome-coding normalizer, shared by every gene_locations / genotype-map
+# ingestion point ("chr1" and "1" are the same chromosome; mixed codings
+# otherwise make every pair look cross-chromosomal and make the crossmap
+# proximity filter find zero exclusions, both silently). Same rule as
+# load_genotypes' window match.
+.norm_chr <- function(x) sub("^chr", "", as.character(x), ignore.case = TRUE)

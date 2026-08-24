@@ -14,7 +14,6 @@ run_fdr(
   level1 = NULL,
   level2 = NULL,
   level3 = NULL,
-  dependence = c("BY", "BH"),
   hierarchy = c("target", "regulator"),
   verbose = TRUE
 )
@@ -59,16 +58,6 @@ Default 0.05.}
 
 \item{level1, level2, level3}{Numeric or \code{NULL}. Per-level FDR
 targets; \code{NULL} (default) inherits \code{alpha}.}
-
-\item{dependence}{Character. Cut-off rule at levels 2 and 3:
-\code{"BY"} (default) applies the Benjamini-Yekutieli correction,
-valid under arbitrary dependence; \code{"BH"} is the uncorrected
-Benjamini-Hochberg rule. \strong{Level 1 is always BH regardless of
-this setting} (see the file header for why). \code{"BY"} is the
-default because the intended use -- multi-context data in which the
-same individuals recur across contexts -- guarantees cross-context
-residual correlation, under which BH is anti-conservative at the
-cell and triplet levels; the measured cost is 1-3 power points.}
 
 \item{hierarchy}{\code{"target"} (default) puts target genes on
 the outer level (eTargets first). \code{"regulator"} flips: outer
@@ -120,3 +109,13 @@ This is a vectorised reimplementation of treeQTL - algorithmically
 equivalent to \code{treeQTL::get_eGenes_multi_tissue()} but typically
 an order of magnitude faster and dramatically lower memory.
 }
+\section{Levels 2-3 cut-off rule}{
+
+  Levels 2 and 3 use the Benjamini-Yekutieli correction. It is fixed
+  rather than an argument: the intended use is multi-context data in
+  which the same individuals recur across contexts, and under that
+  dependence the plain Benjamini-Hochberg rule is anti-conservative.
+  Level 1 is BH by design of the hierarchical procedure (see the file
+  header).
+}
+

@@ -56,12 +56,18 @@
 #'   files are written. Created if absent.
 #' @param contexts         Character vector or \code{NULL}. \code{NULL}
 #'   (default) processes every context found in \code{matrix_dir}.
-#' @param sigma_E_form     Character. \eqn{\Sigma_E} parameterisation passed
-#'   to \code{fit_sigma_E()}: \code{"het_cs"} (heteroskedastic compound
-#'   symmetry -- per-context variances; the default) or \code{"cs"} (compound
-#'   symmetry -- one shared variance across contexts). het-CS controls the
-#'   trans FDR strictly better across the grid (complete control at
-#'   \eqn{\rho_E \le 0.5}) for a negligible power cost, so it is the default.
+#' @section Residual covariance:
+#'   \eqn{\Sigma_E} is heteroskedastic compound symmetry (het-CS,
+#'   per-context variances + one correlation), fitted per target by
+#'   \code{fit_sigma_E()}. This is fixed, not an argument: het-CS controls
+#'   the trans FDR strictly better than plain CS for negligible power
+#'   cost.
+#'   After the scan, the median fitted cross-context correlation
+#'   \eqn{\widehat\rho} across targets is reported; when it exceeds 0.5 a
+#'   warning is raised, because simulation verified triplet-level FDR
+#'   control only up to \eqn{\rho_E = 0.5} and found strong
+#'   anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in between is
+#'   not yet mapped).
 #' @param target_response  Character. \code{"residualized"} (default,
 #'   previous behaviour) de-cis's the observed expression against this
 #'   gene's crocotel GReX on the fly (\code{residualize_grex}, identical to
@@ -116,10 +122,6 @@
 #' @param pv_threshold     Numeric. Only pairs with \eqn{p_c} below this are
 #'   written. Default \code{0.05}, matching \code{run_trans_eqtl()} and
 #'   \code{run_trans_eqtl_snp()}. Set to \code{1} to retain all pairs.
-#' @param force_iid        Logical. Test hook only. When \code{TRUE},
-#'   \eqn{\Sigma_E} is forced to \eqn{\widehat\sigma^2 I} (rho = 0) after
-#'   fitting, so \eqn{p_c} reduces to the per-context OLS score. Used by the
-#'   numerical-sanity unit test (design doc section 9). Default \code{FALSE}.
 #'
 #' @details
 #'   Cross-mappability filtering is DECOUPLED: writes raw output +
@@ -135,6 +137,47 @@
 #'   family-count file (\code{gene, context, n_pairs}) for the FDR step.
 #' @export
 run_trans_lmm <- function(matrix_dir,
+                          gene_locations,
+                          output_dir,
+                          contexts        = NULL,
+                          target_response = c("residualized", "raw"),
+                          grex_gate       = TRUE,
+                          grex_gate_pval  = c("full", "shared", "specific"),
+                          grex_gate_q     = 0.05,
+                          grex_gate_r2_min = 0,
+                          grex_gate_mode  = c("pval", "r2", "both"),
+                          min_obs_per_ctx = 30L,
+                          min_reg_obs     = 5L,
+                          hierarchy       = c("target", "regulator"),
+                          pv_threshold    = 0.05,
+                          verbose         = TRUE) {
+  # Sigma_E form and the iid test hook are deliberately NOT user-facing
+  # (PI decision 2026-08-24): het-CS strictly improved FDR control over CS
+  # across the simulation grid, and force_iid exists only to localise the
+  # pooling mechanism in diagnostics. Both live on .run_trans_lmm_impl().
+  .run_trans_lmm_impl(matrix_dir = matrix_dir,
+                      gene_locations = gene_locations,
+                      output_dir = output_dir,
+                      contexts = contexts,
+                      target_response = target_response,
+                      sigma_E_form = "het_cs",
+                      grex_gate = grex_gate,
+                      grex_gate_pval = grex_gate_pval,
+                      grex_gate_q = grex_gate_q,
+                      grex_gate_r2_min = grex_gate_r2_min,
+                      grex_gate_mode = grex_gate_mode,
+                      min_obs_per_ctx = min_obs_per_ctx,
+                      min_reg_obs = min_reg_obs,
+                      hierarchy = hierarchy,
+                      pv_threshold = pv_threshold,
+                      force_iid = FALSE,
+                      verbose = verbose)
+}
+
+# Internal implementation. sigma_E_form and force_iid are retained here as
+# diagnostic hooks (unit tests validate the CS likelihood path and the
+# per-context OLS collapse); the exported wrapper pins het_cs / no-iid.
+.run_trans_lmm_impl <- function(matrix_dir,
                           gene_locations,
                           output_dir,
                           contexts        = NULL,
@@ -172,7 +215,7 @@ run_trans_lmm <- function(matrix_dir,
   if (length(missing_cols) > 0)
     stop("gene_locations missing required column(s): ",
          paste(missing_cols, collapse = ", "))
-  chr_of <- stats::setNames(as.character(gene_locations$chr),
+  chr_of <- stats::setNames(.norm_chr(gene_locations$chr),
                             gene_locations$gene_id)
   # (Cross)mappability filtering is DECOUPLED (Task B): write raw output +
   # n_tests + an n_tests_meta sidecar; apply_crossmap_post() filters afterward.
@@ -296,6 +339,7 @@ run_trans_lmm <- function(matrix_dir,
   Vmsk <- lapply(seq_len(n_ctx), function(x) matrix(0, n_genes, n_ind))
 
   report_every <- max(1L, n_genes %/% 10L)
+  rho_hats <- rep(NA_real_, n_genes)   # per-target fitted cross-context cor
   for (ti in seq_len(n_genes)) {
 
     if (verbose && ti %% report_every == 0L)
@@ -310,6 +354,7 @@ run_trans_lmm <- function(matrix_dir,
     if (is.null(fit)) next
 
     sigma2 <- fit$sigma2
+    rho_hats[ti] <- fit$rho
     mu     <- fit$mu                      # length C; NA for dropped contexts
     keep_ctx <- which(!is.na(mu))
     if (length(keep_ctx) < 2L) next
@@ -444,6 +489,28 @@ run_trans_lmm <- function(matrix_dir,
   saveRDS(n_tests, file.path(output_dir,
                              paste0("n_tests_", hierarchy, "_lmm.rds")))
   saveRDS(meta_list, file.path(output_dir, "n_tests_meta_lmm.rds"))
+
+  # Cross-context-correlation guardrail (PI directive 2026-08-24). The
+  # per-target median rho-hat is essentially exact at these dimensions
+  # (unbiased, per-target IQR ~ +-0.01 at N=700/C=20, robust to sparse
+  # coverage; verified against known truth). Simulation verified
+  # triplet-level FDR control only up to rho_E = 0.5 and found strong
+  # anti-conservativeness (triplet FDP to 0.90) at rho_E = 0.9; the onset
+  # in between is unmapped, so the warning threshold sits at the last
+  # verified point. Suppressed under force_iid (diagnostic runs).
+  med_rho <- stats::median(rho_hats, na.rm = TRUE)
+  if (verbose && is.finite(med_rho))
+    message(sprintf("Median fitted cross-context correlation: %.3f", med_rho))
+  if (!force_iid && is.finite(med_rho) && med_rho > 0.5)
+    warning(sprintf(paste0(
+      "Median fitted cross-context residual correlation is %.2f. ",
+      "Simulations verified the LMM's triplet-level hierarchical FDR ",
+      "control only up to rho = 0.5; at rho = 0.9 the triplet level is ",
+      "strongly anti-conservative (wrong-regulator credits within active ",
+      "target-context cells). Treat triplet-level (eTriplet) discoveries ",
+      "with caution; eTarget/eTarget-context levels are less affected. ",
+      "Consider the per-context scan (run_trans_eqtl) for triplet claims."),
+      med_rho), call. = FALSE)
 
   invisible(contexts[ctx_has_regs])
 }

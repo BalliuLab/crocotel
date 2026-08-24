@@ -6,7 +6,7 @@
 \usage{
 fit_sigma_E(
   Y,
-  form = "cs",
+  form = "het_cs",
   min_obs_per_ctx = 30L,
   rho_eps = 1e-04,
   tol = 1e-06
@@ -16,10 +16,10 @@ fit_sigma_E(
 \item{Y}{Numeric matrix (n_individuals x n_contexts).
 NAs allowed in any cell.}
 
-\item{form}{Character. Covariance structure: \code{"cs"}
-(compound symmetry; single sigma2 + rho) or \code{"het_cs"}
-(heterogeneous compound symmetry; per-context variances). Default
-\code{"cs"}.}
+\item{form}{Character. Covariance structure: \code{"het_cs"}
+(heterogeneous compound symmetry; per-context variances) or
+\code{"cs"} (compound symmetry; single sigma2 + rho). Default
+\code{"het_cs"}, matching \code{run_trans_lmm()}.}
 
 \item{min_obs_per_ctx}{Integer. Contexts with fewer than this many
 observed individuals are dropped (their column in \code{mu} is NA

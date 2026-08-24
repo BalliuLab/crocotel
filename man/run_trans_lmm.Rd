@@ -10,7 +10,6 @@ run_trans_lmm(
   output_dir,
   contexts = NULL,
   target_response = c("residualized", "raw"),
-  sigma_E_form = "het_cs",
   grex_gate = TRUE,
   grex_gate_pval = c("full", "shared", "specific"),
   grex_gate_q = 0.05,
@@ -20,7 +19,6 @@ run_trans_lmm(
   min_reg_obs = 5L,
   hierarchy = c("target", "regulator"),
   pv_threshold = 0.05,
-  force_iid = FALSE,
   verbose = TRUE
 )
 }
@@ -44,13 +42,6 @@ previous behaviour) de-cis's the observed expression against this
 gene's crocotel GReX on the fly (\code{residualize_grex}, identical to
 \code{run_trans_eqtl()}); \code{"raw"} scans the observed expression
 directly. Mirrors \code{run_trans_eqtl()}'s argument.}
-
-\item{sigma_E_form}{Character. \eqn{\Sigma_E} parameterisation passed
-to \code{fit_sigma_E()}: \code{"het_cs"} (heteroskedastic compound
-symmetry -- per-context variances; the default) or \code{"cs"} (compound
-symmetry -- one shared variance across contexts). het-CS controls the
-trans FDR strictly better across the grid (complete control at
-\eqn{\rho_E \le 0.5}) for a negligible power cost, so it is the default.}
 
 \item{grex_gate}{Logical. Regulator GReX-quality gate, same
 semantics and default as \code{run_trans_eqtl()}: a gene is admitted as
@@ -110,11 +101,6 @@ orientation without re-scanning.}
 written. Default \code{0.05}, matching \code{run_trans_eqtl()} and
 \code{run_trans_eqtl_snp()}. Set to \code{1} to retain all pairs.}
 
-\item{force_iid}{Logical. Test hook only. When \code{TRUE},
-\eqn{\Sigma_E} is forced to \eqn{\widehat\sigma^2 I} (rho = 0) after
-fitting, so \eqn{p_c} reduces to the per-context OLS score. Used by the
-numerical-sanity unit test (design doc section 9). Default \code{FALSE}.}
-
 \item{verbose}{Logical. Print progress. Default \code{TRUE}.}
 }
 \value{
@@ -141,3 +127,18 @@ Cross-mappability filtering is DECOUPLED: writes raw output +
   \code{n_tests_<hierarchy>_lmm.rds} + \code{n_tests_meta_lmm.rds}; run
   \code{apply_crossmap_post(regulator = "gene", ...)} afterward.
 }
+\section{Residual covariance}{
+
+  \eqn{\Sigma_E} is heteroskedastic compound symmetry (het-CS,
+  per-context variances + one correlation), fitted per target by
+  \code{fit_sigma_E()}. This is fixed, not an argument: het-CS controls
+  the trans FDR strictly better than plain CS for negligible power
+  cost.
+  After the scan, the median fitted cross-context correlation
+  \eqn{\widehat\rho} across targets is reported; when it exceeds 0.5 a
+  warning is raised, because simulation verified triplet-level FDR
+  control only up to \eqn{\rho_E = 0.5} and found strong
+  anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in between is
+  not yet mapped).
+}
+

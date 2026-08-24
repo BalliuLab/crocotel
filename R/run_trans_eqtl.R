@@ -165,8 +165,8 @@ run_trans_eqtl <- function(matrix_dir,
     stop("gene_locations missing required column(s): ",
          paste(missing_cols, collapse = ", "))
 
-  # Normalise chr to character for downstream comparisons
-  gene_locations$chr <- as.character(gene_locations$chr)
+  # Normalise chr coding ("chr1" == "1") for downstream comparisons
+  gene_locations$chr <- .norm_chr(gene_locations$chr)
 
   # (Cross)mappability filtering is DECOUPLED (Task B): this scan writes RAW
   # output + n_tests + an n_tests_meta sidecar (the snpspos tested per context);
