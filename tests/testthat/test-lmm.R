@@ -491,4 +491,10 @@ test_that("exported run_trans_lmm: no diagnostic args, rho guardrail", {
   expect_warning(crocotel::run_trans_lmm(matrix_dir = dh, gene_locations = glh,
     output_dir = file.path(dh, "o1"), pv_threshold = 1, verbose = FALSE),
     "triplet-level")
+  # per-target rho-hat is persisted, and tracks the simulated truth
+  rl <- read.delim(file.path(dw, "o1", "rho_hat_lmm.tsv"))
+  rh <- read.delim(file.path(dh, "o1", "rho_hat_lmm.tsv"))
+  expect_setequal(rl$gene, gene_ids)
+  expect_lt(abs(median(rl$rho_hat, na.rm = TRUE) - 0.4), 0.15)
+  expect_lt(abs(median(rh$rho_hat, na.rm = TRUE) - 0.85), 0.1)
 })

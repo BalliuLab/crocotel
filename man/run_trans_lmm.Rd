@@ -134,11 +134,14 @@ Cross-mappability filtering is DECOUPLED: writes raw output +
   \code{fit_sigma_E()}. This is fixed, not an argument: het-CS controls
   the trans FDR strictly better than plain CS for negligible power
   cost.
-  After the scan, the median fitted cross-context correlation
-  \eqn{\widehat\rho} across targets is reported; when it exceeds 0.5 a
-  warning is raised, because simulation verified triplet-level FDR
-  control only up to \eqn{\rho_E = 0.5} and found strong
-  anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in between is
-  not yet mapped).
+  Every target's fitted correlation is written to
+  \code{output_dir/rho_hat_lmm.tsv} (columns \code{gene},
+  \code{rho_hat}; NA where the \eqn{\Sigma_E} fit failed) --- on real
+  data this is the record of which correlation regime the scan ran in.
+  The median \eqn{\widehat\rho} across targets is also reported; when it
+  exceeds 0.5 a warning is raised, because simulation verified
+  triplet-level FDR control only up to \eqn{\rho_E = 0.5} and found
+  strong anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in
+  between is not yet mapped).
 }
 

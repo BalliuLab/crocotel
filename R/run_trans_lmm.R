@@ -62,12 +62,15 @@
 #'   \code{fit_sigma_E()}. This is fixed, not an argument: het-CS controls
 #'   the trans FDR strictly better than plain CS for negligible power
 #'   cost.
-#'   After the scan, the median fitted cross-context correlation
-#'   \eqn{\widehat\rho} across targets is reported; when it exceeds 0.5 a
-#'   warning is raised, because simulation verified triplet-level FDR
-#'   control only up to \eqn{\rho_E = 0.5} and found strong
-#'   anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in between is
-#'   not yet mapped).
+#'   Every target's fitted correlation is written to
+#'   \code{output_dir/rho_hat_lmm.tsv} (columns \code{gene},
+#'   \code{rho_hat}; NA where the \eqn{\Sigma_E} fit failed) --- on real
+#'   data this is the record of which correlation regime the scan ran in.
+#'   The median \eqn{\widehat\rho} across targets is also reported; when it
+#'   exceeds 0.5 a warning is raised, because simulation verified
+#'   triplet-level FDR control only up to \eqn{\rho_E = 0.5} and found
+#'   strong anti-conservativeness at \eqn{\rho_E = 0.9} (the onset in
+#'   between is not yet mapped).
 #' @param target_response  Character. \code{"residualized"} (default,
 #'   previous behaviour) de-cis's the observed expression against this
 #'   gene's crocotel GReX on the fly (\code{residualize_grex}, identical to
@@ -498,6 +501,15 @@ run_trans_lmm <- function(matrix_dir,
   # anti-conservativeness (triplet FDP to 0.90) at rho_E = 0.9; the onset
   # in between is unmapped, so the warning threshold sits at the last
   # verified point. Suppressed under force_iid (diagnostic runs).
+  # Persist every target's fitted cross-context correlation: on real data
+  # this is the QC deliverable that says which regime the scan ran in (the
+  # warning below is only its median summary). NA = the target's Sigma_E
+  # fit failed or was skipped.
+  utils::write.table(
+    data.frame(gene = gene_ids, rho_hat = rho_hats),
+    file.path(output_dir, "rho_hat_lmm.tsv"),
+    sep = "\t", quote = FALSE, row.names = FALSE)
+
   med_rho <- stats::median(rho_hats, na.rm = TRUE)
   if (verbose && is.finite(med_rho))
     message(sprintf("Median fitted cross-context correlation: %.3f", med_rho))
