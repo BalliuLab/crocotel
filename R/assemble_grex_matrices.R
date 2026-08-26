@@ -331,6 +331,10 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   # 4. Fill matrices gene by gene (single pass over files)
   # ------------------------------------------------------------------
   n_expr_hits <- 0L   # genes whose expr_dir file exists (guard below)
+
+  # Hoisted out of the loop: defining it per gene allocated 42k closures.
+  getv <- function(vec, ctx) if (is.null(vec)) NA_real_ else unname(vec[ctx])
+
   for (i in seq_len(n_genes)) {
 
     if (verbose && i %% 500 == 0)
@@ -350,37 +354,62 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     #     (the fit ran; "tested, not significant" is real information).
     #     no_input records have pvals = NULL and are skipped naturally.
 
-    # helper: fill one context matrix row-by-row, handling individual mismatch
-    fill_row <- function(mat_list, src_mat) {
-      if (is.null(src_mat)) return(mat_list)
-      g_inds <- rownames(src_mat)
-      common  <- intersect(ind_ids, g_inds)
-      for (ctx in ctx_names) {
-        if (!ctx %in% colnames(src_mat)) next
-        mat_list[[ctx]][gid, common] <- src_mat[common, ctx]
-      }
-      mat_list
-    }
-
+    # Fill this gene's row in every context matrix, IN PLACE.
+    #
+    # Deliberately not a helper taking the matrix list. The previous
+    # fill_row(mat_list, src) mutated its argument and returned it, and passing
+    # the list into a function raises its reference count -- so every write
+    # duplicated a whole (n_genes x n_ind) matrix. At GTEx v11 scale that is
+    # 258 MB per call, three calls per gene, ~32 TB of memcpy over 41,911
+    # genes; the job spent more time in the kernel (9,771 s) than computing
+    # (7,005 s) and took 4 h 57 m for one context. Writing through a top-level
+    # local keeps the refcount at 1 and R mutates in place.
+    #
+    # Two further wins folded in: `pos` maps the record's individuals onto the
+    # frame's columns ONCE per source matrix (was an intersect() per context
+    # per call), and rows are addressed by integer `i` rather than by gene
+    # name, skipping a rowname hash lookup on every write.
     if (identical(g$status, "ok")) {
-      if (run_crocotel)
-        grex_crocotel <- fill_row(grex_crocotel, g$Z_grex_crocotel)
-      if (run_cbc)
-        grex_cbc      <- fill_row(grex_cbc,      g$Z_grex_cbc)
+      if (run_crocotel && !is.null(g$Z_grex_crocotel)) {
+        src  <- g$Z_grex_crocotel
+        pos  <- match(rownames(src), ind_ids)
+        keep <- !is.na(pos); pos_k <- pos[keep]
+        for (ci in seq_len(n_ctx)) {
+          j <- match(ctx_names[ci], colnames(src)); if (is.na(j)) next
+          grex_crocotel[[ci]][i, pos_k] <- src[keep, j]
+        }
+      }
+      if (run_cbc && !is.null(g$Z_grex_cbc)) {
+        src  <- g$Z_grex_cbc
+        pos  <- match(rownames(src), ind_ids)
+        keep <- !is.na(pos); pos_k <- pos[keep]
+        for (ci in seq_len(n_ctx)) {
+          j <- match(ctx_names[ci], colnames(src)); if (is.na(j)) next
+          grex_cbc[[ci]][i, pos_k] <- src[keep, j]
+        }
+      }
     }
 
     # Raw expression from expr_dir (one file per gene, individuals x contexts)
-    # into the method-agnostic per-context expr matrices.
+    # into the method-agnostic per-context expr matrices. Filled for EVERY gene
+    # whose file exists, whatever its fit status.
     ef <- file.path(expr_dir, paste0(gid, ".rds"))
     if (file.exists(ef)) {
-      expr_ctx    <- fill_row(expr_ctx, readRDS(ef))
+      src <- readRDS(ef)
+      if (!is.null(src) && !is.null(rownames(src))) {
+        pos  <- match(rownames(src), ind_ids)
+        keep <- !is.na(pos); pos_k <- pos[keep]
+        for (ci in seq_len(n_ctx)) {
+          j <- match(ctx_names[ci], colnames(src)); if (is.na(j)) next
+          expr_ctx[[ci]][i, pos_k] <- src[keep, j]
+        }
+      }
       n_expr_hits <- n_expr_hits + 1L
     }
 
     # QC fill: pull per-context p-values / r2 by context NAME (robust to
-    # per-gene context ordering). getv returns NA if the vector is absent or
-    # the context is missing for this gene.
-    getv <- function(vec, ctx) if (is.null(vec)) NA_real_ else unname(vec[ctx])
+    # per-gene context ordering). getv (hoisted above the loop) returns NA if
+    # the vector is absent or the context is missing for this gene.
     if (run_crocotel && !is.null(g$pvals)) {
       for (ctx in ctx_names)
         qc_crocotel[[ctx]][gid, ] <- c(getv(g$pvals$p_full, ctx),
