@@ -36,12 +36,35 @@
   rowSums(!is.na(Y)) >= min_obs
 }
 
-# Materialize the assembly-time eligibility decision: one sidecar file in the
-# matrix directory recording the threshold used and, per context, the eligible
-# target gene IDs.
-.write_eligible_sidecar <- function(output_dir, targets_by_ctx, min_obs) {
-  saveRDS(list(min_obs = as.integer(min_obs), targets = targets_by_ctx),
-          file.path(output_dir, "expressed_targets.rds"))
+# Materialize the assembly-time eligibility decision. TWO files, because
+# assemble_grex_matrices() is routinely run one context per job (one job over
+# all 49 GTEx contexts does not finish):
+#
+#   expressed_targets_<ctx>.rds  per context. Only the job that owns a context
+#                                writes that context's file, so concurrent
+#                                per-context jobs cannot clobber each other.
+#                                Authoritative on read.
+#   expressed_targets.rds        the combined file, written only by a run that
+#                                covered every context (combined = TRUE).
+#                                Retained for hand-built matrix dirs and as
+#                                the read fallback.
+#
+# Both carry the identical structure -- list(min_obs, targets = <named list>) --
+# so .get_eligible_targets()'s checks apply unchanged to either.
+.eligible_sidecar_path <- function(dir, ctx = NULL)
+  file.path(dir, if (is.null(ctx)) "expressed_targets.rds"
+                 else paste0("expressed_targets_", ctx, ".rds"))
+
+.write_eligible_sidecar <- function(output_dir, targets_by_ctx, min_obs,
+                                    combined = TRUE) {
+  min_obs <- as.integer(min_obs)
+  for (ctx in names(targets_by_ctx))
+    saveRDS(list(min_obs = min_obs, targets = targets_by_ctx[ctx]),
+            .eligible_sidecar_path(output_dir, ctx))
+  if (combined)
+    saveRDS(list(min_obs = min_obs, targets = targets_by_ctx),
+            .eligible_sidecar_path(output_dir))
+  invisible(NULL)
 }
 
 # Scanner-side accessor: the sidecar is the authority when present; without
@@ -50,26 +73,32 @@
 # the sidecar stops loudly -- the family threshold must be decided once.
 .get_eligible_targets <- function(matrix_dir, ctx, Y, min_obs,
                                   verbose = TRUE) {
-  sf <- file.path(matrix_dir, "expressed_targets.rds")
+  # Per-context sidecar first: with one assemble job per context, the combined
+  # file may hold only whichever context finished last.
+  sf <- .eligible_sidecar_path(matrix_dir, ctx)
+  if (!file.exists(sf)) sf <- .eligible_sidecar_path(matrix_dir)
   if (file.exists(sf)) {
     sc <- readRDS(sf)
     if (!identical(as.integer(sc$min_obs), as.integer(min_obs)))
       stop(sprintf(paste0(
-        "Target-eligibility threshold conflict: the expressed_targets.rds ",
-        "file in %s was written with min_obs = %d, but the scanner was ",
+        "Target-eligibility threshold conflict: %s in %s ",
+        "was written with min_obs = %d, but the scanner was ",
         "called with min_obs_per_ctx = %d. Re-run assemble_grex_matrices() ",
         "with the desired min_obs_per_ctx, or pass the matching value."),
-        matrix_dir, as.integer(sc$min_obs), as.integer(min_obs)))
+        basename(sf), matrix_dir, as.integer(sc$min_obs),
+        as.integer(min_obs)))
     if (!ctx %in% names(sc$targets))
       stop(sprintf(paste0(
-        "expressed_targets.rds in %s has no entry for context '%s'. ",
-        "Re-run assemble_grex_matrices() over all contexts."),
-        matrix_dir, ctx))
+        "%s in %s has no entry for context '%s'. Re-run ",
+        "assemble_grex_matrices() for that context -- a per-context run ",
+        "writes expressed_targets_<ctx>.rds, which is read in preference to ",
+        "the combined file."),
+        basename(sf), matrix_dir, ctx))
     return(intersect(sc$targets[[ctx]], rownames(Y)))
   }
   if (verbose)
     message(sprintf(paste0(
-      "  [%s] no expressed_targets.rds file in %s; computing target ",
+      "  [%s] no expressed_targets sidecar in %s; computing target ",
       "eligibility on the fly (min_obs = %d)."), ctx, matrix_dir,
       as.integer(min_obs)))
   rownames(Y)[.eligible_targets(Y, min_obs)]

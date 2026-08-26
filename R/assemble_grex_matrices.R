@@ -11,10 +11,18 @@
 #                                 p-values + r2 for the B12 regulator gate
 #   expr_<ctx>.rds              - matrix (n_genes x n_individuals) of raw
 #                                 (observed) expression, from expr_dir
-#   expressed_targets.rds       - target-eligibility sidecar: list(min_obs,
-#                                 targets = ctx -> eligible target gene IDs).
-#                                 THE single decision point all scanners obey
-#                                 (see trans_scan_shared.R).
+#   expressed_targets_<ctx>.rds - target-eligibility sidecar, ONE PER CONTEXT:
+#                                 list(min_obs, targets = ctx -> eligible
+#                                 target gene IDs). THE single decision point
+#                                 all scanners obey (see trans_scan_shared.R),
+#                                 and the file they read in preference to the
+#                                 combined one. Per-context so that concurrent
+#                                 one-context-per-job assemblies cannot clobber
+#                                 each other.
+#   expressed_targets.rds       - the same structure covering every context.
+#                                 Written ONLY by a run that assembled all of
+#                                 them (contexts = NULL); a per-context run
+#                                 leaves it alone.
 #
 # The de-cis residual is NOT stored: run_trans_eqtl reconstructs it on the fly
 # from expr_<ctx> + grex_<method>_<ctx> (raw = expr directly). One file per
@@ -38,9 +46,9 @@
 #'   gene universe is every gene found in \code{expr_dir} (optionally
 #'   intersected with \code{gene_ids}), and the output is exactly what the
 #'   SNP-based scanners (\code{run_trans_eqtl_snp()}) need -- the
-#'   \code{expr_<ctx>.rds} matrices plus the \code{expressed_targets.rds}
-#'   eligibility sidecar, produced by the same code path the GReX assembly
-#'   uses.
+#'   \code{expr_<ctx>.rds} matrices plus the
+#'   \code{expressed_targets_<ctx>.rds} eligibility sidecars, produced by the
+#'   same code path the GReX assembly uses.
 #' @param grex_list  Named list or \code{NULL}. In-memory alternative to
 #'   \code{grex_dir}: a list of \code{fit_grex_gene()} records named by gene
 #'   ID. Provide at most one of \code{grex_dir} or \code{grex_list}
@@ -67,7 +75,7 @@
 #' @param min_obs_per_ctx Integer. Target-eligibility threshold: a gene is an
 #'   admissible trans TARGET in a context only if it has at least this many
 #'   observed expression values there. The decision is made here, once, and
-#'   written to an \code{expressed_targets.rds} file (per-context eligible
+#'   written to \code{expressed_targets_<ctx>.rds} files (per-context eligible
 #'   gene sets + the threshold) that every scanner
 #'   (\code{run_trans_eqtl()}, \code{run_trans_eqtl_snp()},
 #'   \code{run_trans_lmm()}) obeys for both its scan and its FDR family.
@@ -85,10 +93,14 @@
 #'     expression-only mode).}
 #'   \item{output_dir}{The output directory path.}
 #' }
-#' Besides the per-context matrices, an \code{expressed_targets.rds} file
-#' is written to \code{output_dir}: the per-context eligible-target sets (see
-#' \code{min_obs_per_ctx}) that the trans scanners use for their scans and
-#' FDR families.
+#' Besides the per-context matrices, one \code{expressed_targets_<ctx>.rds}
+#' file per context is written to \code{output_dir}: the eligible-target set
+#' (see \code{min_obs_per_ctx}) that the trans scanners use for their scans
+#' and FDR families. A run covering every context additionally writes the
+#' combined \code{expressed_targets.rds}; a per-context run does not, so
+#' concurrent per-context jobs cannot overwrite one another's decision. Use
+#' \code{write_eligible_sidecars()} to (re)generate these from already
+#' assembled \code{expr_<ctx>.rds} without repeating the assembly.
 #'
 #' @examples
 #' \dontrun{
@@ -419,7 +431,7 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   # ------------------------------------------------------------------
   # 6. Target eligibility, decided HERE (once, for every method): per
   #    context, the genes with >= min_obs_per_ctx observed expression
-  #    values. Written as the expressed_targets.rds sidecar that all
+  #    values. Written as the expressed_targets_<ctx>.rds sidecars that all
   #    scanners obey for their scan + FDR family (.get_eligible_targets).
   # ------------------------------------------------------------------
   eligible <- lapply(expr_ctx, function(M)
@@ -429,7 +441,12 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
       message(sprintf(
         "  [%s] eligible targets (>= %d observed): %d/%d genes.",
         ctx, as.integer(min_obs_per_ctx), length(eligible[[ctx]]), n_genes))
-  .write_eligible_sidecar(output_dir, eligible, min_obs_per_ctx)
+  # Combined file only when this run covered every context: a per-context run
+  # must not replace a complete combined file with a single-context one. That
+  # is what made concurrent per-context jobs clobber each other. The
+  # per-context sidecars are always written and are authoritative on read.
+  .write_eligible_sidecar(output_dir, eligible, min_obs_per_ctx,
+                          combined = is.null(contexts))
 
   if (verbose) message("Done. ", n_ctx, " context(s) written.")
 
