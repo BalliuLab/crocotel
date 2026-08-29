@@ -24,17 +24,28 @@
     stop(what, " not found: ", file)
   n_col <- length(col_names)
   fmt   <- paste(col_names, collapse = ", ")
-  first <- data.table::fread(file, nrows = 1L, header = FALSE)
-  if (nrow(first) == 0L)
+  # Probe SEVERAL rows, not one. A legitimate table can carry missing scores --
+  # the GENCODE v48 gene-mappability file has 1,253 rows whose score is the
+  # literal "NA" (mostly snoRNA/miRNA: present in the annotation, mappability
+  # not computable). Typing the file from row 1 alone meant that if such a row
+  # happened to come first, fread typed the column logical, as.numeric() gave
+  # NA, the numeric test below failed, and the whole file was rejected as
+  # malformed. Whether a valid file parsed depended on its row ORDER.
+  probe <- data.table::fread(file, nrows = 20L, header = FALSE)
+  if (nrow(probe) == 0L)
     stop(what, " is empty: ", file)
-  row1 <- as.character(unlist(first))
+  row1 <- as.character(unlist(probe[1L]))
+
+  # A column is "numeric enough" if ANY probed value parses as a number.
+  # Literal NA / empty are legitimately missing, not evidence of a text column.
+  score_probe   <- as.character(probe[[min(n_col, ncol(probe))]])
+  score_numeric <- any(!is.na(suppressWarnings(as.numeric(score_probe))))
 
   if (all(col_names %in% row1)) {
     # Headered file with the documented names: select BY NAME.
     dt <- data.table::fread(file, header = TRUE)
     dt <- dt[, col_names, with = FALSE]
-  } else if (ncol(first) == n_col &&
-             !is.na(suppressWarnings(as.numeric(row1[n_col])))) {
+  } else if (ncol(probe) == n_col && score_numeric) {
     # Headerless file with exactly the expected columns, numeric score.
     dt <- data.table::fread(file, header = FALSE, col.names = col_names)
   } else {
@@ -43,20 +54,29 @@
          " tab-separated columns (", fmt, ", in that order), or a HEADERED ",
          "file whose header row contains the column names (", fmt,
          "; extra columns and any order are fine).\n",
-         "Found ", ncol(first), " column(s); first row: ",
+         "Found ", ncol(probe), " column(s); first row: ",
          paste(utils::head(row1, 6), collapse = " | "),
-         if (ncol(first) > 6) " | ..." else "", "\n",
+         if (ncol(probe) > 6) " | ..." else "", "\n",
          "Check that this is the right file and that its score column is ",
          "numeric.")
   }
 
   score <- col_names[n_col]
   if (!is.numeric(dt[[score]])) {
-    bad <- dt[[score]][is.na(suppressWarnings(as.numeric(dt[[score]])))][1]
+    # Hunt for a value that is genuinely non-numeric. Literal "NA" and empty
+    # are legitimately MISSING, not text -- reporting "NA" as "the first
+    # offending value" is maximally confusing for a file that is allowed to
+    # contain it.
+    v   <- as.character(dt[[score]])
+    bad <- v[is.na(suppressWarnings(as.numeric(v))) &
+             !is.na(v) & !v %in% c("NA", "")][1]
     stop("The '", score, "' column of ", what, " (", file, ") is not ",
-         "numeric (first offending value: \"", bad, "\"). Numeric scores ",
-         "are required -- comparing text scores would silently apply ",
-         "alphabetical ordering instead of numeric thresholds.")
+         "numeric",
+         if (is.na(bad))
+           " (its values are all missing/NA, so no threshold can be applied)"
+         else paste0(" (first offending value: \"", bad, "\")"),
+         ". Numeric scores are required -- comparing text scores would ",
+         "silently apply alphabetical ordering instead of numeric thresholds.")
   }
   dt
 }
