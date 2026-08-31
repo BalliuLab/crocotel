@@ -154,13 +154,32 @@ crossmap_excluded_pairs_gene_proximity <- function(cm, reg_ids, tgt_ids,
 # Drop a precomputed excluded-pairs table (columns reg, tgt) from a trans
 # output tsv (columns SNP=regulator, gene=target). Idempotent; done ONCE per
 # context regardless of how many family sidecars exist for the run.
-.crossmap_filter_tsv <- function(out_file, excl) {
-  if (nrow(excl) == 0L) return(invisible(NULL))
+.crossmap_filter_tsv <- function(out_file, excl, drop_genes = character(0)) {
+  # Both filters in ONE read/write pass. The scan tsvs run to tens of millions
+  # of rows per context, so a second pass would double the dominant cost of
+  # the whole call.
+  if (nrow(excl) == 0L && length(drop_genes) == 0L) return(invisible(NULL))
   if (file.exists(out_file) && file.info(out_file)$size > 0) {
     o <- data.table::fread(out_file)
-    if (nrow(o) && all(c("SNP", "gene") %in% names(o)))
-      o <- o[!excl, on = c("SNP" = "reg", "gene" = "tgt")]
-    data.table::fwrite(o, out_file, sep = "\t")
+    if (nrow(o) && all(c("SNP", "gene") %in% names(o))) {
+      # Gene-level membership drop first (cheap %chin%), then the pair
+      # anti-join. Both are idempotent set operations, so a re-run removes
+      # nothing extra.
+      if (length(drop_genes) > 0L)
+        o <- o[!(SNP %chin% drop_genes) & !(gene %chin% drop_genes)]
+      if (nrow(excl) > 0L)
+        o <- o[!excl, on = c("SNP" = "reg", "gene" = "tgt")]
+    }
+    # Write to a temp file and rename. fwrite() straight onto out_file
+    # truncates it first, so a job killed mid-write would leave a truncated
+    # scan file recoverable only by re-running the (hours-long) scan.
+    # file.rename() is atomic within a filesystem.
+    tmp <- paste0(out_file, ".tmp")
+    data.table::fwrite(o, tmp, sep = "\t")
+    if (!file.rename(tmp, out_file)) {
+      unlink(tmp)
+      stop("Failed to replace ", out_file, " with its filtered version.")
+    }
   }
   invisible(NULL)
 }
@@ -341,10 +360,40 @@ apply_crossmap_post <- function(output_dir, method,
                                 cross_map_min_strength = 0,
                                 direct_min_strength = 0,
                                 proximity_min_strength = 100,
+                                gene_mappability_file = NULL,
+                                gene_mappability_min = 0.8,
                                 verbose = TRUE) {
   regulator <- match.arg(regulator)
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required.")
+
+  # Gene-mappability filter: OPT-IN, and SILENT when omitted, so every existing
+  # call behaves exactly as before.
+  #
+  # Deliberately NOT modelled on resolve_cross_map()'s "NULL warns" policy.
+  # Cross-mappability is mandatory for real data -- run_fdr() hard-errors
+  # without its stamp -- so a caller who omits THAT should be told. This filter
+  # has no such enforcement and does not apply to simulations at all, where a
+  # warning on every call would be noise.
+  do_gm <- !(is.null(gene_mappability_file) ||
+             (length(gene_mappability_file) == 1L &&
+              is.na(gene_mappability_file)))
+  if (do_gm) {
+    if (!is.character(gene_mappability_file) ||
+        length(gene_mappability_file) != 1L)
+      stop("gene_mappability_file must be a single file path (or NULL/NA).")
+    if (!file.exists(gene_mappability_file))
+      stop("gene_mappability_file not found: ", gene_mappability_file)
+    # min = 0 keeps everything, which is almost certainly a mistake rather than
+    # an intent to disable -- say so instead of silently no-opping.
+    if (!is.numeric(gene_mappability_min) ||
+        length(gene_mappability_min) != 1L || is.na(gene_mappability_min) ||
+        gene_mappability_min <= 0 || gene_mappability_min > 1)
+      stop("gene_mappability_min must be a single number in (0, 1]; got: ",
+           paste(gene_mappability_min, collapse = ", "),
+           ". (0 would keep every gene -- pass gene_mappability_file = NULL ",
+           "to turn the filter off.)")
+  }
   if (missing(gene_locations) || is.null(gene_locations))
     stop("gene_locations is required (gene_id, chr, start, end): it anchors ",
          "the regulator cis-window for the proximity/LD-halo filter.")
@@ -355,7 +404,12 @@ apply_crossmap_post <- function(output_dir, method,
 
   cm <- resolve_cross_map(cross_map_file, universe = gene_locations$gene_id,
                           min_strength = cross_map_min_strength, verbose = verbose)
-  if (is.null(cm)) return(invisible(NULL))          # off (NA) or warned (NULL)
+  # Return only if there is NOTHING to do. Previously this returned whenever
+  # the cross-map table was off, which made `cross_map_file = NA` plus a
+  # gene_mappability_file a SILENT no-op: the call looked like it filtered and
+  # changed nothing.
+  do_cm <- !is.null(cm)
+  if (!do_cm && !do_gm) return(invisible(NULL))     # off (NA) or warned (NULL)
 
   chr_of <- stats::setNames(gene_locations$chr,
                             .cm_strip_ver(gene_locations$gene_id))
@@ -385,10 +439,14 @@ apply_crossmap_post <- function(output_dir, method,
     nt_raw <- readRDS(nt_files[[h]])
     # Idempotency guard: subtracting from an already-filtered family would
     # double-count (the tsv anti-join IS idempotent, but n_pairs - sub is not).
-    if (isTRUE(attr(nt_raw, "crossmap_filtered")))
-      stop(basename(nt_files[[h]]), " is already cross-map filtered; ",
-           "regenerate the raw family (re-run the scan, or write_n_tests()) ",
-           "before filtering again.")
+    if (isTRUE(attr(nt_raw, "crossmap_filtered")) ||
+        isTRUE(attr(nt_raw, "gene_mappability_filtered")))
+      stop(basename(nt_files[[h]]), " is already filtered (",
+           paste(c(if (isTRUE(attr(nt_raw, "crossmap_filtered"))) "cross-map",
+                   if (isTRUE(attr(nt_raw, "gene_mappability_filtered")))
+                     "gene-mappability"), collapse = " + "),
+           "); regenerate the raw family (re-run the scan, or ",
+           "write_n_tests()) before filtering again.")
     if (!identical(attr(nt_raw, "hierarchy"), h))
       stop(basename(nt_files[[h]]), " lacks a matching hierarchy stamp ",
            "(expected \"", h, "\"); build family tables with ",
@@ -396,6 +454,38 @@ apply_crossmap_post <- function(output_dir, method,
     nts[[h]] <- data.table::as.data.table(nt_raw)
   }
   meta <- readRDS(meta_file)             # list: ctx -> list(snpspos, tgt_ids)
+
+  # ------------------------------------------------------------------
+  # Gene-mappability drop set, resolved ONCE over the whole scanned universe.
+  #
+  # The universe comes from the scan METADATA, not gene_locations: snpspos$snp
+  # and tgt_ids are exactly the IDs that appear in the tsv SNP/gene columns and
+  # in n_tests. Using gene_locations would measure coverage against every
+  # annotated gene rather than the genes actually scanned, so the
+  # namespace-mismatch warning inside filter_mappable_genes() would report on
+  # the wrong population.
+  #
+  # filter_mappable_genes() is the single implementation of "which genes are
+  # low-mappability", shared with the pre-fit path, so the two can never
+  # disagree. It returns the KEPT ids; the drop set is the complement.
+  # ------------------------------------------------------------------
+  drop_genes <- character(0)
+  if (do_gm) {
+    universe <- unique(c(
+      unlist(lapply(meta, function(m) as.character(m$snpspos$snp)),
+             use.names = FALSE),
+      unlist(lapply(meta, function(m) as.character(m$tgt_ids)),
+             use.names = FALSE)))
+    if (verbose)
+      message("Gene-mappability filter over ", length(universe),
+              " scanned gene(s):")
+    kept_genes <- filter_mappable_genes(universe, gene_mappability_file,
+                                        min = gene_mappability_min,
+                                        verbose = verbose)
+    drop_genes <- setdiff(universe, kept_genes)
+    if (length(drop_genes) == 0L && verbose)
+      message("  no genes fall below the threshold; nothing to drop.")
+  }
 
   out <- stats::setNames(vector("list", length(nts)), names(nts))
   for (ctx in names(meta)) {
@@ -407,9 +497,29 @@ apply_crossmap_post <- function(output_dir, method,
            "the current package version.")
     snpspos <- m$snpspos
     tgt_ids <- m$tgt_ids
+
+    # Apply the gene filter FIRST, so everything below sees the reduced
+    # universe. The ordering is load-bearing: if the cross-map exclusion were
+    # computed on the unfiltered universe and then decremented from a
+    # gene-filtered n_pairs, it would subtract pairs the gene filter had
+    # already removed -- a silent double-decrement.
+    if (length(drop_genes) > 0L) {
+      snpspos <- snpspos[!(as.character(snpspos$snp) %in% drop_genes), ,
+                         drop = FALSE]
+      tgt_ids <- setdiff(as.character(tgt_ids), drop_genes)
+      if (nrow(snpspos) == 0L || length(tgt_ids) == 0L)
+        stop("Context '", ctx, "' has no ",
+             if (nrow(snpspos) == 0L) "regulators" else "targets",
+             " left after the gene-mappability filter (min = ",
+             gene_mappability_min, "). A family of size zero gives BH a zero ",
+             "denominator; relax the threshold or drop this context.")
+    }
+
     # ONE exclusion set per context, applied to the tsv once and to every
     # family sidecar present (in its own orientation).
-    excl <- if (regulator == "gene") {
+    excl <- if (!do_cm) {
+      data.table::data.table(reg = character(0), tgt = character(0))
+    } else if (regulator == "gene") {
       crossmap_excl_gene(cm, snpspos$snp, tgt_ids, chr_of,
                          gene_locations = gene_locations,
                          cis_window = cis_window,
@@ -425,16 +535,60 @@ apply_crossmap_post <- function(output_dir, method,
                             window = cis_window, chr_of = chr_of,
                             min_strength = proximity_min_strength)
     }
-    .crossmap_filter_tsv(out_file, excl)
-    for (h in names(nts))
-      out[[h]][[ctx]] <- .crossmap_decrement(nts[[h]][context == ctx], excl, h)
+    .crossmap_filter_tsv(out_file, excl, drop_genes)
+
+    for (h in names(nts)) {
+      if (length(drop_genes) > 0L) {
+        # RECOMPUTE rather than decrement. build_n_tests_trans() on the
+        # filtered metadata drops the excluded genes' rows outright AND
+        # shrinks every surviving gene's n_pairs by the right cross-chromosome
+        # count, in both orientations, using the arithmetic that built the
+        # table in the first place. Decrementing would only ever reduce
+        # n_pairs, never remove a row.
+        tchr <- chr_of[.cm_strip_ver(tgt_ids)]
+        if (anyNA(tchr))
+          stop("Some surviving target genes in context '", ctx, "' lack a ",
+               "gene_locations entry.")
+        # Normalize BOTH sides. build_n_tests_trans() derives same_chr_count by
+        # matching genepos$chr against names(table(snpspos$chr)), so the two
+        # must share a convention. chr_of is already normalized (line ~49), but
+        # snpspos$chr comes verbatim from the scan metadata. Today's scanners
+        # happen to write it normalized, so this is currently a no-op -- but
+        # nothing enforces that, and a mismatch would not error: every gene
+        # would silently get same_chr_count = 0 and therefore the FULL
+        # regulator count, inflating n_pairs instead of shrinking it.
+        snpspos_n <- snpspos
+        snpspos_n$chr <- .norm_chr(snpspos_n$chr)
+        nt_ctx <- build_n_tests_trans(
+          snpspos_n,
+          data.frame(geneid = tgt_ids, chr = .norm_chr(tchr),
+                     stringsAsFactors = FALSE),
+          contexts = ctx, hierarchy = h)
+      } else {
+        nt_ctx <- nts[[h]][context == ctx]
+      }
+      out[[h]][[ctx]] <- .crossmap_decrement(nt_ctx, excl, h)
+    }
   }
   res <- list()
   for (h in names(nts)) {
     other  <- nts[[h]][!(context %in% names(meta))]
     nt_new <- data.table::rbindlist(c(out[[h]], list(other)), use.names = TRUE)
     data.table::setattr(nt_new, "hierarchy", h)      # rbindlist drops attrs
-    data.table::setattr(nt_new, "crossmap_filtered", TRUE)  # refuse re-runs
+    # Stamp each filter INDEPENDENTLY. crossmap_filtered must reflect only
+    # whether the cross-map filter actually ran: run_fdr() treats it as proof
+    # that cross-mappable pairs were removed, so stamping it on a
+    # gene-mappability-only run would let an unfiltered family walk straight
+    # past that guard.
+    if (do_cm)
+      data.table::setattr(nt_new, "crossmap_filtered", TRUE)
+    if (do_gm) {
+      data.table::setattr(nt_new, "gene_mappability_filtered", TRUE)
+      data.table::setattr(nt_new, "gene_mappability_min", gene_mappability_min)
+      data.table::setattr(nt_new, "gene_mappability_file",
+                          normalizePath(gene_mappability_file,
+                                        mustWork = FALSE))
+    }
     saveRDS(nt_new, nt_files[[h]])
     res[[h]] <- nt_new
   }

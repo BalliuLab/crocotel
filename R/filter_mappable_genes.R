@@ -54,19 +54,63 @@ filter_mappable_genes <- function(gene_ids, mappability_file, min = 0.8,
   # strict format + numeric-score validation (see read_score_table.R).
   m <- .read_score_table(mappability_file, c("gene_id", "score"),
                          "mappability_file")
-  score_of <- m$score
-  names(score_of) <- strip_ver(m$gene_id)
+  # Collapse duplicate keys before building the lookup. Version stripping can
+  # map several rows onto one key -- e.g. a HUGO-relabelled table where the
+  # pipeline's sub("\\..*$") already folded ENSG...\_PAR_Y onto its X-copy,
+  # which this function's stricter sub("\\.[0-9]+$") would not have. Indexing a
+  # named vector by key silently returns the FIRST match, so without this the
+  # score used would depend on row order. Keep the MINIMUM: any evidence of low
+  # mappability should drop the gene.
+  # NB the column is `gkey`, not `key`: a data.table column literally named
+  # "key" collides with data.table's own key machinery, and `by = "key"` then
+  # fails with "some columns are not in the data.table" listing the column's
+  # VALUES.
+  mk <- data.table::data.table(gkey = strip_ver(m$gene_id), score = m$score)
+  n_dup_keys <- sum(duplicated(mk$gkey))
+  if (n_dup_keys > 0L)
+    mk <- mk[, list(score = if (all(is.na(score))) NA_real_
+                            else min(score, na.rm = TRUE)), by = "gkey"]
 
-  key   <- strip_ver(gene_ids)
-  score <- score_of[key]                       # NA when gene absent from table
-  keep  <- is.na(score) | score >= min         # unscored kept; scored gated
+  score_of <- mk$score
+  names(score_of) <- mk$gkey
 
-  n_drop   <- sum(!is.na(score) & score < min)
-  n_unscored <- sum(is.na(score))
-  if (verbose)
+  key     <- strip_ver(gene_ids)
+  matched <- key %in% names(score_of)
+  score   <- score_of[key]                     # NA if absent OR scored NA
+  keep    <- is.na(score) | score >= min       # unscored kept; scored gated
+
+  # THREE buckets, deliberately not merged. "absent from the table" and
+  # "present but unscored" are different situations, and lumping them is what
+  # hides an ID-namespace mismatch: a table in the wrong ID space reports every
+  # gene as "unscored kept" and looks entirely normal. n_unmatched is the alarm.
+  n_drop      <- sum(!is.na(score) & score < min)
+  n_na_scored <- sum(matched & is.na(score))
+  n_unmatched <- sum(!matched)
+
+  if (verbose) {
     message(sprintf(
-      "Mappability filter (>= %.2f): kept %d / %d genes (dropped %d low-mappability; %d unscored kept).",
-      min, sum(keep), length(gene_ids), n_drop, n_unscored))
+      paste0("Mappability filter (>= %.2f): kept %d / %d genes ",
+             "(dropped %d low-mappability; %d scored NA kept; ",
+             "%d not in the table, kept)."),
+      min, sum(keep), length(gene_ids), n_drop, n_na_scored, n_unmatched))
+    if (n_dup_keys > 0L)
+      message(sprintf(
+        "  %d duplicate gene key(s) after version stripping; kept the minimum.",
+        n_dup_keys))
+  }
+
+  # A table in the wrong ID space is the most damaging way this can fail
+  # silently: it filters nothing and reports success. Raw GENCODE tables are
+  # Ensembl-keyed, so a study whose genes are HUGO symbols matches ~nothing.
+  if (length(gene_ids) > 0L && n_unmatched > 0.5 * length(gene_ids))
+    warning(sprintf(
+      paste0("%.0f%% of gene_ids (%d/%d) are absent from %s and were KEPT ",
+             "unfiltered. That usually means an ID-namespace mismatch (an ",
+             "Ensembl-keyed table against HUGO symbols, say), not genuinely ",
+             "unknown mappability. Examples: %s"),
+      100 * n_unmatched / length(gene_ids), n_unmatched, length(gene_ids),
+      basename(mappability_file),
+      paste(utils::head(gene_ids[!matched], 5), collapse = ", ")))
 
   gene_ids[keep]
 }
