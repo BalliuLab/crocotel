@@ -123,6 +123,79 @@
 # Returns a named logical vector over rownames(Z). Dropping a regulator
 # shrinks every target's n_pairs, so this decision is family-shaping and must
 # not be re-implemented inside a scanner.
+# THE GReX-quality ("is this gene's GReX heritable here?") test, factored out
+# so the two places that need it cannot drift apart:
+#   * .usable_regulators() below -- admits a gene as a trans REGULATOR
+#   * the scanners' de-cis step -- decides whether a gene's own GReX is fit to
+#     be regressed out of its expression (see genes_arg below)
+# A gene must get the same verdict in a given context whichever role it plays,
+# which is why this is one function and not two thresholds.
+#
+# genes: character vector of gene IDs to test (rownames of Z, or the full gene
+# set when gating targets). Returns a named logical over `genes`.
+.grex_quality_pass <- function(genes, matrix_dir, method, ctx,
+                               grex_gate_pval, grex_gate_q,
+                               grex_gate_r2_min, grex_gate_mode = "pval") {
+  qc_file <- file.path(matrix_dir, paste0("qc_", method, "_", ctx, ".rds"))
+  if (!file.exists(qc_file))
+    stop(sprintf(paste0("A GReX-quality gate was requested but the QC file ",
+                        "is missing:\n  %s\nRe-run assemble_grex_matrices() ",
+                        "to write the qc_%s_* files, or disable the gate."),
+                 qc_file, method))
+  qc   <- readRDS(qc_file)
+  pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
+  rcol <- if (method == "cbc") "r2_cbc" else "r2_full"
+  pv   <- qc[genes, pcol]
+  r2   <- qc[genes, rcol]
+  # BH is computed over the genes PASSED IN, so the multiplicity matches the
+  # set being tested. Regulators and targets are different sets, so their
+  # q-values are not interchangeable -- do not cache one and reuse it for the
+  # other.
+  q    <- stats::p.adjust(pv, method = "BH")
+  q_ok  <- !is.na(q)  & q  <  grex_gate_q
+  r2_ok <- !is.na(r2) & r2 >= grex_gate_r2_min
+  pass <- switch(grex_gate_mode,
+    pval = if (grex_gate_r2_min > 0) q_ok & r2_ok else q_ok,
+    r2   = r2_ok,
+    both = q_ok & r2_ok,
+    stop("grex_gate_mode must be one of \"pval\", \"r2\", \"both\"."))
+  stats::setNames(pass, genes)
+}
+
+# The TARGET de-cis gate. Returns Z with the rows of genes whose own GReX is
+# NOT heritable in this context set to NA, ready to hand to residualize_grex().
+#
+# Why NA rather than dropping the row: residualize_grex() leaves any column
+# whose GReX contains an NA as the raw expression E (see its `proc` line), and
+# it is indexed positionally against the expression matrix -- so blanking is
+# both the documented fall-through and the only edit that keeps the two
+# matrices aligned. Every gene keeps a row; failures simply carry raw E through.
+#
+# Why gate at all: regressing a gene's expression on a non-heritable GReX is
+# regressing it on noise. It removes no real cis signal and adds the
+# predictor's estimation error to the target, which is a net loss.
+#
+# The returned matrix is used ONLY for the de-cis step. The caller's Z (the
+# regulator matrix) must not be affected, hence the copy.
+.gate_decis_grex <- function(Z, matrix_dir, method, ctx, target_grex_gate,
+                             grex_gate_pval, grex_gate_q,
+                             grex_gate_r2_min, grex_gate_mode = "pval",
+                             verbose = TRUE) {
+  if (!isTRUE(target_grex_gate)) return(Z)
+  pass <- .grex_quality_pass(rownames(Z), matrix_dir, method, ctx,
+                             grex_gate_pval, grex_gate_q,
+                             grex_gate_r2_min, grex_gate_mode)
+  if (verbose)
+    message(sprintf(paste0(
+      "  [%s] target de-cis gate: %d/%d genes have a heritable GReX; ",
+      "%d keep RAW expression (own GReX not regressed out)."),
+      ctx, sum(pass), length(pass), sum(!pass)))
+  if (all(pass)) return(Z)
+  Zg <- Z                      # copy: the caller still needs the raw Z
+  Zg[!pass, ] <- NA_real_
+  Zg
+}
+
 .usable_regulators <- function(Z, matrix_dir, method, ctx,
                                grex_gate, grex_gate_pval, grex_gate_q,
                                grex_gate_r2_min, min_reg_obs,
@@ -130,26 +203,13 @@
                                verbose = TRUE) {
   gate_pass <- rep(TRUE, nrow(Z))
   if (grex_gate) {
-    qc_file <- file.path(matrix_dir, paste0("qc_", method, "_", ctx, ".rds"))
-    if (!file.exists(qc_file))
-      stop(sprintf(paste0("grex_gate=TRUE but QC file is missing:\n  %s\n",
-                          "Re-run assemble_grex_matrices() to write the ",
-                          "qc_%s_* files, or set grex_gate=FALSE."),
-                   qc_file, method))
-    qc   <- readRDS(qc_file)
-    pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
-    rcol <- if (method == "cbc") "r2_cbc" else "r2_full"
-    pv   <- qc[rownames(Z), pcol]
-    r2   <- qc[rownames(Z), rcol]
-    q    <- stats::p.adjust(pv, method = "BH")   # within-context BH
-    q_ok  <- !is.na(q) & q < grex_gate_q
-    r2_ok <- !is.na(r2) & r2 >= grex_gate_r2_min
-    gate_pass <- switch(grex_gate_mode,
-      pval = if (grex_gate_r2_min > 0) q_ok & r2_ok else q_ok,
-      r2   = r2_ok,
-      both = q_ok & r2_ok,
-      stop("grex_gate_mode must be one of \"pval\", \"r2\", \"both\"."))
-    if (verbose)
+    # Shared with the target de-cis gate (.ungatable_targets) so a gene cannot
+    # get one verdict as a regulator and a different one as a target.
+    gate_pass <- .grex_quality_pass(rownames(Z), matrix_dir, method, ctx,
+                                    grex_gate_pval, grex_gate_q,
+                                    grex_gate_r2_min, grex_gate_mode)
+    if (verbose) {
+      pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
       message(sprintf(
         "  [%s] GReX gate (mode=%s%s%s): %d/%d regulators pass.",
         ctx, grex_gate_mode,
@@ -158,6 +218,7 @@
         if (grex_gate_mode != "pval" || grex_gate_r2_min > 0)
           sprintf(", r2>=%.3g", grex_gate_r2_min) else "",
         sum(gate_pass), length(gate_pass)))
+    }
   }
   obs   <- !is.na(Z)
   nobs  <- rowSums(obs)

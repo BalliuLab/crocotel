@@ -80,10 +80,16 @@
 #'   semantics and default as \code{run_trans_eqtl()}: a gene is admitted as
 #'   a REGULATOR in a context only if its crocotel GReX is significantly
 #'   predictive there (within-context BH on the assembled
-#'   \code{qc_crocotel_<ctx>} p-values, \code{q < grex_gate_q}). Targets are
-#'   never gated. Default \code{TRUE}; requires the
-#'   \code{qc_crocotel_<ctx>.rds} files from
-#'   \code{assemble_grex_matrices()} (errors if absent).
+#'   \code{qc_crocotel_<ctx>} p-values, \code{q < grex_gate_q}). Default
+#'   \code{TRUE}; requires the \code{qc_crocotel_<ctx>.rds} files from
+#'   \code{assemble_grex_matrices()} (errors if absent). For the separate
+#'   gate on a gene's own GReX as a TARGET, see \code{target_grex_gate}.
+#' @param target_grex_gate Logical. Target de-cis gate, same semantics and
+#'   default as \code{run_trans_eqtl()}: when \code{TRUE} (default) and
+#'   \code{target_response = "residualized"}, a gene's own GReX is regressed
+#'   out of its expression only if that GReX is heritable in this context,
+#'   judged by the same criterion \code{grex_gate} applies to regulators.
+#'   Genes that fail keep their RAW expression as the target.
 #' @param grex_gate_pval   Character. Which GReX p-value to gate on:
 #'   \code{"full"} (default), \code{"shared"}, or \code{"specific"}.
 #' @param grex_gate_q      Numeric. Within-context BH q-value cutoff for the
@@ -149,6 +155,7 @@ run_trans_lmm <- function(matrix_dir,
                           grex_gate_q     = 0.05,
                           grex_gate_r2_min = 0,
                           grex_gate_mode  = c("pval", "r2", "both"),
+                          target_grex_gate = TRUE,
                           min_obs_per_ctx = 30L,
                           min_reg_obs     = 5L,
                           hierarchy       = c("target", "regulator"),
@@ -169,6 +176,7 @@ run_trans_lmm <- function(matrix_dir,
                       grex_gate_q = grex_gate_q,
                       grex_gate_r2_min = grex_gate_r2_min,
                       grex_gate_mode = grex_gate_mode,
+                      target_grex_gate = target_grex_gate,
                       min_obs_per_ctx = min_obs_per_ctx,
                       min_reg_obs = min_reg_obs,
                       hierarchy = hierarchy,
@@ -191,6 +199,7 @@ run_trans_lmm <- function(matrix_dir,
                           grex_gate_q     = 0.05,
                           grex_gate_r2_min = 0,
                           grex_gate_mode  = c("pval", "r2", "both"),
+                          target_grex_gate = TRUE,
                           min_obs_per_ctx = 30L,
                           min_reg_obs     = 5L,
                           hierarchy       = c("target", "regulator"),
@@ -260,7 +269,10 @@ run_trans_lmm <- function(matrix_dir,
     raw <- readRDS(ef)[rownames(Z), colnames(Z), drop = FALSE]
     Zc[[ctx]] <- Z
     Yc[[ctx]] <- if (target_response == "raw") raw
-                 else t(residualize_grex(t(raw), t(Z)))
+                 else t(residualize_grex(t(raw), t(.gate_decis_grex(
+                   Z, matrix_dir, "crocotel", ctx, target_grex_gate,
+                   grex_gate_pval, grex_gate_q, grex_gate_r2_min,
+                   grex_gate_mode, verbose))))
   }
 
 
@@ -298,8 +310,10 @@ run_trans_lmm <- function(matrix_dir,
   # GReX values + positive variance over the observed values, per context.
   # A non-usable regulator's GReX row is then cleared to NA so the scan
   # (Phase B's Obs mask), `usable`/n_tests, and the crossmap meta all see
-  # the same eligible set consistently. Yc was already built from the FULL
-  # Z above, so targets are never gated -- same semantics as run_trans_eqtl.
+  # the same eligible set consistently. Yc was already built above from a
+  # SEPARATE copy of Z (masked only by the target de-cis gate), so this
+  # regulator masking cannot reach back into the targets -- same semantics
+  # as run_trans_eqtl.
   for (ci in seq_len(n_ctx)) {
     u <- .usable_regulators(Zc[[ci]], matrix_dir, "crocotel", contexts[ci],
                             grex_gate, grex_gate_pval, grex_gate_q,

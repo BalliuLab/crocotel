@@ -55,9 +55,24 @@
 #'   \code{TRUE} (default), a gene is admitted as a REGULATOR in a context only
 #'   if its GReX is significantly predictive there (within-context BH on the
 #'   assembled p-values, \code{q < grex_gate_q}). Applied before the scan, so
-#'   FDR family sizes shrink to the gated set (honest power gain). Targets are
-#'   never gated. Requires \code{qc_<method>_<ctx>.rds} from
-#'   \code{assemble_grex_matrices()}; errors if \code{TRUE} and absent.
+#'   FDR family sizes shrink to the gated set (honest power gain). Requires
+#'   \code{qc_<method>_<ctx>.rds} from \code{assemble_grex_matrices()}; errors
+#'   if \code{TRUE} and absent. For the separate gate on a gene's own GReX as a
+#'   TARGET, see \code{target_grex_gate}.
+#' @param target_grex_gate Logical. Target de-cis gate, applied only when
+#'   \code{target_response = "residualized"}. When \code{TRUE} (default), a
+#'   gene's own GReX is regressed out of its expression only if that GReX is
+#'   heritable in this context, judged by exactly the criterion
+#'   \code{grex_gate} uses for regulators (same \code{grex_gate_pval},
+#'   \code{grex_gate_q}, \code{grex_gate_r2_min}, \code{grex_gate_mode}).
+#'   Genes that fail keep their RAW expression as the target. Rationale: a
+#'   non-heritable GReX is noise, so regressing on it removes no real cis
+#'   signal while injecting the predictor's error into the target. Independent
+#'   of \code{grex_gate} -- gating regulators and gating the de-cis step are
+#'   separate decisions -- but it reads the same \code{qc_<method>_<ctx>.rds}
+#'   and errors if that file is absent. \code{FALSE} restores the historical
+#'   behaviour (de-cis every gene). Note the two gates test different gene
+#'   SETS, so their BH q-values differ; a gene can pass one and fail the other.
 #' @param grex_gate_pval   Character. Which crocotel GReX p-value to gate on:
 #'   \code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
 #'   for \code{method="cbc"} (which gates on its single \code{p_cbc}).
@@ -137,6 +152,7 @@ run_trans_eqtl <- function(matrix_dir,
                             grex_gate_q     = 0.05,
                             grex_gate_r2_min = 0,
                             grex_gate_mode  = c("pval", "r2", "both"),
+                            target_grex_gate = TRUE,
                             min_obs_per_ctx = 30L,
                             min_reg_obs     = 5L,
                             hierarchy       = c("target", "regulator"),
@@ -221,10 +237,17 @@ run_trans_eqtl <- function(matrix_dir,
     # gene-row -- transpose so its per-column reduction runs over genes),
     # identical to the fit-time residual. NB: built *before* dropping all-NA
     # regulator rows, since Y is needed for every gene (targets too).
+    #
+    # .gate_decis_grex() applies the TARGET gate: genes whose own GReX is not
+    # heritable here get an NA row, which residualize_grex() passes through as
+    # raw E. It returns a copy, so the Z used for regulators below is untouched.
     Y <- if (target_response == "raw") {
       raw
     } else {
-      t(residualize_grex(t(raw), t(Z)))
+      t(residualize_grex(t(raw), t(.gate_decis_grex(
+        Z, matrix_dir, method, ctx, target_grex_gate,
+        grex_gate_pval, grex_gate_q, grex_gate_r2_min,
+        grex_gate_mode, verbose))))
     }
 
     # Target eligibility (shared rule, decided at assembly): only genes with

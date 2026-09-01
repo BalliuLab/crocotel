@@ -312,9 +312,12 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   # One method-agnostic raw expression matrix per context (canonical target).
   expr_ctx      <- make_ctx_list()
 
-  # Per-context GReX quality-control tables (gene x metric), consumed by the
-  # B12 regulator GReX-quality gate in run_trans_eqtl(). One row per gene, from
-  # each record's B9 p-values (p_full/p_shared/p_specific, p_cbc) and adj-R2.
+  # Per-context GReX quality-control tables (gene x metric), consumed by both
+  # GReX-quality gates in run_trans_eqtl()/run_trans_lmm(): the B12 regulator
+  # gate and the target de-cis gate. One row per gene -- the full gene
+  # universe, not just the regulators, because the target gate asks the same
+  # question of every gene. From each record's B9 p-values
+  # (p_full/p_shared/p_specific, p_cbc) and adj-R2.
   make_qc_list <- function(cols) {
     m <- vector("list", n_ctx); names(m) <- ctx_names
     for (ctx in ctx_names)
