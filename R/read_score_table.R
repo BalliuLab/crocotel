@@ -40,12 +40,22 @@
   # Literal NA / empty are legitimately missing, not evidence of a text column.
   score_probe   <- as.character(probe[[min(n_col, ncol(probe))]])
   score_numeric <- any(!is.na(suppressWarnings(as.numeric(score_probe))))
+  # ... but "any row parses" is not enough on its own to call the file
+  # headerless: a file with an UNRECOGNIZED header (gene/mapscore) has a text
+  # cell in row 1 and numeric cells below it, and would otherwise be read
+  # positionally with the header row as data -- the score column then types
+  # character and the error blames the header text instead of naming the real
+  # problem. Row 1 must itself look like data: numeric, or legitimately
+  # missing (the v48 file has 1,253 rows whose score is the literal "NA").
+  row1_score    <- score_probe[1L]
+  row1_is_data  <- !is.na(suppressWarnings(as.numeric(row1_score))) ||
+                   row1_score %in% c("NA", "")
 
   if (all(col_names %in% row1)) {
     # Headered file with the documented names: select BY NAME.
     dt <- data.table::fread(file, header = TRUE)
     dt <- dt[, col_names, with = FALSE]
-  } else if (ncol(probe) == n_col && score_numeric) {
+  } else if (ncol(probe) == n_col && score_numeric && row1_is_data) {
     # Headerless file with exactly the expected columns, numeric score.
     dt <- data.table::fread(file, header = FALSE, col.names = col_names)
   } else {

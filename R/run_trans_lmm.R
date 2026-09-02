@@ -268,11 +268,21 @@ run_trans_lmm <- function(matrix_dir,
     Z   <- readRDS(gf)
     raw <- readRDS(ef)[rownames(Z), colnames(Z), drop = FALSE]
     Zc[[ctx]] <- Z
+    # .impute_row_mean() between the target de-cis gate and residualize_grex(),
+    # identical to run_trans_eqtl(): without it a gate-PASSING target with one
+    # incidental per-individual NA (a CV fold selecting zero SNPs) silently
+    # reverts to raw via residualize_grex()'s all-or-nothing-per-column rule.
+    # Gate-FAILING targets are unaffected (an all-NA row imputes to all-NaN,
+    # still is.na()==TRUE, so residualize_grex() still falls back to raw).
+    # NOTE: this is the TARGET side only. Zc[[ctx]] above is deliberately the
+    # UN-imputed, un-gated Z -- the regulator side (below) handles missingness
+    # natively via its own Obs/Vmsk masking in the batched GLS scan, not via
+    # this function; do not add .impute_row_mean() there too.
     Yc[[ctx]] <- if (target_response == "raw") raw
-                 else t(residualize_grex(t(raw), t(.gate_decis_grex(
+                 else t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(
                    Z, matrix_dir, "crocotel", ctx, target_grex_gate,
                    grex_gate_pval, grex_gate_q, grex_gate_r2_min,
-                   grex_gate_mode, verbose))))
+                   grex_gate_mode, verbose)))))
   }
 
 

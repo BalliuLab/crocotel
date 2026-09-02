@@ -196,6 +196,46 @@
   Zg
 }
 
+# Row-mean impute remaining NAs (per gene). SINGLE SHARED implementation --
+# previously duplicated as a local closure inside run_trans_eqtl() and again
+# as a private copy in run_trans_eqtl_snp() (algebraically identical in both;
+# consolidated here so the places that need it cannot drift apart, same
+# rationale as .grex_quality_pass() above).
+#
+# For a row that is ENTIRELY NA -- e.g. .gate_decis_grex()'s NA-the-row
+# signal for a target that failed the de-cis gate -- rowMeans(., na.rm=TRUE)
+# over zero observations returns NaN, and is.na(NaN) is TRUE in R. So an
+# all-NA row imputes to all-NaN, which residualize_grex()'s `proc` check
+# still correctly treats as missing: the gate's fail signal survives
+# unconditional imputation. Only rows with genuine PARTIAL data (some
+# observed, some not) get a real, usable mean substituted -- which is exactly
+# the case this function exists to fix: a gene that PASSES the quality gate
+# but has an incidental per-individual NA (e.g. a CV fold that selected zero
+# SNPs for one individual) must not have that single NA silently revert the
+# whole gene to unresidualized raw expression via residualize_grex()'s
+# all-or-nothing-per-column rule.
+#
+# No minimum-observed-count floor here BY DESIGN: on the regulator side this
+# is called only after .usable_regulators() has already enforced
+# nobs >= min_reg_obs, so every row reaching this function has enough real
+# observations for the mean to be non-degenerate. On the target side
+# (.gate_decis_grex()'s output), .grex_quality_pass() -- the ONLY test a
+# target gate-pass depends on -- has NO equivalent observation-count floor;
+# a target could in principle pass on stale fit-time quality while having
+# very few real GReX values in this context and still get imputed from a
+# near-empty mean. That gap belongs in .grex_quality_pass() / .gate_decis_grex(),
+# not here: this function's contract is "impute what's given," not "decide
+# what's safe to impute."
+.impute_row_mean <- function(M) {
+  row_means <- rowMeans(M, na.rm = TRUE)
+  na_mask   <- is.na(M)
+  if (any(na_mask)) {
+    rep_means  <- row_means[row(M)][na_mask]
+    M[na_mask] <- rep_means
+  }
+  M
+}
+
 .usable_regulators <- function(Z, matrix_dir, method, ctx,
                                grex_gate, grex_gate_pval, grex_gate_q,
                                grex_gate_r2_min, min_reg_obs,

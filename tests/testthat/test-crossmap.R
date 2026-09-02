@@ -27,20 +27,20 @@ test_that("gene-proximity (LD-halo) exclusion: in/out of cis-window, strength, c
   chr_ofPX <- stats::setNames(glPX$chr, glPX$gene_id)
   cmPX <- data.table::data.table(g1 = c("Pin", "Pout"), g2 = c("T1", "T2"),
                                  strength = c(200, 200))
-  excl <- crossmap_excluded_pairs_gene_proximity(
+  excl <- crocotel:::crossmap_excluded_pairs_gene_proximity(
     cmPX, reg_ids = "R", tgt_ids = c("T1", "T2"), gene_locations = glPX,
     cis_window = 1e6, window = 1e6, chr_of = chr_ofPX, min_strength = 100)
   expect_equal(nrow(excl[excl$reg == "R" & excl$tgt == "T1", ]), 1L)  # inside
   expect_equal(nrow(excl[excl$tgt == "T2", ]), 0L)                    # outside
   # strength below the threshold -> nothing excluded
-  expect_equal(nrow(crossmap_excluded_pairs_gene_proximity(
+  expect_equal(nrow(crocotel:::crossmap_excluded_pairs_gene_proximity(
     data.table::data.table(g1 = "Pin", g2 = "T1", strength = 50),
     reg_ids = "R", tgt_ids = "T1", gene_locations = glPX,
     cis_window = 1e6, window = 1e6, chr_of = chr_ofPX,
     min_strength = 100)), 0L)
   # same-chr (cis) reg/target is never a trans pair -> never excluded
   glc <- glPX; glc$chr[glc$gene_id == "T1"] <- "1"
-  expect_equal(nrow(crossmap_excluded_pairs_gene_proximity(
+  expect_equal(nrow(crocotel:::crossmap_excluded_pairs_gene_proximity(
     cmPX, reg_ids = "R", tgt_ids = "T1", gene_locations = glc,
     cis_window = 1e6, window = 1e6,
     chr_of = stats::setNames(glc$chr, glc$gene_id),

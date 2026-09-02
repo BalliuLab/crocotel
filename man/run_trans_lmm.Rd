@@ -15,6 +15,7 @@ run_trans_lmm(
   grex_gate_q = 0.05,
   grex_gate_r2_min = 0,
   grex_gate_mode = c("pval", "r2", "both"),
+  target_grex_gate = TRUE,
   min_obs_per_ctx = 30L,
   min_reg_obs = 5L,
   hierarchy = c("target", "regulator"),
@@ -47,10 +48,17 @@ directly. Mirrors \code{run_trans_eqtl()}'s argument.}
 semantics and default as \code{run_trans_eqtl()}: a gene is admitted as
 a REGULATOR in a context only if its crocotel GReX is significantly
 predictive there (within-context BH on the assembled
-\code{qc_crocotel_<ctx>} p-values, \code{q < grex_gate_q}). Targets are
-never gated. Default \code{TRUE}; requires the
-\code{qc_crocotel_<ctx>.rds} files from
-\code{assemble_grex_matrices()} (errors if absent).}
+\code{qc_crocotel_<ctx>} p-values, \code{q < grex_gate_q}). Default
+\code{TRUE}; requires the \code{qc_crocotel_<ctx>.rds} files from
+\code{assemble_grex_matrices()} (errors if absent). For the separate
+gate on a gene's own GReX as a TARGET, see \code{target_grex_gate}.}
+
+\item{target_grex_gate}{Logical. Target de-cis gate, same semantics and
+default as \code{run_trans_eqtl()}: when \code{TRUE} (default) and
+\code{target_response = "residualized"}, a gene's own GReX is regressed
+out of its expression only if that GReX is heritable in this context,
+judged by the same criterion \code{grex_gate} applies to regulators.
+Genes that fail keep their RAW expression as the target.}
 
 \item{grex_gate_pval}{Character. Which GReX p-value to gate on:
 \code{"full"} (default), \code{"shared"}, or \code{"specific"}.}

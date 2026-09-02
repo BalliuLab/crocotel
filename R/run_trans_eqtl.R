@@ -241,13 +241,23 @@ run_trans_eqtl <- function(matrix_dir,
     # .gate_decis_grex() applies the TARGET gate: genes whose own GReX is not
     # heritable here get an NA row, which residualize_grex() passes through as
     # raw E. It returns a copy, so the Z used for regulators below is untouched.
+    #
+    # .impute_row_mean() runs BETWEEN the gate and residualize_grex(): without
+    # it, a gate-PASSING gene with even one incidental per-individual NA (e.g.
+    # a CV fold that selected zero SNPs for one individual) silently reverts
+    # to raw expression too, via residualize_grex()'s all-or-nothing-per-
+    # column rule -- the gate's pass verdict gets overridden by an NA that has
+    # nothing to do with gate quality. Gate-FAILING genes are unaffected: an
+    # entirely-NA row imputes to all-NaN (rowMeans of zero observations), and
+    # is.na(NaN) is TRUE, so residualize_grex() still correctly falls back to
+    # raw for them. See .impute_row_mean()'s own doc in trans_scan_shared.R.
     Y <- if (target_response == "raw") {
       raw
     } else {
-      t(residualize_grex(t(raw), t(.gate_decis_grex(
+      t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(
         Z, matrix_dir, method, ctx, target_grex_gate,
         grex_gate_pval, grex_gate_q, grex_gate_r2_min,
-        grex_gate_mode, verbose))))
+        grex_gate_mode, verbose)))))
     }
 
     # Target eligibility (shared rule, decided at assembly): only genes with
@@ -271,8 +281,11 @@ run_trans_eqtl <- function(matrix_dir,
     #     .usable_regulators() = B12 GReX-quality gate (within-context BH
     #     q < grex_gate_q on the assembled p-values, optional R2 floor)
     #     + >= min_reg_obs observed GReX values + positive variance over
-    #     the observed values. Applied to Z (regulators) only; Y (targets)
-    #     was already built above from the full Z and is never gated.
+    #     the observed values. Applied to Z (regulators) only. Y (targets)
+    #     was already built above from its own gated COPY of Z, so this
+    #     subsetting cannot reach back into the targets. Both gates see the
+    #     same full rownames(Z) here, so their BH multiplicity -- and hence
+    #     their verdicts -- coincide; that is not guaranteed in general.
     # ----------------------------------------------------------------
     keep_reg <- .usable_regulators(Z, matrix_dir, method, ctx,
                                    grex_gate, grex_gate_pval, grex_gate_q,
@@ -286,19 +299,12 @@ run_trans_eqtl <- function(matrix_dir,
     Z <- Z[keep_reg, , drop = FALSE]
 
     # ----------------------------------------------------------------
-    # 2b. Row-mean impute remaining NAs (per gene), then drop zero-
-    #     variance rows that would yield NaN test statistics.
+    # 2b. Row-mean impute remaining NAs (per gene; .impute_row_mean() in
+    #     trans_scan_shared.R -- the same shared call used on the target
+    #     side above), then drop zero-variance rows that would yield NaN
+    #     test statistics.
     # ----------------------------------------------------------------
-    impute_row_mean <- function(M) {
-      row_means <- rowMeans(M, na.rm = TRUE)
-      na_mask   <- is.na(M)
-      if (any(na_mask)) {
-        rep_means <- row_means[row(M)][na_mask]
-        M[na_mask] <- rep_means
-      }
-      M
-    }
-    Z <- impute_row_mean(Z)
+    Z <- .impute_row_mean(Z)
     # Complete-case response: drop individuals (columns) with NO observed
     # target in this context -- they were only union-padded in by
     # assemble_grex_matrices. MatrixEQTL runs unchanged on the smaller dense
