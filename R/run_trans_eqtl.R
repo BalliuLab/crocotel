@@ -41,10 +41,16 @@
 #' @param contexts         Character vector or \code{NULL}. Contexts to
 #'   process. \code{NULL} (default) processes every context found for
 #'   \code{method} in \code{matrix_dir}.
-#' @param target_response  Character. \code{"residualized"} (default) or
-#'   \code{"raw"}. \code{"raw"} uses the observed expression (\code{expr_<ctx>})
-#'   directly; \code{"residualized"} de-cis's it against this method's GReX on
-#'   the fly via \code{residualize_grex()} (identical to the fit-time residual).
+#' @param target_response  Character. \strong{\code{method = "crocotel"} only.}
+#'   \code{"residualized"} (default) or \code{"raw"}. \code{"raw"} uses the
+#'   observed expression (\code{expr_<ctx>}) directly; \code{"residualized"}
+#'   de-cis's it against the crocotel GReX on the fly via
+#'   \code{residualize_grex()} (identical to the fit-time residual).
+#'   \strong{Ignored for \code{method = "cbc"}}, which always scans raw
+#'   observed expression: cbc is the context-by-context comparator (GBAT,
+#'   Liu et al.), and de-cis'ing its target would give the comparator a
+#'   crocotel-only step, so the two methods would no longer be comparable.
+#'   Passing anything but \code{"raw"} with \code{"cbc"} warns and is ignored.
 #' @param pv_threshold     Numeric. Only pairs with p-value below this are
 #'   kept. Default \code{0.05} (matches \code{run_trans_eqtl_snp}); loose
 #'   enough that any pair which could
@@ -159,7 +165,23 @@ run_trans_eqtl <- function(matrix_dir,
                             verbose         = TRUE) {
 
   method          <- match.arg(method)
+  tr_given        <- !missing(target_response)
   target_response <- match.arg(target_response)
+  # target_response is a CROCOTEL-ONLY option. cbc is the context-by-context
+  # comparator (GBAT, Liu et al.), which scans OBSERVED target expression --
+  # the legacy implementation pins this with `regress_target_GReX = F` and
+  # reads <ctx>.norm_res_exp.txt. De-cis'ing a cbc target would hand the
+  # comparator a crocotel-only step, so the crocotel-vs-cbc contrast would
+  # stop isolating the decomposition. cbc is therefore always raw, whatever
+  # the caller passes; target_grex_gate is likewise inert for cbc, since it
+  # only acts on the residualized branch.
+  if (method == "cbc") {
+    if (tr_given && target_response != "raw")
+      warning("target_response is a crocotel-only option; ignoring ",
+              "target_response = \"", target_response, "\" and scanning raw ",
+              "observed expression for method = \"cbc\".")
+    target_response <- "raw"
+  }
   grex_gate_pval  <- match.arg(grex_gate_pval)
   grex_gate_mode  <- match.arg(grex_gate_mode)
   hierarchy       <- match.arg(hierarchy)

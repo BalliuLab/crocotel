@@ -71,12 +71,10 @@
   list(G = G, snpspos = snpspos)
 }
 
-.impute_row_mean <- function(M) {
-  rm <- rowMeans(M, na.rm = TRUE)
-  na <- is.na(M)
-  if (any(na)) M[na] <- rm[row(M)][na]
-  M
-}
+# .impute_row_mean() used below is the SHARED implementation in
+# trans_scan_shared.R -- this file previously carried its own private copy
+# (algebraically identical); consolidated to avoid a second, independently-
+# maintained duplicate of the same nine lines.
 
 # Lead-SNP dosage matrix (gene x individual) via a MatrixEQTL CIS scan: the
 # min-p cis-SNP per gene (top regardless of significance), so cis and trans use

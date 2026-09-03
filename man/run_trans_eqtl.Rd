@@ -42,10 +42,16 @@ One method per call; invoke twice if both are wanted.}
 process. \code{NULL} (default) processes every context found for
 \code{method} in \code{matrix_dir}.}
 
-\item{target_response}{Character. \code{"residualized"} (default) or
-\code{"raw"}. \code{"raw"} uses the observed expression (\code{expr_<ctx>})
-directly; \code{"residualized"} de-cis's it against this method's GReX on
-the fly via \code{residualize_grex()} (identical to the fit-time residual).}
+\item{target_response}{Character. \strong{\code{method = "crocotel"} only.}
+\code{"residualized"} (default) or \code{"raw"}. \code{"raw"} uses the
+observed expression (\code{expr_<ctx>}) directly; \code{"residualized"}
+de-cis's it against the crocotel GReX on the fly via
+\code{residualize_grex()} (identical to the fit-time residual).
+\strong{Ignored for \code{method = "cbc"}}, which always scans raw
+observed expression: cbc is the context-by-context comparator (GBAT,
+Liu et al.), and de-cis'ing its target would give the comparator a
+crocotel-only step, so the two methods would no longer be comparable.
+Passing anything but \code{"raw"} with \code{"cbc"} warns and is ignored.}
 
 \item{pv_threshold}{Numeric. Only pairs with p-value below this are
 kept. Default \code{0.05} (matches \code{run_trans_eqtl_snp}); loose
