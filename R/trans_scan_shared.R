@@ -133,6 +133,21 @@
 #
 # genes: character vector of gene IDs to test (rownames of Z, or the full gene
 # set when gating targets). Returns a named logical over `genes`.
+# qc_<method>_<ctx>.rds column names for a given gate setting, under the
+# <quantity>_<method>_<response>_<predictor> scheme that
+# assemble_grex_matrices() writes. Defined once because two call sites need
+# it: the lookup below and .usable_regulators()'s progress message.
+# NB the "shared"/"specific" gate options map to the CONDITIONAL tests.
+.qc_gate_cols <- function(method, grex_gate_pval) {
+  if (method == "cbc")
+    return(list(p = "p_cbc_expr_full", r2 = "r2_cbc_expr_full"))
+  list(p = switch(grex_gate_pval,
+                  full     = "p_crocotel_expr_full",
+                  shared   = "p_crocotel_expr_shared_given_specific",
+                  specific = "p_crocotel_expr_specific_given_shared"),
+       r2 = "r2_crocotel_expr_full")
+}
+
 .grex_quality_pass <- function(genes, matrix_dir, method, ctx,
                                grex_gate_pval, grex_gate_q,
                                grex_gate_r2_min, grex_gate_mode = "pval") {
@@ -143,10 +158,9 @@
                         "to write the qc_%s_* files, or disable the gate."),
                  qc_file, method))
   qc   <- readRDS(qc_file)
-  pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
-  rcol <- if (method == "cbc") "r2_cbc" else "r2_full"
-  pv   <- qc[genes, pcol]
-  r2   <- qc[genes, rcol]
+  cols <- .qc_gate_cols(method, grex_gate_pval)
+  pv   <- qc[genes, cols$p]
+  r2   <- qc[genes, cols$r2]
   # BH is computed over the genes PASSED IN, so the multiplicity matches the
   # set being tested. Regulators and targets are different sets, so their
   # q-values are not interchangeable -- do not cache one and reuse it for the
@@ -249,7 +263,7 @@
                                     grex_gate_pval, grex_gate_q,
                                     grex_gate_r2_min, grex_gate_mode)
     if (verbose) {
-      pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
+      pcol <- .qc_gate_cols(method, grex_gate_pval)$p
       message(sprintf(
         "  [%s] GReX gate (mode=%s%s%s): %d/%d regulators pass.",
         ctx, grex_gate_mode,

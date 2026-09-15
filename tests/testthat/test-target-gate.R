@@ -17,8 +17,10 @@ set_qc_failures <- function(dir, contexts, failing) {
   for (ctx in contexts) {
     f  <- file.path(dir, paste0("qc_crocotel_", ctx, ".rds"))
     qc <- readRDS(f)
-    qc[failing, c("p_full", "p_shared", "p_specific")] <- 1
-    qc[failing, "r2_full"] <- 0
+    qc[failing, c("p_crocotel_expr_full",
+                  "p_crocotel_expr_shared_given_specific",
+                  "p_crocotel_expr_specific_given_shared")] <- 1
+    qc[failing, "r2_crocotel_expr_full"] <- 0
     saveRDS(qc, f)
   }
 }
@@ -143,7 +145,8 @@ test_that("target_response is crocotel-only: cbc always scans raw", {
     file.copy(file.path(d, paste0("grex_crocotel_", ctx, ".rds")),
               file.path(d, paste0("grex_cbc_", ctx, ".rds")))
     qc <- readRDS(file.path(d, paste0("qc_crocotel_", ctx, ".rds")))
-    cb <- cbind(p_cbc = qc[, "p_full"], r2_cbc = qc[, "r2_full"])
+    cb <- cbind(p_cbc_expr_full  = qc[, "p_crocotel_expr_full"],
+                r2_cbc_expr_full = qc[, "r2_crocotel_expr_full"])
     rownames(cb) <- rownames(qc)
     saveRDS(cb, file.path(d, paste0("qc_cbc_", ctx, ".rds")))
   }
