@@ -6,7 +6,7 @@
 # reconstruct the de-cis residual on the fly from the assembled raw
 # expression + GReX; fit_grex_doublecv does NOT compute or store residuals.
 #
-# NB: distinct from residualize_expression() (real-data covariate/PC adjustment)
+# NB: this is the cis-GReX de-residualization used inside the trans scanners.
 # - this one regresses expression on its own cis-GReX prediction.
 
 

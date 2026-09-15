@@ -4,7 +4,13 @@
 \alias{filter_mappable_genes}
 \title{Filter a gene list to reliably-mappable genes}
 \usage{
-filter_mappable_genes(gene_ids, mappability_file, min = 0.8, verbose = TRUE)
+filter_mappable_genes(
+  gene_ids,
+  mappability_file,
+  min = 0.8,
+  min_scored_frac = 0.95,
+  verbose = TRUE
+)
 }
 \arguments{
 \item{gene_ids}{Character vector of gene IDs to filter.}
@@ -19,6 +25,18 @@ pre-fit filter: don't call it if you don't want to filter on mappability.}
 
 \item{min}{Numeric. Minimum mappability to retain. Default
 \code{0.8} (Saha & Battle / GTEx convention).}
+
+\item{min_scored_frac}{Numeric in (0, 1], or \code{NULL}. Minimum
+fraction of \code{gene_ids} that must carry a score in
+\code{mappability_file}; the call \code{stop()}s below it. Default
+\code{0.95}: the current hg38 GENCODE v48 table scores ~100% of GTEx v11
+genes, while the older v26 table scores only 71.8%, so this default
+catches a stale or mismatched table. Pass \code{NULL} to disable, which
+is appropriate only for small gene sets where partial coverage is
+expected rather than diagnostic. Because unscored genes are KEPT, a gene-ID / build
+mismatch would otherwise leave every gene unscored and silently disable
+the filter while still reporting a plausible kept count; this turns that
+into a loud, diagnosable error.}
 
 \item{verbose}{Logical. Report kept / dropped / unscored counts.
 Default \code{TRUE}.}

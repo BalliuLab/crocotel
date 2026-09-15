@@ -54,21 +54,33 @@ test_that("fit_grex_gene record: shape, effects, r2 (incl. *_expr), pvals", {
     c("gene_id", "chr", "status", "reason",
       "status_crocotel", "status_cbc",
       "Z_grex_crocotel", "Z_grex_cbc",
-      "Z_grex_shared", "Z_grex_specific",
-      "ctx_gate_crocotel", "ctx_gate_cbc", "r2", "pvals", "effects"))
+      "Z_grex_crocotel_shared", "Z_grex_crocotel_specific",
+      "ctx_gate_crocotel", "ctx_gate_cbc", "r2", "pvals", "n", "w", "support",
+      "folds", "effects"))
+  # support: per-fold elastic-net support counts, 0..K_outer. Shared is a
+  # scalar (fitted once per fold); specific/cbc are per-context vectors.
+  expect_true(all(c("support_crocotel_shared", "support_crocotel_specific",
+                    "support_cbc") %in% names(r$support)))
+  expect_length(r$support$support_crocotel_shared, 1L)
+  expect_length(r$support$support_crocotel_specific, gx_params$n_contexts)
+  K <- length(unique(r$folds))          # gx_fit() uses K_outer = 3
+  expect_true(all(r$support$support_crocotel_specific >= 0L &
+                  r$support$support_crocotel_specific <= K))
+  expect_true(r$support$support_crocotel_shared >= 0L &&
+              r$support$support_crocotel_shared <= K)
   n_C <- gx_params$n_contexts
   expect_equal(dim(r$Z_grex_crocotel),
                c(gx_params$n_individuals, n_C))
   # r2: legacy trio + the per-context component-vs-raw-expression pair
-  expect_true(all(c("r2_shared", "r2_specific", "r2_shared_expr",
-                    "r2_specific_expr", "r2_full", "r2_cbc") %in%
+  expect_true(all(c("r2_crocotel_shcomp_shared", "r2_crocotel_spcomp_specific", "r2_crocotel_expr_shared",
+                    "r2_crocotel_expr_specific", "r2_crocotel_expr_full", "r2_cbc_expr_full") %in%
                   names(r$r2)))
-  expect_length(r$r2$r2_shared, 1L)
-  expect_length(r$r2$r2_shared_expr,   n_C)
-  expect_length(r$r2$r2_specific_expr, n_C)
+  expect_length(r$r2$r2_crocotel_shcomp_shared, 1L)
+  expect_length(r$r2$r2_crocotel_expr_shared,   n_C)
+  expect_length(r$r2$r2_crocotel_expr_specific, n_C)
   # pvals present per context
-  expect_length(r$pvals$p_full, n_C)
-  expect_true(any(is.finite(r$pvals$p_full)))
+  expect_length(r$pvals$p_crocotel_expr_full, n_C)
+  expect_true(any(is.finite(r$pvals$p_crocotel_expr_full)))
   # elastic-net effects: per component x outer fold; a completed shared fit
   # carries lambda/intercept/support and the non-zero coefficients
   expect_true(all(c("shared", "specific", "cbc") %in% names(r$effects)))
@@ -89,19 +101,19 @@ test_that("fit_grex_gene record: shape, effects, r2 (incl. *_expr), pvals", {
   expect_true(length(all_coef) > 0L)
   expect_true(all(all_coef %in% real_ids))
   # components are opt-in: NULL by default
-  expect_null(r$Z_grex_shared)
-  expect_null(r$Z_grex_specific)
+  expect_null(r$Z_grex_crocotel_shared)
+  expect_null(r$Z_grex_crocotel_specific)
 })
 
 test_that("return_components = TRUE returns the shared/specific sub-matrices", {
   r <- gx_fit(gx_regs[1], return_components = TRUE)
-  expect_length(r$Z_grex_shared, gx_params$n_individuals)
-  expect_equal(dim(r$Z_grex_specific),
+  expect_length(r$Z_grex_crocotel_shared, gx_params$n_individuals)
+  expect_equal(dim(r$Z_grex_crocotel_specific),
                c(gx_params$n_individuals, gx_params$n_contexts))
   # the full GReX is built from the components: where all three are observed
   # the full must be a finite combination (spot-check finiteness/consistency)
-  expect_true(any(is.finite(r$Z_grex_shared)))
-  expect_true(any(is.finite(r$Z_grex_specific)))
+  expect_true(any(is.finite(r$Z_grex_crocotel_shared)))
+  expect_true(any(is.finite(r$Z_grex_crocotel_specific)))
 })
 
 test_that("assemble + run_trans_eqtl + run_trans_eqtl_snp run end-to-end", {

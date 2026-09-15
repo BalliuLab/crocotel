@@ -86,8 +86,8 @@ coefficient caps (OOM escape hatch); \code{NULL} (default) uses glmnet's
 defaults. Forwarded to \code{fit_grex_doublecv()}.}
 
 \item{return_components}{Logical. When \code{TRUE}, the saved record also
-carries the shared/specific GReX sub-matrices (\code{Z_grex_shared},
-\code{Z_grex_specific}). Default \code{FALSE} (roughly doubles per-gene
+carries the shared/specific GReX sub-matrices (\code{Z_grex_crocotel_shared},
+\code{Z_grex_crocotel_specific}). Default \code{FALSE} (roughly doubles per-gene
 storage). Forwarded to \code{fit_grex_doublecv()}.}
 
 \item{maf_min}{Numeric. Minimum MAF for cis-SNP inclusion.
@@ -144,17 +144,37 @@ Invisibly returns \code{NULL} (or the record if
     (< \code{min_valid_n} measured), \code{"invariant"} (constant
     expression), or \code{"no_signal"} (eligible but the fit found none).
     \code{NULL} for \code{"no_input"} genes (no fit attempted).}
-  \item{r2}{Named list of adjusted R2 metrics from
-    \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
-  \item{pvals}{Named list of per-context GReX significance F-test p-values
-    (\code{p_full}, \code{p_shared}, \code{p_specific}, \code{p_cbc}) from
-    \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
+  \item{r2}{Named list of six adjusted R2 values, named
+    \code{<method>_<response>_<predictor>}. Response is \code{expr} (raw
+    expression), \code{shcomp} (the cross-context mean) or \code{spcomp}
+    (the de-meaned component). \code{NULL} for \code{"no_input"}.}
+  \item{pvals}{Named list of per-context GReX significance F-test p-values,
+    named \code{<method>_<response>_<predictor>}: six marginal tests
+    pairing 1:1 with \code{r2}, plus
+    \code{p_crocotel_expr_shared_given_specific} and
+    \code{p_crocotel_expr_specific_given_shared} (conditional; no matching
+    \code{r2} by design). \code{NULL} for \code{"no_input"}.}
+  \item{n}{Named list of the rows used by each \code{r2}/\code{pvals}
+    pair. Not a single value: the full model needs both predictors present,
+    a marginal fit needs one, and \code{shcomp} uses a different response.
+    Adjusted \eqn{R^2} depends on it, so it is what lets raw \eqn{R^2} be
+    recovered.}
+  \item{folds}{Integer vector named by individual: the outer-fold
+    assignment. Stored because it is otherwise unrecoverable --- folds are
+    built by ranking on \code{rowMeans(E)} then randomising within blocks,
+    so they depend on the RNG state and the seed is not itself stored.
+    Needed to tell which individuals received a prediction from a fold
+    whose elastic net selected no SNPs (that prediction is then just the
+    fold intercept, carrying no genetic information).}
+  \item{w}{\code{w_crocotel_shared} and \code{w_crocotel_specific}: the
+    OLS weights defining \code{Z_grex_crocotel}. Without them the shipped
+    predictor cannot be decomposed.}
   \item{effects}{Elastic-net effects from \code{fit_grex_doublecv()} --
     per component and outer fold, the chosen \code{lambda},
     \code{intercept}, support size \code{n_snps}, and the non-zero
     \code{snp}/\code{beta} coefficients (see that function's docs).
     \code{NULL} for non-\code{"ok"} records.}
-  \item{Z_grex_shared, Z_grex_specific}{The shared (n_individuals) and
+  \item{Z_grex_crocotel_shared, Z_grex_crocotel_specific}{The shared (n_individuals) and
     specific (n_individuals x n_contexts) GReX sub-matrices. \code{NULL}
     unless \code{return_components = TRUE} on an \code{"ok"} record.}
 }

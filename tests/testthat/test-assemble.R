@@ -18,10 +18,10 @@
   list(gene_id = gene_id, chr = "1", status = "ok", reason = NA_character_,
        status_crocotel = "ok", status_cbc = NA_character_,
        Z_grex_crocotel = Z, Z_grex_cbc = NULL,
-       Z_grex_shared = NULL, Z_grex_specific = NULL,
+       Z_grex_crocotel_shared = NULL, Z_grex_crocotel_specific = NULL,
        ctx_gate_crocotel = NULL, ctx_gate_cbc = NULL,
-       r2 = list(r2_full = r2), pvals = list(p_full = pv, p_shared = pv,
-                                             p_specific = pv),
+       r2 = list(r2_crocotel_expr_full = r2), pvals = list(p_crocotel_expr_full = pv, p_crocotel_expr_shared_given_specific = pv,
+                                             p_crocotel_expr_specific_given_shared = pv),
        effects = NULL)
 }
 .no_model_rec <- function(gene_id) {
@@ -32,10 +32,10 @@
        reason = "no_usable_model",
        status_crocotel = "no_model", status_cbc = NA_character_,
        Z_grex_crocotel = NULL, Z_grex_cbc = NULL,
-       Z_grex_shared = NULL, Z_grex_specific = NULL,
+       Z_grex_crocotel_shared = NULL, Z_grex_crocotel_specific = NULL,
        ctx_gate_crocotel = NULL, ctx_gate_cbc = NULL,
-       r2 = list(r2_full = r2), pvals = list(p_full = pv, p_shared = pv,
-                                             p_specific = pv),
+       r2 = list(r2_crocotel_expr_full = r2), pvals = list(p_crocotel_expr_full = pv, p_crocotel_expr_shared_given_specific = pv,
+                                             p_crocotel_expr_specific_given_shared = pv),
        effects = NULL)
 }
 .no_input_rec <- function(gene_id) {
@@ -43,7 +43,7 @@
        reason = "no_cis_snps",
        status_crocotel = NA_character_, status_cbc = NA_character_,
        Z_grex_crocotel = NULL, Z_grex_cbc = NULL,
-       Z_grex_shared = NULL, Z_grex_specific = NULL,
+       Z_grex_crocotel_shared = NULL, Z_grex_crocotel_specific = NULL,
        ctx_gate_crocotel = NULL, ctx_gate_cbc = NULL,
        r2 = NULL, pvals = NULL, effects = NULL)
 }
@@ -75,7 +75,7 @@ test_that("no_model genes keep expression (stay targets) and get qc rows", {
   # regulator side: still no GReX row
   expect_true(all(is.na(gx["tgtNM", ])))
   # qc: the fit's real (insignificant) p-values are recorded, not NA
-  expect_equal(unname(qc["tgtNM", "p_full"]), 0.7)
+  expect_equal(unname(qc["tgtNM", "p_crocotel_expr_full"]), 0.7)
 
   # end-to-end: the scanner must now TEST the no_model gene as a target
   gl <- data.frame(gene_id = c("regA", "tgtNM"), chr = c("1", "2"),

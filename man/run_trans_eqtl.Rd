@@ -86,7 +86,7 @@ SETS, so their BH q-values differ; a gene can pass one and fail the other.}
 
 \item{grex_gate_pval}{Character. Which crocotel GReX p-value to gate on:
 \code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
-for \code{method="cbc"} (which gates on its single \code{p_cbc}).}
+for \code{method="cbc"} (which gates on its single \code{p_cbc_expr_full}).}
 
 \item{grex_gate_q}{Numeric. Within-context BH q-value cutoff for the
 gate. Default \code{0.05}.}

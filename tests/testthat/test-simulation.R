@@ -185,19 +185,4 @@ test_that("minors batch: shortfall warning, writer validation, early checks, n_p
                         h2_sh_tgt = 0.5, h2_sp_tgt = 0.3, h2_Y = 0.3),
     "must be < 1")
   expect_lt(as.numeric(Sys.time() - t0, units = "secs"), 2)
-
-  # (12) n_pc validation in residualize_expression
-  E12 <- matrix(rnorm(10 * 40), 10, 40,
-                dimnames = list(paste0("g", 1:10), sprintf("i%02d", 1:40)))
-  C12 <- matrix(rnorm(40), 40, 1,
-                dimnames = list(colnames(E12), "cov1"))
-  expect_error(
-    residualize_expression(E12, C12, n_pc = -1, verbose = FALSE),
-    "non-negative integer")
-  expect_error(
-    residualize_expression(E12, C12, n_pc = 1.5, verbose = FALSE),
-    "non-negative integer")
-  expect_message(
-    residualize_expression(E12, C12, n_pc = 500, verbose = FALSE),
-    "exceeds the structural maximum")
 })

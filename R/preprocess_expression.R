@@ -36,7 +36,7 @@
 #'   Default \code{"\t"} (tab-separated).
 #' @param gene_id_col   Integer or character or \code{NULL}. Column containing
 #'   gene IDs. \code{NULL} (default) means gene IDs are row names (first
-#'   column used as row names by \code{read.table}).
+#'   column used as row names).
 #' @param na_strings    Character vector. Strings to treat as \code{NA}.
 #'   Default \code{c("NA", "na", "")}.
 #' @param genes         Character vector or \code{NULL}. If provided, only
@@ -126,13 +126,25 @@ preprocess_expression <- function(expr_files,
     if (verbose)
       message(sprintf("  [%d/%d] %s", j, n_contexts, basename(expr_files[j])))
 
-    e <- read.table(expr_files[j],
-                    header           = TRUE,
-                    sep              = sep,
-                    row.names        = if (is.null(gene_id_col)) 1L else NULL,
-                    check.names      = FALSE,
-                    na.strings       = na_strings,
-                    stringsAsFactors = FALSE)
+    # fread rather than read.table: this loop holds EVERY context in
+    # expr_list simultaneously before the genes x contexts x individuals array
+    # is allocated, so the per-file representation is the binding memory
+    # constraint at cohort scale. data.table = FALSE keeps a data.frame, so the
+    # row-name handling below (and its duplicate-ID error) is unchanged.
+    e <- data.table::fread(expr_files[j],
+                           header       = TRUE,
+                           sep          = sep,
+                           na.strings   = na_strings,
+                           check.names  = FALSE,
+                           data.table   = FALSE,
+                           showProgress = FALSE)
+    if (is.null(gene_id_col)) {
+      # read.table(row.names = 1L) errored on duplicate IDs; assigning
+      # duplicate row names to a data.frame errors identically, so the guard
+      # survives the swap.
+      rownames(e) <- e[[1L]]
+      e <- e[, -1L, drop = FALSE]
+    }
 
     if (!is.null(gene_id_col)) {
       rownames(e) <- e[[gene_id_col]]

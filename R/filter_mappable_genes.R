@@ -34,6 +34,17 @@
 #'   pre-fit filter: don't call it if you don't want to filter on mappability.
 #' @param min               Numeric. Minimum mappability to retain. Default
 #'   \code{0.8} (Saha & Battle / GTEx convention).
+#' @param min_scored_frac   Numeric in (0, 1], or \code{NULL}. Minimum
+#'   fraction of \code{gene_ids} that must carry a score in
+#'   \code{mappability_file}; the call \code{stop()}s below it. Default
+#'   \code{0.95}: the current hg38 GENCODE v48 table scores ~100% of GTEx v11
+#'   genes, while the older v26 table scores only 71.8%, so this default
+#'   catches a stale or mismatched table. Pass \code{NULL} to disable, which
+#'   is appropriate only for small gene sets where partial coverage is
+#'   expected rather than diagnostic. Because unscored genes are KEPT, a gene-ID / build
+#'   mismatch would otherwise leave every gene unscored and silently disable
+#'   the filter while still reporting a plausible kept count; this turns that
+#'   into a loud, diagnosable error.
 #' @param verbose           Logical. Report kept / dropped / unscored counts.
 #'   Default \code{TRUE}.
 #'
@@ -41,6 +52,7 @@
 #'   >= \code{min}, plus any genes absent from the table).
 #' @export
 filter_mappable_genes <- function(gene_ids, mappability_file, min = 0.8,
+                                  min_scored_frac = 0.95,
                                   verbose = TRUE) {
   if (missing(mappability_file) || is.null(mappability_file) ||
       (length(mappability_file) == 1L && is.na(mappability_file)))
@@ -88,6 +100,36 @@ filter_mappable_genes <- function(gene_ids, mappability_file, min = 0.8,
   n_unmatched <- sum(!matched)
 
   if (verbose) {
+  n_unscored <- sum(is.na(score))
+  n_scored   <- length(gene_ids) - n_unscored
+
+  # Coverage guard. Unscored genes are kept by design, so a gene-ID / build
+  # mismatch silently disables the whole filter. Fail loudly instead, and do it
+  # before emitting the reassuring kept/dropped line.
+  if (!is.null(min_scored_frac)) {
+    if (length(min_scored_frac) != 1L || !is.numeric(min_scored_frac) ||
+        is.na(min_scored_frac) || min_scored_frac <= 0 || min_scored_frac > 1)
+      stop("min_scored_frac must be NULL or a single number in (0, 1]; got: ",
+           paste(min_scored_frac, collapse = ", "))
+    frac <- if (length(gene_ids)) n_scored / length(gene_ids) else 0
+    if (frac < min_scored_frac) {
+      ex_miss <- gene_ids[is.na(score)]
+      ex_miss <- ex_miss[seq_len(min(3L, length(ex_miss)))]
+      ex_tab  <- m$gene_id[seq_len(min(3L, nrow(m)))]
+      stop(sprintf(paste0(
+        "Mappability table covers only %d of %d gene(s) (%.1f%%), below ",
+        "min_scored_frac = %.1f%%. Unscored genes are kept, so the filter ",
+        "would silently pass %d gene(s) and do nothing. This usually means ",
+        "gene_ids and mappability_file use different ID spaces or GENCODE ",
+        "builds.\n  unmatched gene_ids:       %s\n",
+        "  mappability_file gene_id: %s"),
+        n_scored, length(gene_ids), 100 * frac, 100 * min_scored_frac,
+        n_unscored, paste(ex_miss, collapse = ", "),
+        paste(ex_tab, collapse = ", ")))
+    }
+  }
+
+  if (verbose)
     message(sprintf(
       paste0("Mappability filter (>= %.2f): kept %d / %d genes ",
              "(dropped %d low-mappability; %d scored NA kept; ",

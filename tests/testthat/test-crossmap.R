@@ -8,8 +8,11 @@
 test_that("filter_mappable_genes drops low-map, keeps high and unscored", {
   mapf <- file.path(tempdir(), "map_t1.txt")
   writeLines(c("gA\t0.95", "gB\t0.50", "gC\t0.99"), mapf)
+  # min_scored_frac = NULL: this case deliberately supplies an unscored gene,
+  # so the coverage guard must be off to exercise the keep-unscored rule.
   kept <- filter_mappable_genes(c("gA", "gB", "gC", "gUnscored"), mapf,
-                                min = 0.8, verbose = FALSE)
+                                min = 0.8, min_scored_frac = NULL,
+                                verbose = FALSE)
   expect_true(all(c("gA", "gC", "gUnscored") %in% kept))
   expect_false("gB" %in% kept)
   expect_error(filter_mappable_genes(c("gA"), verbose = FALSE))

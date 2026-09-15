@@ -312,12 +312,10 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
   # One method-agnostic raw expression matrix per context (canonical target).
   expr_ctx      <- make_ctx_list()
 
-  # Per-context GReX quality-control tables (gene x metric), consumed by both
-  # GReX-quality gates in run_trans_eqtl()/run_trans_lmm(): the B12 regulator
-  # gate and the target de-cis gate. One row per gene -- the full gene
-  # universe, not just the regulators, because the target gate asks the same
-  # question of every gene. From each record's B9 p-values
-  # (p_full/p_shared/p_specific, p_cbc) and adj-R2.
+  # Per-context GReX quality-control tables (gene x metric), consumed by the
+  # B12 regulator GReX-quality gate in run_trans_eqtl(). One row per gene, from
+  # each record's p-values and adjusted R2, under the
+  # <quantity>_<method>_<response>_<predictor> scheme.
   make_qc_list <- function(cols) {
     m <- vector("list", n_ctx); names(m) <- ctx_names
     for (ctx in ctx_names)
@@ -326,9 +324,12 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     m
   }
   qc_crocotel <- if (run_crocotel)
-    make_qc_list(c("p_full", "p_shared", "p_specific", "r2_full")) else NULL
+    make_qc_list(c("p_crocotel_expr_full",
+                   "p_crocotel_expr_shared_given_specific",
+                   "p_crocotel_expr_specific_given_shared",
+                   "r2_crocotel_expr_full")) else NULL
   qc_cbc      <- if (run_cbc)
-    make_qc_list(c("p_cbc", "r2_cbc")) else NULL
+    make_qc_list(c("p_cbc_expr_full", "r2_cbc_expr_full")) else NULL
 
   # ------------------------------------------------------------------
   # 4. Fill matrices gene by gene (single pass over files)
@@ -415,15 +416,16 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     # the vector is absent or the context is missing for this gene.
     if (run_crocotel && !is.null(g$pvals)) {
       for (ctx in ctx_names)
-        qc_crocotel[[ctx]][gid, ] <- c(getv(g$pvals$p_full, ctx),
-                                       getv(g$pvals$p_shared, ctx),
-                                       getv(g$pvals$p_specific, ctx),
-                                       getv(g$r2$r2_full, ctx))
+        qc_crocotel[[ctx]][gid, ] <- c(
+          getv(g$pvals$p_crocotel_expr_full, ctx),
+          getv(g$pvals$p_crocotel_expr_shared_given_specific, ctx),
+          getv(g$pvals$p_crocotel_expr_specific_given_shared, ctx),
+          getv(g$r2$r2_crocotel_expr_full, ctx))
     }
     if (run_cbc && !is.null(g$pvals)) {
       for (ctx in ctx_names)
-        qc_cbc[[ctx]][gid, ] <- c(getv(g$pvals$p_cbc, ctx),
-                                  getv(g$r2$r2_cbc, ctx))
+        qc_cbc[[ctx]][gid, ] <- c(getv(g$pvals$p_cbc_expr_full, ctx),
+                                  getv(g$r2$r2_cbc_expr_full, ctx))
     }
   }
 
