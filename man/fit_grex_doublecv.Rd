@@ -107,7 +107,7 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
   overall (no genetic signal, \code{ctx_gate = "no_signal"}) -- drop
   such regulators before testing. If \code{Z_specific[, c]} is exactly
   collinear with \code{Z_shared}, \code{anova()} returns \code{NA} for
-  \code{p_shared}/\code{p_specific} (0-df comparison; no crash).
+  \code{p_crocotel_expr_shared_given_specific}/\code{p_crocotel_expr_specific_given_shared} (0-df comparison; no crash).
 \describe{
   \item{Z_full}{Numeric matrix (n_individuals x n_contexts) or \code{NULL}.
     crocotel(Full) GReX - OLS combination of shared and specific components.
@@ -130,45 +130,51 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
     Each entry is a list \code{lambda} (chosen lambda.min),
     \code{intercept}, \code{n_snps} (support size), and \code{coef} (a
     data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
-    \code{NULL} entries mark skipped fits. Makes the GReX reconstructable
-    and exposes the selected cis-SNP support for downstream conditioning.}
-  \item{r2_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
+    \code{NULL} entries mark skipped fits. Together with \code{folds} this
+    makes the GReX reconstructable and exposes the selected cis-SNP support
+    for downstream conditioning.}
+  \item{folds}{Integer vector (n_individuals), the outer-fold assignment as
+    supplied. Needed to attribute each individual's prediction to the fold
+    model that produced it: a fold whose elastic net selected no SNPs
+    contributes only its intercept, and without \code{folds} those
+    individuals cannot be identified.}
+  \item{r2_crocotel_shcomp_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
     shared GReX vs rowMeans(E).
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-  \item{r2_specific}{Numeric vector (n_contexts) or \code{NULL}. Adjusted
+  \item{r2_crocotel_spcomp_specific}{Numeric vector (n_contexts) or \code{NULL}. Adjusted
     R2 of the specific GReX vs within-individual deviation per context.
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-  \item{r2_shared_expr}{Numeric vector (n_contexts) or \code{NULL}.
+  \item{r2_crocotel_expr_shared}{Numeric vector (n_contexts) or \code{NULL}.
     Adjusted R2 of the SHARED GReX alone vs RAW expression per context --
     comparable to CONTENT/crossval "shared" columns that score against
-    observed expression (unlike \code{r2_shared}, whose response is the
+    observed expression (unlike \code{r2_crocotel_shcomp_shared}, whose response is the
     cross-context mean). \code{NULL} when \code{"crocotel"} is not in
     \code{method}.}
-  \item{r2_specific_expr}{Numeric vector (n_contexts) or \code{NULL}.
+  \item{r2_crocotel_expr_specific}{Numeric vector (n_contexts) or \code{NULL}.
     Adjusted R2 of the SPECIFIC GReX alone vs RAW expression per context
-    (unlike \code{r2_specific}, whose response is de-meaned). \code{NULL}
+    (unlike \code{r2_crocotel_spcomp_specific}, whose response is de-meaned). \code{NULL}
     when \code{"crocotel"} is not in \code{method}.}
-  \item{r2_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
+  \item{r2_crocotel_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
     of Z_full vs E.
     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-  \item{r2_cbc}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
+  \item{r2_cbc_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
     of Z_cbc vs E.
     \code{NULL} when \code{"cbc"} is not in \code{method}.}
-  \item{p_full}{Numeric vector (n_contexts) or \code{NULL}. Per-context
+  \item{p_crocotel_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Per-context
     nested-model p-value (\code{anova()} exact F-test) for the full
     crocotel GReX (Z_shared + Z_specific) vs an intercept-only null,
     df = 2 -- "is there any cis GReX in this context?". NA for gated/unfit
     contexts. \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-  \item{p_shared}{Numeric vector (n_contexts) or \code{NULL}. Conditional
+  \item{p_crocotel_expr_shared_given_specific}{Numeric vector (n_contexts) or \code{NULL}. Conditional
     F-test p-value for the shared component given specific (full vs
     specific-only), df = 1. NA for gated/unfit contexts. \code{NULL} when
     \code{"crocotel"} is not in \code{method}.}
-  \item{p_specific}{Numeric vector (n_contexts) or \code{NULL}. Conditional
+  \item{p_crocotel_expr_specific_given_shared}{Numeric vector (n_contexts) or \code{NULL}. Conditional
     F-test p-value for the specific component given shared (full vs
     shared-only), df = 1 -- the context-specificity test. NA for
     gated/unfit contexts. \code{NULL} when \code{"crocotel"} is not in
     \code{method}.}
-  \item{p_cbc}{Numeric vector (n_contexts) or \code{NULL}. F-test p-value
+  \item{p_cbc_expr_full}{Numeric vector (n_contexts) or \code{NULL}. F-test p-value
     for the CBC GReX vs an intercept-only null, df = 1. NA for gated/unfit
     contexts. \code{NULL} when \code{"cbc"} is not in \code{method}. All
     nested models per test are fit on one common observed-row set --
@@ -221,8 +227,8 @@ old_recipe <- sample(findInterval(rowMeans(E),
 
 # Run both methods in one call
 fit <- fit_grex_doublecv(E, G, folds)
-fit$r2_full   # crocotel R2 per context
-fit$r2_cbc    # CBC R2 per context
+fit$r2_crocotel_expr_full   # crocotel R2 per context
+fit$r2_cbc_expr_full        # CBC R2 per context
 
 # Run one method only
 fit_crocotel <- fit_grex_doublecv(E, G, folds, method = "crocotel")

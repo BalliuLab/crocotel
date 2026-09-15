@@ -51,8 +51,11 @@
 #' @param method  Character vector. One or both of \code{"crocotel"} and
 #'   \code{"cbc"}. Default \code{c("crocotel", "cbc")} runs both methods in a
 #'   single CV loop. Fields for unused methods are \code{NULL} in the output.
-#'   With fewer than 3 contexts the crocotel decomposition is unidentifiable
-#'   and the method is auto-disabled with a warning (CBC still runs).
+#'   With fewer than 3 USABLE contexts (clearing \code{min_valid_n} and
+#'   non-constant, i.e. \code{sum(ctx_usable) < 3} -- not \code{ncol(E)}, which
+#'   counts the NA-padded cohort-wide context set) the crocotel decomposition
+#'   is unidentifiable and the method is auto-disabled with a warning (CBC
+#'   still runs).
 #' @param K_outer Integer. Number of outer CV folds. Must match the number of
 #'   unique values in \code{folds}. Default 10.
 #' @param K_inner Integer. Inner CV folds for lambda selection inside
@@ -100,13 +103,15 @@
 #'   residual is NOT returned: it is fully derivable from raw expression + GReX,
 #'   so \code{run_trans_eqtl()} reconstructs it on the fly (via
 #'   \code{residualize_grex()}) from the assembled raw \code{expr_<ctx>} + GReX.
-#'   A zero-SNP elastic-net fit contributes intercept-only (constant)
-#'   predictions for its test fold, which are kept; a column becomes
-#'   entirely \code{NA} only when the assembled predictor is constant
-#'   overall (no genetic signal, \code{ctx_gate = "no_signal"}) -- drop
-#'   such regulators before testing. If \code{Z_specific[, c]} is exactly
+#'   A zero-SNP elastic-net fit contributes exactly \code{0} for its test fold
+#'   (the GReX is \eqn{G\beta}; no intercept is added), so those individuals
+#'   carry no genetic information rather than the fold's mean expression. A
+#'   column becomes entirely \code{NA} when the assembled predictor is constant
+#'   -- which now includes the case of no SNPs selected in ANY fold (no genetic
+#'   signal, \code{ctx_gate = "no_signal"}) -- drop such regulators before
+#'   testing. See \code{support} for how many folds found any SNP. If \code{Z_specific[, c]} is exactly
 #'   collinear with \code{Z_shared}, \code{anova()} returns \code{NA} for
-#'   \code{p_shared}/\code{p_specific} (0-df comparison; no crash).
+#'   \code{p_crocotel_expr_shared_given_specific}/\code{p_crocotel_expr_specific_given_shared} (0-df comparison; no crash).
 #' \describe{
 #'   \item{Z_full}{Numeric matrix (n_individuals x n_contexts) or \code{NULL}.
 #'     crocotel(Full) GReX - OLS combination of shared and specific components.
@@ -127,47 +132,65 @@
 #'     outer fold: \code{effects$shared[[k]]},
 #'     \code{effects$specific[[ctx]][[k]]}, \code{effects$cbc[[ctx]][[k]]}.
 #'     Each entry is a list \code{lambda} (chosen lambda.min),
-#'     \code{intercept}, \code{n_snps} (support size), and \code{coef} (a
-#'     data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
-#'     \code{NULL} entries mark skipped fits. Makes the GReX reconstructable
-#'     and exposes the selected cis-SNP support for downstream conditioning.}
-#'   \item{r2_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
+#'     \code{intercept}, \code{n_train} (individuals the fit trained on, after
+#'     that component's own masking -- the specific fit additionally drops
+#'     individuals measured only in that context, so it is a strict subset of
+#'     the cbc fit's rows for the same context and fold), \code{n_snps}
+#'     (support size, counting NON-ZERO betas of either sign), and \code{coef}
+#'     (a data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
+#'     \code{NULL} entries mark skipped fits. Together with \code{folds} this
+#'     makes the GReX reconstructable and exposes the selected cis-SNP support
+#'     for downstream conditioning.}
+#'   \item{support}{List of elastic-net support counts -- how many outer folds
+#'     selected at least one SNP. \code{support_crocotel_shared} is a scalar
+#'     (the shared component is fitted once per fold);
+#'     \code{support_crocotel_specific} and \code{support_cbc} are named integer
+#'     vectors over contexts. \code{NULL} for a method not in \code{method}.
+#'     Derived from \code{effects}, but carried separately because \code{effects}
+#'     is dropped from lightweight records -- a count of 0 is the direct
+#'     explanation for a context with no usable GReX.}
+#'   \item{folds}{Integer vector (n_individuals), the outer-fold assignment as
+#'     supplied. Needed to attribute each individual's prediction to the fold
+#'     model that produced it: a fold whose elastic net selected no SNPs
+#'     contributes exactly 0, and without \code{folds} those
+#'     individuals cannot be identified.}
+#'   \item{r2_crocotel_shcomp_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
 #'     shared GReX vs rowMeans(E).
 #'     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-#'   \item{r2_specific}{Numeric vector (n_contexts) or \code{NULL}. Adjusted
+#'   \item{r2_crocotel_spcomp_specific}{Numeric vector (n_contexts) or \code{NULL}. Adjusted
 #'     R2 of the specific GReX vs within-individual deviation per context.
 #'     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-#'   \item{r2_shared_expr}{Numeric vector (n_contexts) or \code{NULL}.
+#'   \item{r2_crocotel_expr_shared}{Numeric vector (n_contexts) or \code{NULL}.
 #'     Adjusted R2 of the SHARED GReX alone vs RAW expression per context --
 #'     comparable to CONTENT/crossval "shared" columns that score against
-#'     observed expression (unlike \code{r2_shared}, whose response is the
+#'     observed expression (unlike \code{r2_crocotel_shcomp_shared}, whose response is the
 #'     cross-context mean). \code{NULL} when \code{"crocotel"} is not in
 #'     \code{method}.}
-#'   \item{r2_specific_expr}{Numeric vector (n_contexts) or \code{NULL}.
+#'   \item{r2_crocotel_expr_specific}{Numeric vector (n_contexts) or \code{NULL}.
 #'     Adjusted R2 of the SPECIFIC GReX alone vs RAW expression per context
-#'     (unlike \code{r2_specific}, whose response is de-meaned). \code{NULL}
+#'     (unlike \code{r2_crocotel_spcomp_specific}, whose response is de-meaned). \code{NULL}
 #'     when \code{"crocotel"} is not in \code{method}.}
-#'   \item{r2_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
+#'   \item{r2_crocotel_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
 #'     of Z_full vs E.
 #'     \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-#'   \item{r2_cbc}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
+#'   \item{r2_cbc_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Adjusted R2
 #'     of Z_cbc vs E.
 #'     \code{NULL} when \code{"cbc"} is not in \code{method}.}
-#'   \item{p_full}{Numeric vector (n_contexts) or \code{NULL}. Per-context
+#'   \item{p_crocotel_expr_full}{Numeric vector (n_contexts) or \code{NULL}. Per-context
 #'     nested-model p-value (\code{anova()} exact F-test) for the full
 #'     crocotel GReX (Z_shared + Z_specific) vs an intercept-only null,
 #'     df = 2 -- "is there any cis GReX in this context?". NA for gated/unfit
 #'     contexts. \code{NULL} when \code{"crocotel"} is not in \code{method}.}
-#'   \item{p_shared}{Numeric vector (n_contexts) or \code{NULL}. Conditional
+#'   \item{p_crocotel_expr_shared_given_specific}{Numeric vector (n_contexts) or \code{NULL}. Conditional
 #'     F-test p-value for the shared component given specific (full vs
 #'     specific-only), df = 1. NA for gated/unfit contexts. \code{NULL} when
 #'     \code{"crocotel"} is not in \code{method}.}
-#'   \item{p_specific}{Numeric vector (n_contexts) or \code{NULL}. Conditional
+#'   \item{p_crocotel_expr_specific_given_shared}{Numeric vector (n_contexts) or \code{NULL}. Conditional
 #'     F-test p-value for the specific component given shared (full vs
 #'     shared-only), df = 1 -- the context-specificity test. NA for
 #'     gated/unfit contexts. \code{NULL} when \code{"crocotel"} is not in
 #'     \code{method}.}
-#'   \item{p_cbc}{Numeric vector (n_contexts) or \code{NULL}. F-test p-value
+#'   \item{p_cbc_expr_full}{Numeric vector (n_contexts) or \code{NULL}. F-test p-value
 #'     for the CBC GReX vs an intercept-only null, df = 1. NA for gated/unfit
 #'     contexts. \code{NULL} when \code{"cbc"} is not in \code{method}. All
 #'     nested models per test are fit on one common observed-row set --
@@ -212,8 +235,8 @@
 #'
 #' # Run both methods in one call
 #' fit <- fit_grex_doublecv(E, G, folds)
-#' fit$r2_full   # crocotel R2 per context
-#' fit$r2_cbc    # CBC R2 per context
+#' fit$r2_crocotel_expr_full   # crocotel R2 per context
+#' fit$r2_cbc_expr_full        # CBC R2 per context
 #'
 #' # Run one method only
 #' fit_crocotel <- fit_grex_doublecv(E, G, folds, method = "crocotel")
@@ -277,18 +300,6 @@ fit_grex_doublecv <- function(E,
       sprintf("(= floor((K_outer-1)/K_outer * min_valid_n) = floor(%d/%d * %d)).",
               K_outer - 1, K_outer, min_valid_n))
 
-  # Shared/specific decomposition is unidentifiable with <3 contexts.
-  if ("crocotel" %in% method && ncol(E) < 3) {
-    warning("Fewer than 3 contexts: the crocotel shared/specific ",
-            "decomposition is unidentifiable, so the crocotel method is ",
-            "disabled for this fit (CBC, if requested, still runs).")
-    method      <- setdiff(method, "crocotel")
-    run_crocotel <- FALSE
-    if (length(method) == 0)
-      stop("No methods to run: crocotel disabled (n_contexts < 3) and ",
-           "'cbc' not requested.")
-  }
-
   n_I <- nrow(G)
   n_C <- ncol(E)
   n_P <- ncol(G)
@@ -302,13 +313,34 @@ fit_grex_doublecv <- function(E,
   # A context is usable only if it clears min_valid_n AND its observed
   # expression varies. An invariant (constant) context carries no signal and
   # would yield a degenerate intercept-only fit; skip the gene-context pair.
-  # Fold-monomorphic guard (constant column within a training fold).
+  # This variance is GLOBAL (all measured individuals in the context). The
+  # within-fold monomorphic guard is separate: `var_floor` in fit_one(),
+  # applied to SNP columns on each fold's training rows.
   ctx_var <- apply(E, 2L, function(x) {
     xo <- x[!is.na(x)]
     if (length(xo) < 2L) return(0)
     stats::var(xo)
   })
   ctx_usable <- n_measured_per_ctx >= min_valid_n & ctx_var > 0
+
+  # Shared/specific decomposition is unidentifiable with <3 contexts. This must
+  # be tested on ctx_usable, NOT on ncol(E): preprocess_expression() NA-pads
+  # every gene to the full context set, so ncol(E) is the cohort's context
+  # count for EVERY gene (50 in GTEx v11) and a test on it can never fire.
+  # ~19% of GTEx genes have fewer than 3 contexts that clear min_valid_n and
+  # vary, and were running the decomposition regardless.
+  n_ctx_usable <- sum(ctx_usable)
+  if (run_crocotel && n_ctx_usable < 3) {
+    warning("Only ", n_ctx_usable, " usable context(s) (of ", n_C,
+            " in the matrix): the crocotel shared/specific decomposition is ",
+            "unidentifiable with fewer than 3, so the crocotel method is ",
+            "disabled for this fit (CBC, if requested, still runs).")
+    method       <- setdiff(method, "crocotel")
+    run_crocotel <- FALSE
+    if (length(method) == 0)
+      stop("No methods to run: crocotel disabled (", n_ctx_usable,
+           " usable context(s) < 3) and 'cbc' not requested.")
+  }
 
   ind_names <- rownames(E)
   ctx_names <- colnames(E)
@@ -391,12 +423,31 @@ fit_grex_doublecv <- function(E,
     eff <- list(
       lambda    = fit$lambda.min,
       intercept = intercept,
+      # Individuals this fit actually trained on, AFTER the component's own
+      # masking. Not derivable from `folds`, which is one assignment shared by
+      # every component: the specific fit additionally drops individuals
+      # measured only in context c (their other-tissue mean is undefined), so
+      # for the same context and fold it trains on a strict subset of what cbc
+      # does. Differencing the two exposes that gap per fold, which otherwise
+      # requires the expression matrix to reconstruct.
+      n_train   = sum(nona),
       n_snps    = length(nz),
       coef      = data.frame(snp  = snp_ids[nz],
                              beta = betas[nz],
                              stringsAsFactors = FALSE))
 
-    list(pred = as.vector(x_test %*% betas + intercept), eff = eff)
+    # GReX is the GENETIC component, G %*% beta -- the intercept is deliberately
+    # NOT added. It is a location term every consumer is invariant to, but it
+    # differs per fold (it is mean(y_train)), so including it injects
+    # fold-assignment noise into every column. Worst case: a fold that selected
+    # NO SNPs would otherwise emit that intercept as its whole "prediction",
+    # giving a column whose only variation is which fold an individual landed in
+    # (measured on GTEx v11: 16,192 such columns, each with exactly K distinct
+    # values and variance ~1e-4 -- far above the 1e-12 nullification floor, so
+    # none were caught). Dropping it makes a zero-SNP fold contribute exactly 0,
+    # so an all-zero-support column is constant and IS nullified. The intercept
+    # remains in `eff` for reconstruction.
+    list(pred = as.vector(x_test %*% betas), eff = eff)
   }
 
   for (k in seq_len(K_outer)) {
@@ -458,7 +509,8 @@ fit_grex_doublecv <- function(E,
 
   t_full_model <- 0
   Z_full       <- NULL
-  p_full <- p_shared <- p_specific <- p_cbc <- NULL
+  p_crocotel_expr_full <- p_crocotel_expr_shared_given_specific <-
+    p_crocotel_expr_specific_given_shared <- p_cbc_expr_full <- NULL
 
   # Nested-model p-value via anova()'s EXACT F-test (replaces the hand-rolled
   # asymptotic chisq LRT, decided 2026-08-20). Three gains: (a) anova() ERRORS
@@ -479,8 +531,10 @@ fit_grex_doublecv <- function(E,
     t0           <- proc.time()["elapsed"]
     Z_full       <- matrix(NA_real_, n_I, n_C, dimnames = ind_ctx)
     full_weights <- vector("list", n_C)
-    p_full <- p_shared <- p_specific <-
+    p_crocotel_expr_full <- p_crocotel_expr_shared_given_specific <-
+      p_crocotel_expr_specific_given_shared <-
       stats::setNames(rep(NA_real_, n_C), ctx_names)
+    n_crocotel_expr_full <- stats::setNames(rep(NA_integer_, n_C), ctx_names)
 
     for (c in seq_len(n_C)) {
       full_weights[[c]] <- c(NA_real_, NA_real_)
@@ -504,22 +558,24 @@ fit_grex_doublecv <- function(E,
       m_null <- lm(y_c[ok] ~ 1)                     # intercept only
       m_sh   <- lm(y_c[ok] ~ Z_shared[ok])          # shared only
       m_sp   <- lm(y_c[ok] ~ Z_specific[ok, c])     # specific only
-      p_full[c]     <- lrt_p(m_null, m_full)    # any GReX (df 2, inferred)
-      p_shared[c]   <- lrt_p(m_sp,   m_full)    # shared | specific (df 1)
-      p_specific[c] <- lrt_p(m_sh,   m_full)    # specific | shared (df 1)
+      p_crocotel_expr_full[c]                  <- lrt_p(m_null, m_full)  # df 2
+      p_crocotel_expr_shared_given_specific[c] <- lrt_p(m_sp,   m_full)  # df 1
+      p_crocotel_expr_specific_given_shared[c] <- lrt_p(m_sh,   m_full)  # df 1
+      n_crocotel_expr_full[c]                  <- sum(ok)
     }
     t_full_model <- proc.time()["elapsed"] - t0
   }
 
   # Nullify degenerate (constant) GReX columns. glmnet can select no SNPs even
-  # when expression varies, yielding an intercept-only prediction that is
-  # constant across individuals -- no usable cis signal. Set such columns to NA
+  # when expression varies; with no intercept added, such a fold predicts
+  # exactly 0, so a component with no SNPs in ANY fold is constant at 0 --
+  # no usable cis signal. Set such columns to NA
   # at the source so every consumer treats them consistently: ctx_gate reports
   # "no_signal" (not a misleading "ok"); residualize_grex reverts them to raw E via
   # its NA all-or-nothing rule; and a constant regulator GReX never reaches
   # run_trans_eqtl as a predictor (which already drops zero-variance rows, so
   # trans results / n_tests are unchanged -- this only makes the in-package
-  # label agree). r2_cbc becomes NA (was ~0) for such contexts, consistent with
+  # label agree). r2_cbc_expr_full becomes NA (was ~0) for such contexts,
   # no_signal.
   # NOTE: the 1e-12 variance floor is ABSOLUTE, appropriate for expression
   # on a standardized/INT scale (the package's pipelines). Pathologically
@@ -536,17 +592,28 @@ fit_grex_doublecv <- function(E,
   had_full <- if (!is.null(Z_full)) colSums(!is.na(Z_full)) > 0L else NULL
   Z_full <- nullify_constant_grex(Z_full)
   Z_cbc  <- nullify_constant_grex(Z_cbc)
+  # Same treatment for the components themselves. A component whose elastic net
+  # selected no SNPs in ANY fold predicts a constant, which is no instrument --
+  # report it as NA rather than as a column that explains nothing (r2 = 0).
+  # Z_shared is a VECTOR (one value per individual, not per context), so it
+  # cannot go through nullify_constant_grex()'s column loop.
+  if (!is.null(Z_shared)) {
+    obs_sh <- Z_shared[!is.na(Z_shared)]
+    if (length(obs_sh) > 0L && stats::var(obs_sh) <= 1e-12)
+      Z_shared[] <- NA_real_
+  }
+  Z_specific <- nullify_constant_grex(Z_specific)
   # The crocotel p-values were computed BEFORE nullification; a context whose
   # GReX was just wiped (no_signal) must not keep a "significantly
   # predictive" p in the QC table -- NA them so the record is internally
-  # consistent. (p_cbc is computed after nullification and is already
+  # consistent. (p_cbc_expr_full is computed after nullification and is already
   # consistent by construction.)
   if (run_crocotel && !is.null(had_full)) {
     nulled <- had_full & colSums(!is.na(Z_full)) == 0L
     if (any(nulled)) {
-      p_full[nulled]     <- NA_real_
-      p_shared[nulled]   <- NA_real_
-      p_specific[nulled] <- NA_real_
+      p_crocotel_expr_full[nulled]                  <- NA_real_
+      p_crocotel_expr_shared_given_specific[nulled] <- NA_real_
+      p_crocotel_expr_specific_given_shared[nulled] <- NA_real_
     }
   }
 
@@ -556,51 +623,99 @@ fit_grex_doublecv <- function(E,
   # assembled raw expr_<ctx> + GReX -- one canonical raw-expression matrix per
   # context instead of storing per-gene, per-method residuals.
 
-  adj_r2 <- function(y, X) {
+  # Adjusted R2, its overall F-test p-value, and the rows used -- all three
+  # from ONE summary(lm()). The p is summary()$fstatistic, i.e. the test
+  # against the intercept-only null; for a single predictor it equals the
+  # slope p. n is returned because adjusted R2 depends on it and the row sets
+  # differ between quantities (a one-predictor fit can use more rows than the
+  # two-predictor full model), so no single n describes them all.
+  fit_stats <- function(y, X) {
     X  <- as.matrix(X)
     ok <- !is.na(y) & stats::complete.cases(X)
-    if (sum(ok) < ncol(X) + 2) return(NA_real_)
+    n  <- sum(ok)
+    if (n < ncol(X) + 2)      return(list(r2 = NA_real_, p = NA_real_, n = n))
     # constant response: lm() returns an arbitrary adj-R2 (plus a "perfect
     # fit" warning) -- report NA, there is nothing to explain
-    if (stats::var(y[ok]) == 0) return(NA_real_)
-    summary(lm(y[ok] ~ X[ok, , drop = FALSE]))$adj.r.squared
+    if (stats::var(y[ok]) == 0) return(list(r2 = NA_real_, p = NA_real_, n = n))
+    sm <- summary(lm(y[ok] ~ X[ok, , drop = FALSE]))
+    fs <- sm$fstatistic
+    pv <- if (is.null(fs)) NA_real_
+          else unname(stats::pf(fs[1L], fs[2L], fs[3L], lower.tail = FALSE))
+    list(r2 = sm$adj.r.squared, p = pv, n = n)
   }
+  # convenience: pull one field across a per-context list
+  .pull <- function(lst, f) stats::setNames(vapply(lst, `[[`, numeric(1), f), ctx_names)
 
-  r2_shared <- r2_specific <- r2_full <- r2_cbc <- NULL
-  r2_shared_expr <- r2_specific_expr <- NULL
+  # Naming: <quantity>_<method>_<response>_<predictor>. Response is `expr`
+  # (raw expression E[,c]), `shcomp` (the shared component, i.e. the
+  # cross-context mean) or `spcomp` (the specific component, de-meaned).
+  # Each fit_stats() call yields the adjusted R2, its marginal F-test p, and
+  # the rows it used -- the row sets are NOT the same across quantities.
+  r2_crocotel_expr_shared <- r2_crocotel_expr_specific <-
+    r2_crocotel_expr_full <- r2_cbc_expr_full <-
+    r2_crocotel_shcomp_shared <- r2_crocotel_spcomp_specific <- NULL
+  p_crocotel_expr_shared <- p_crocotel_expr_specific <-
+    p_crocotel_shcomp_shared <- p_crocotel_spcomp_specific <- NULL
+  n_crocotel_expr_shared <- n_crocotel_expr_specific <-
+    n_cbc_expr_full <- n_crocotel_shcomp_shared <-
+    n_crocotel_spcomp_specific <- NULL
+
   if (run_crocotel) {
-    # Component-vs-own-target accuracies (the original set): shared vs the
-    # observed shared component (cross-context mean), specific vs the observed
-    # specific component (de-meaned), full vs raw expression.
-    r2_shared   <- adj_r2(rowMeans(E, na.rm = TRUE), Z_shared)
-    r2_specific <- stats::setNames(sapply(seq_len(n_C), function(c)
-      adj_r2(E[, c] - rowMeans(E, na.rm = TRUE), Z_specific[, c])), ctx_names)
-    r2_full     <- stats::setNames(sapply(seq_len(n_C), function(c)
-      adj_r2(E[, c], cbind(Z_shared, Z_specific[, c]))), ctx_names)
-    # Component-vs-RAW-expression accuracies (added 2026-08-20): how much of
-    # each context's observed expression each component alone explains --
-    # comparable to the student's crossval_r2 "shared"/"specific" columns,
-    # which score against raw expression, unlike r2_shared/r2_specific above.
-    r2_shared_expr   <- stats::setNames(sapply(seq_len(n_C), function(c)
-      adj_r2(E[, c], Z_shared)), ctx_names)
-    r2_specific_expr <- stats::setNames(sapply(seq_len(n_C), function(c)
-      adj_r2(E[, c], Z_specific[, c])), ctx_names)
+    E_bar <- rowMeans(E, na.rm = TRUE)
+
+    # response = the decomposed component itself (CONTENT's *.herit)
+    st <- fit_stats(E_bar, Z_shared)
+    r2_crocotel_shcomp_shared <- st$r2
+    p_crocotel_shcomp_shared  <- st$p
+    n_crocotel_shcomp_shared  <- st$n
+
+    st_sp <- lapply(seq_len(n_C), function(c) fit_stats(E[, c] - E_bar, Z_specific[, c]))
+    r2_crocotel_spcomp_specific <- .pull(st_sp, "r2")
+    p_crocotel_spcomp_specific  <- .pull(st_sp, "p")
+    n_crocotel_spcomp_specific  <- .pull(st_sp, "n")
+
+    # response = raw expression; marginal fits, one predictor each
+    st_sh_e <- lapply(seq_len(n_C), function(c) fit_stats(E[, c], Z_shared))
+    r2_crocotel_expr_shared <- .pull(st_sh_e, "r2")
+    p_crocotel_expr_shared  <- .pull(st_sh_e, "p")
+    n_crocotel_expr_shared  <- .pull(st_sh_e, "n")
+
+    st_sp_e <- lapply(seq_len(n_C), function(c) fit_stats(E[, c], Z_specific[, c]))
+    r2_crocotel_expr_specific <- .pull(st_sp_e, "r2")
+    p_crocotel_expr_specific  <- .pull(st_sp_e, "p")
+    n_crocotel_expr_specific  <- .pull(st_sp_e, "n")
+
+    # response = raw expression; the full two-predictor model. Its p is the
+    # df-2 nested test computed above, not fit_stats()'s marginal one.
+    # A nullified component is all-NA, which would make complete.cases() drop
+    # EVERY row and return NA -- wiping the full R2 even when the other
+    # component carries real signal. Drop all-NA columns instead: lm() already
+    # aliases an all-constant predictor away, so this preserves the value while
+    # letting a component be NA.
+    r2_crocotel_expr_full <- stats::setNames(vapply(seq_len(n_C), function(c) {
+      X <- cbind(Z_shared, Z_specific[, c])
+      X <- X[, colSums(!is.na(X)) > 0L, drop = FALSE]
+      if (ncol(X) == 0L) return(NA_real_)
+      fit_stats(E[, c], X)$r2
+    }, numeric(1)), ctx_names)
   }
-  if (run_cbc)
-    r2_cbc <- stats::setNames(
-      sapply(seq_len(n_C), function(c) adj_r2(E[, c], Z_cbc[, c])), ctx_names)
+  if (run_cbc) {
+    st_cbc <- lapply(seq_len(n_C), function(c) fit_stats(E[, c], Z_cbc[, c]))
+    r2_cbc_expr_full <- .pull(st_cbc, "r2")
+    n_cbc_expr_full  <- .pull(st_cbc, "n")
+  }
 
   # CBC GReX significance: single-predictor LRT vs null (no decomposition to
   # condition on, so marginal-vs-null is the right test). Null and alt on the
   # same `ok` rows. Constant Z_cbc columns are already NA (nullify_constant_grex)
   # so they fall out via `ok` and stay NA -- consistent with no_signal.
   if (run_cbc) {
-    p_cbc <- stats::setNames(rep(NA_real_, n_C), ctx_names)
+    p_cbc_expr_full <- stats::setNames(rep(NA_real_, n_C), ctx_names)
     for (c in seq_len(n_C)) {
       y_c <- E[, c]; zc <- Z_cbc[, c]
       ok  <- !is.na(y_c) & !is.na(zc)
       if (sum(ok) < min_full) next
-      p_cbc[c] <- lrt_p(lm(y_c[ok] ~ 1), lm(y_c[ok] ~ zc[ok]))
+      p_cbc_expr_full[c] <- lrt_p(lm(y_c[ok] ~ 1), lm(y_c[ok] ~ zc[ok]))
     }
   }
 
@@ -627,22 +742,63 @@ fit_grex_doublecv <- function(E,
   # RAM high-water mark (Mb) across this gene's fits, from GC max-used columns.
   peak_mb <- sum(gc()[, 6])
 
+  # Elastic-net support: how many outer folds selected at least one SNP.
+  # Derived from `effects`, but kept as its own field because `effects` is
+  # dropped from lightweight records -- and "0 of K folds found a SNP" is
+  # exactly the diagnosis wanted when a gene yields no usable model.
+  n_folds_with_snps <- function(lst) {
+    if (is.null(lst)) return(NA_integer_)
+    sum(vapply(lst, function(e) !is.null(e) && e$n_snps > 0L, logical(1)))
+  }
+  support <- list(
+    support_crocotel_shared   = if (run_crocotel) n_folds_with_snps(effects$shared)
+                                else NA_integer_,
+    support_crocotel_specific = if (run_crocotel)
+      vapply(effects$specific, n_folds_with_snps, integer(1)) else NULL,
+    support_cbc               = if (run_cbc)
+      vapply(effects$cbc, n_folds_with_snps, integer(1)) else NULL)
+
   list(
     Z_full          = Z_full,
     Z_cbc           = Z_cbc,
     Z_shared        = if (return_components) Z_shared   else NULL,
     Z_specific      = if (return_components) Z_specific else NULL,
     effects         = effects,
-    r2_shared       = r2_shared,
-    r2_specific     = r2_specific,
-    r2_shared_expr  = r2_shared_expr,
-    r2_specific_expr = r2_specific_expr,
-    r2_full         = r2_full,
-    r2_cbc          = r2_cbc,
-    p_full          = p_full,
-    p_shared        = p_shared,
-    p_specific      = p_specific,
-    p_cbc           = p_cbc,
+    support         = support,
+    # Fold assignment, echoed back. Without it the GReX is not actually
+    # reconstructable from `effects` (you have each fold's lambda/intercept/
+    # betas but not which individual each applied to), and a fold whose
+    # elastic net selected NO SNPs cannot be traced to the individuals whose
+    # prediction is therefore exactly 0.
+    folds           = folds,
+    # --- accuracy: <method>_<response>_<predictor> ---
+    r2_crocotel_expr_shared     = r2_crocotel_expr_shared,
+    r2_crocotel_expr_specific   = r2_crocotel_expr_specific,
+    r2_crocotel_expr_full       = r2_crocotel_expr_full,
+    r2_cbc_expr_full            = r2_cbc_expr_full,
+    r2_crocotel_shcomp_shared   = r2_crocotel_shcomp_shared,
+    r2_crocotel_spcomp_specific = r2_crocotel_spcomp_specific,
+    # --- significance: marginal, then the two conditional tests ---
+    p_crocotel_expr_shared      = p_crocotel_expr_shared,
+    p_crocotel_expr_specific    = p_crocotel_expr_specific,
+    p_crocotel_expr_full        = p_crocotel_expr_full,
+    p_cbc_expr_full             = p_cbc_expr_full,
+    p_crocotel_shcomp_shared    = p_crocotel_shcomp_shared,
+    p_crocotel_spcomp_specific  = p_crocotel_spcomp_specific,
+    p_crocotel_expr_shared_given_specific = p_crocotel_expr_shared_given_specific,
+    p_crocotel_expr_specific_given_shared = p_crocotel_expr_specific_given_shared,
+    # --- rows used: one per R2/p pair, the row sets genuinely differ ---
+    n_crocotel_expr_shared      = n_crocotel_expr_shared,
+    n_crocotel_expr_specific    = n_crocotel_expr_specific,
+    n_crocotel_expr_full        = if (run_crocotel) n_crocotel_expr_full else NULL,
+    n_cbc_expr_full             = n_cbc_expr_full,
+    n_crocotel_shcomp_shared    = n_crocotel_shcomp_shared,
+    n_crocotel_spcomp_specific  = n_crocotel_spcomp_specific,
+    # --- OLS weights defining Z_full; previously computed and discarded ---
+    w_crocotel_shared   = if (run_crocotel)
+      stats::setNames(vapply(full_weights, function(w) unname(w[1]), numeric(1)), ctx_names) else NULL,
+    w_crocotel_specific = if (run_crocotel)
+      stats::setNames(vapply(full_weights, function(w) unname(w[2]), numeric(1)), ctx_names) else NULL,
     ctx_gate_crocotel = ctx_gate_crocotel,
     ctx_gate_cbc      = ctx_gate_cbc,
     timing          = list(

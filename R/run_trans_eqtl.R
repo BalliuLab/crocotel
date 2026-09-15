@@ -60,7 +60,7 @@
 #'   \code{assemble_grex_matrices()}; errors if \code{TRUE} and absent.
 #' @param grex_gate_pval   Character. Which crocotel GReX p-value to gate on:
 #'   \code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
-#'   for \code{method="cbc"} (which gates on its single \code{p_cbc}).
+#'   for \code{method="cbc"} (which gates on its single \code{p_cbc_expr_full}).
 #' @param grex_gate_q      Numeric. Within-context BH q-value cutoff for the
 #'   gate. Default \code{0.05}.
 #' @param grex_gate_r2_min Numeric. Optional adjusted-R2 floor applied on top

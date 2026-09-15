@@ -89,7 +89,7 @@
 #' @param grex_gate_q      Numeric. Within-context BH q-value cutoff for the
 #'   gate. Default \code{0.05}.
 #' @param grex_gate_r2_min Numeric. Optional additional floor on
-#'   \code{r2_full}; \code{0} (default) disables it.
+#'   \code{r2_crocotel_expr_full}; \code{0} (default) disables it.
 #' @param grex_gate_mode   Character. Gate criterion: \code{"pval"} (default,
 #'   the historical behavior) admits regulators with within-context BH
 #'   q < \code{grex_gate_q} (plus the R2 floor when

@@ -57,8 +57,10 @@ write_synth <- function(dir, gene_ids, chr, z_arr, y_arr, contexts) {
     saveRDS(Ym, file.path(dir, paste0("expr_",          ctx, ".rds")))
     # qc table for the B12 regulator gate (default grex_gate = TRUE):
     # all genes pass, so the gate is exercised without changing the scan.
-    qc <- cbind(p_full = rep(1e-6, length(gene_ids)), p_shared = 1e-6,
-                p_specific = 1e-6, r2_full = 0.5)
+    qc <- cbind(p_crocotel_expr_full = rep(1e-6, length(gene_ids)),
+                p_crocotel_expr_shared_given_specific = 1e-6,
+                p_crocotel_expr_specific_given_shared = 1e-6,
+                r2_crocotel_expr_full = 0.5)
     rownames(qc) <- gene_ids
     saveRDS(qc, file.path(dir, paste0("qc_crocotel_", ctx, ".rds")))
   }

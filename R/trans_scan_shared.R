@@ -108,8 +108,17 @@
                           "qc_%s_* files, or set grex_gate=FALSE."),
                    qc_file, method))
     qc   <- readRDS(qc_file)
-    pcol <- if (method == "cbc") "p_cbc" else paste0("p_", grex_gate_pval)
-    rcol <- if (method == "cbc") "r2_cbc" else "r2_full"
+    # grex_gate_pval is "full" | "shared" | "specific". Note "shared" and
+    # "specific" select the CONDITIONAL tests (each component given the other),
+    # which is what the old p_shared / p_specific were -- so this is a rename,
+    # not a change of gate semantics.
+    pcol <- if (method == "cbc") "p_cbc_expr_full" else switch(
+      grex_gate_pval,
+      full     = "p_crocotel_expr_full",
+      shared   = "p_crocotel_expr_shared_given_specific",
+      specific = "p_crocotel_expr_specific_given_shared",
+      stop("unknown grex_gate_pval: ", grex_gate_pval))
+    rcol <- if (method == "cbc") "r2_cbc_expr_full" else "r2_crocotel_expr_full"
     pv   <- qc[rownames(Z), pcol]
     r2   <- qc[rownames(Z), rcol]
     q    <- stats::p.adjust(pv, method = "BH")   # within-context BH

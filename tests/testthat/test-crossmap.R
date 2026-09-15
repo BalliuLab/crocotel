@@ -8,8 +8,11 @@
 test_that("filter_mappable_genes drops low-map, keeps high and unscored", {
   mapf <- file.path(tempdir(), "map_t1.txt")
   writeLines(c("gA\t0.95", "gB\t0.50", "gC\t0.99"), mapf)
+  # min_scored_frac = NULL: this case deliberately supplies an unscored gene,
+  # so the coverage guard must be off to exercise the keep-unscored rule.
   kept <- filter_mappable_genes(c("gA", "gB", "gC", "gUnscored"), mapf,
-                                min = 0.8, verbose = FALSE)
+                                min = 0.8, min_scored_frac = NULL,
+                                verbose = FALSE)
   expect_true(all(c("gA", "gC", "gUnscored") %in% kept))
   expect_false("gB" %in% kept)
   expect_error(filter_mappable_genes(c("gA"), verbose = FALSE))
@@ -27,20 +30,20 @@ test_that("gene-proximity (LD-halo) exclusion: in/out of cis-window, strength, c
   chr_ofPX <- stats::setNames(glPX$chr, glPX$gene_id)
   cmPX <- data.table::data.table(g1 = c("Pin", "Pout"), g2 = c("T1", "T2"),
                                  strength = c(200, 200))
-  excl <- crossmap_excluded_pairs_gene_proximity(
+  excl <- crocotel:::crossmap_excluded_pairs_gene_proximity(
     cmPX, reg_ids = "R", tgt_ids = c("T1", "T2"), gene_locations = glPX,
     cis_window = 1e6, window = 1e6, chr_of = chr_ofPX, min_strength = 100)
   expect_equal(nrow(excl[excl$reg == "R" & excl$tgt == "T1", ]), 1L)  # inside
   expect_equal(nrow(excl[excl$tgt == "T2", ]), 0L)                    # outside
   # strength below the threshold -> nothing excluded
-  expect_equal(nrow(crossmap_excluded_pairs_gene_proximity(
+  expect_equal(nrow(crocotel:::crossmap_excluded_pairs_gene_proximity(
     data.table::data.table(g1 = "Pin", g2 = "T1", strength = 50),
     reg_ids = "R", tgt_ids = "T1", gene_locations = glPX,
     cis_window = 1e6, window = 1e6, chr_of = chr_ofPX,
     min_strength = 100)), 0L)
   # same-chr (cis) reg/target is never a trans pair -> never excluded
   glc <- glPX; glc$chr[glc$gene_id == "T1"] <- "1"
-  expect_equal(nrow(crossmap_excluded_pairs_gene_proximity(
+  expect_equal(nrow(crocotel:::crossmap_excluded_pairs_gene_proximity(
     cmPX, reg_ids = "R", tgt_ids = "T1", gene_locations = glc,
     cis_window = 1e6, window = 1e6,
     chr_of = stats::setNames(glc$chr, glc$gene_id),

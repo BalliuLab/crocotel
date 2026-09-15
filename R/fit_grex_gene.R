@@ -58,8 +58,8 @@
 #'   coefficient caps (OOM escape hatch); \code{NULL} (default) uses glmnet's
 #'   defaults. Forwarded to \code{fit_grex_doublecv()}.
 #' @param return_components Logical. When \code{TRUE}, the saved record also
-#'   carries the shared/specific GReX sub-matrices (\code{Z_grex_shared},
-#'   \code{Z_grex_specific}). Default \code{FALSE} (roughly doubles per-gene
+#'   carries the shared/specific GReX sub-matrices (\code{Z_grex_crocotel_shared},
+#'   \code{Z_grex_crocotel_specific}). Default \code{FALSE} (roughly doubles per-gene
 #'   storage). Forwarded to \code{fit_grex_doublecv()}.
 #' @param maf_min        Numeric. Minimum MAF for cis-SNP inclusion.
 #'   Default 0.05.
@@ -108,17 +108,46 @@
 #'     (< \code{min_valid_n} measured), \code{"invariant"} (constant
 #'     expression), or \code{"no_signal"} (eligible but the fit found none).
 #'     \code{NULL} for \code{"no_input"} genes (no fit attempted).}
-#'   \item{r2}{Named list of adjusted R2 metrics from
-#'     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
-#'   \item{pvals}{Named list of per-context GReX significance F-test p-values
-#'     (\code{p_full}, \code{p_shared}, \code{p_specific}, \code{p_cbc}) from
-#'     \code{fit_grex_doublecv()}; \code{NULL} for \code{"no_input"}.}
+#'   \item{r2}{Named list of six adjusted R2 values, named
+#'     \code{<method>_<response>_<predictor>}. Response is \code{expr} (raw
+#'     expression), \code{shcomp} (the cross-context mean) or \code{spcomp}
+#'     (the de-meaned component). \code{NULL} for \code{"no_input"}.}
+#'   \item{pvals}{Named list of per-context GReX significance F-test p-values,
+#'     named \code{<method>_<response>_<predictor>}: six marginal tests
+#'     pairing 1:1 with \code{r2}, plus
+#'     \code{p_crocotel_expr_shared_given_specific} and
+#'     \code{p_crocotel_expr_specific_given_shared} (conditional; no matching
+#'     \code{r2} by design). \code{NULL} for \code{"no_input"}.}
+#'   \item{n}{Named list of the rows used by each \code{r2}/\code{pvals}
+#'     pair. Not a single value: the full model needs both predictors present,
+#'     a marginal fit needs one, and \code{shcomp} uses a different response.
+#'     Adjusted \eqn{R^2} depends on it, so it is what lets raw \eqn{R^2} be
+#'     recovered.}
+#'   \item{folds}{Integer vector named by individual: the outer-fold
+#'     assignment. Stored because it is otherwise unrecoverable --- folds are
+#'     built by ranking on \code{rowMeans(E)} then randomising within blocks,
+#'     so they depend on the RNG state and the seed is not itself stored.
+#'     Needed to tell which individuals received a prediction from a fold
+#'     whose elastic net selected no SNPs (that prediction is then just the
+#'     fold intercept, carrying no genetic information).}
+#'   \item{w}{\code{w_crocotel_shared} and \code{w_crocotel_specific}: the
+#'     OLS weights defining \code{Z_grex_crocotel}. Without them the shipped
+#'     predictor cannot be decomposed.}
+#'   \item{support}{Elastic-net support from \code{fit_grex_doublecv()}: how
+#'     many outer folds selected at least one SNP.
+#'     \code{support_crocotel_shared} is a scalar;
+#'     \code{support_crocotel_specific} and \code{support_cbc} are named
+#'     integer vectors over contexts. Carried on \code{"ok"} AND
+#'     \code{"no_model"} records --- a \code{no_model} gene DID run its fits,
+#'     so a count of 0 is the direct explanation for why no GReX resulted.
+#'     \code{NULL} only for \code{"no_input"}, where no fit was attempted.}
 #'   \item{effects}{Elastic-net effects from \code{fit_grex_doublecv()} --
 #'     per component and outer fold, the chosen \code{lambda},
-#'     \code{intercept}, support size \code{n_snps}, and the non-zero
+#'     \code{intercept}, \code{n_train} (rows the fit used, after that
+#'     component's masking), support size \code{n_snps}, and the non-zero
 #'     \code{snp}/\code{beta} coefficients (see that function's docs).
 #'     \code{NULL} for non-\code{"ok"} records.}
-#'   \item{Z_grex_shared, Z_grex_specific}{The shared (n_individuals) and
+#'   \item{Z_grex_crocotel_shared, Z_grex_crocotel_specific}{The shared (n_individuals) and
 #'     specific (n_individuals x n_contexts) GReX sub-matrices. \code{NULL}
 #'     unless \code{return_components = TRUE} on an \code{"ok"} record.}
 #' }
@@ -190,14 +219,17 @@ fit_grex_gene <- function(gene_id,
                           status_crocotel = NA_character_, status_cbc = NA_character_,
                           Z_grex_crocotel = NULL, Z_grex_cbc = NULL,
                           ctx_gate_crocotel = NULL, ctx_gate_cbc = NULL, r2 = NULL,
-                          pvals = NULL, effects = NULL,
-                          Z_grex_shared = NULL, Z_grex_specific = NULL) {
+                          pvals = NULL, n = NULL, w = NULL, support = NULL,
+                          folds = NULL,
+                          effects = NULL,
+                          Z_grex_crocotel_shared = NULL, Z_grex_crocotel_specific = NULL) {
     list(gene_id = gene_id, chr = chr, status = status, reason = reason,
          status_crocotel = status_crocotel, status_cbc = status_cbc,
          Z_grex_crocotel = Z_grex_crocotel, Z_grex_cbc = Z_grex_cbc,
-         Z_grex_shared = Z_grex_shared, Z_grex_specific = Z_grex_specific,
+         Z_grex_crocotel_shared = Z_grex_crocotel_shared, Z_grex_crocotel_specific = Z_grex_crocotel_specific,
          ctx_gate_crocotel = ctx_gate_crocotel, ctx_gate_cbc = ctx_gate_cbc,
-         r2 = r2, pvals = pvals, effects = effects)
+         r2 = r2, pvals = pvals, n = n, w = w, support = support, folds = folds,
+         effects = effects)
   }
 
   # Emit a no_input record (data problem, fit never attempted): write to disk
@@ -349,17 +381,45 @@ fit_grex_gene <- function(gene_id,
   has_crocotel <- "crocotel" %in% method && any(!is.na(fit$Z_full))
   has_cbc     <- "cbc"     %in% method && any(!is.na(fit$Z_cbc))
 
-  r2_summary <- list(r2_shared        = fit$r2_shared,
-                      r2_specific      = fit$r2_specific,
-                      r2_shared_expr   = fit$r2_shared_expr,
-                      r2_specific_expr = fit$r2_specific_expr,
-                      r2_full          = fit$r2_full,
-                      r2_cbc           = fit$r2_cbc)
+  # Names encode <method>_<response>_<predictor>. Response: `expr` = raw
+  # expression, `shcomp` = the shared component (cross-context mean),
+  # `spcomp` = the specific component (de-meaned).
+  r2_summary <- list(
+    r2_crocotel_expr_shared     = fit$r2_crocotel_expr_shared,
+    r2_crocotel_expr_specific   = fit$r2_crocotel_expr_specific,
+    r2_crocotel_expr_full       = fit$r2_crocotel_expr_full,
+    r2_cbc_expr_full            = fit$r2_cbc_expr_full,
+    r2_crocotel_shcomp_shared   = fit$r2_crocotel_shcomp_shared,
+    r2_crocotel_spcomp_specific = fit$r2_crocotel_spcomp_specific)
 
-  pvals_summary <- list(p_full     = fit$p_full,
-                        p_shared   = fit$p_shared,
-                        p_specific = fit$p_specific,
-                        p_cbc      = fit$p_cbc)
+  # Six marginal tests pair 1:1 with the six R2 above; the last two are the
+  # conditional tests, which deliberately have no matching R2 (they test an
+  # increment, not a fit).
+  pvals_summary <- list(
+    p_crocotel_expr_shared      = fit$p_crocotel_expr_shared,
+    p_crocotel_expr_specific    = fit$p_crocotel_expr_specific,
+    p_crocotel_expr_full        = fit$p_crocotel_expr_full,
+    p_cbc_expr_full             = fit$p_cbc_expr_full,
+    p_crocotel_shcomp_shared    = fit$p_crocotel_shcomp_shared,
+    p_crocotel_spcomp_specific  = fit$p_crocotel_spcomp_specific,
+    p_crocotel_expr_shared_given_specific = fit$p_crocotel_expr_shared_given_specific,
+    p_crocotel_expr_specific_given_shared = fit$p_crocotel_expr_specific_given_shared)
+
+  # Rows used by each R2/p pair. NOT one number: the full model needs both
+  # predictors present, a marginal fit needs only one, and shcomp uses a
+  # different response -- so the row sets differ.
+  n_summary <- list(
+    n_crocotel_expr_shared      = fit$n_crocotel_expr_shared,
+    n_crocotel_expr_specific    = fit$n_crocotel_expr_specific,
+    n_crocotel_expr_full        = fit$n_crocotel_expr_full,
+    n_cbc_expr_full             = fit$n_cbc_expr_full,
+    n_crocotel_shcomp_shared    = fit$n_crocotel_shcomp_shared,
+    n_crocotel_spcomp_specific  = fit$n_crocotel_spcomp_specific)
+
+  # OLS weights defining Z_grex_crocotel; without them the shipped predictor
+  # cannot be decomposed after the fact.
+  w_summary <- list(w_crocotel_shared   = fit$w_crocotel_shared,
+                    w_crocotel_specific = fit$w_crocotel_specific)
 
   # Per-method verdict: "ok" if that method produced any usable prediction,
   # else "no_model"; NA if the method was not requested.
@@ -373,16 +433,21 @@ fit_grex_gene <- function(gene_id,
                        status_crocotel = status_crocotel, status_cbc = status_cbc,
                        ctx_gate_crocotel = fit$ctx_gate_crocotel,
                        ctx_gate_cbc = fit$ctx_gate_cbc, r2 = r2_summary,
-                       pvals = pvals_summary)
+                       pvals = pvals_summary, n = n_summary, w = w_summary,
+                       support = fit$support,
+                       folds = stats::setNames(folds, rownames(E)))
   } else {
     out <- make_record(status = "ok", chr = chr,
                        status_crocotel = status_crocotel, status_cbc = status_cbc,
                        Z_grex_crocotel = fit$Z_full, Z_grex_cbc = fit$Z_cbc,
                        ctx_gate_crocotel = fit$ctx_gate_crocotel,
                        ctx_gate_cbc = fit$ctx_gate_cbc, r2 = r2_summary,
-                       pvals = pvals_summary, effects = fit$effects,
-                       Z_grex_shared = fit$Z_shared,
-                       Z_grex_specific = fit$Z_specific)
+                       pvals = pvals_summary, n = n_summary, w = w_summary,
+                       support = fit$support,
+                       folds = stats::setNames(folds, rownames(E)),
+                       effects = fit$effects,
+                       Z_grex_crocotel_shared = fit$Z_shared,
+                       Z_grex_crocotel_specific = fit$Z_specific)
   }
 
   if (return_output) {

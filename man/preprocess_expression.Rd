@@ -28,7 +28,7 @@ Default \code{"\t"} (tab-separated).}
 
 \item{gene_id_col}{Integer or character or \code{NULL}. Column containing
 gene IDs. \code{NULL} (default) means gene IDs are row names (first
-column used as row names by \code{read.table}).}
+column used as row names).}
 
 \item{na_strings}{Character vector. Strings to treat as \code{NA}.
 Default \code{c("NA", "na", "")}.}

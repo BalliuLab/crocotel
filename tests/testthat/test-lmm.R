@@ -126,9 +126,9 @@ test_that("grex_gate excludes failing regulators per context; errors without qc"
   d6 <- file.path(tempdir(), "lmm_t6"); unlink(d6, recursive = TRUE)
   gl <- write_synth(d6, gene_ids, chr, z_arr, y_arr, contexts)
 
-  # Fail regA1's GReX quality in ctx01 ONLY (p_full = 0.9 -> BH q >> 0.05).
+  # Fail regA1's GReX quality in ctx01 ONLY (p_crocotel_expr_full = 0.9 -> BH q >> 0.05).
   qc1 <- readRDS(file.path(d6, "qc_crocotel_ctx01.rds"))
-  qc1["regA1", "p_full"] <- 0.9
+  qc1["regA1", "p_crocotel_expr_full"] <- 0.9
   saveRDS(qc1, file.path(d6, "qc_crocotel_ctx01.rds"))
 
   run_trans_lmm(matrix_dir = d6, gene_locations = gl, output_dir = d6,
@@ -153,7 +153,7 @@ test_that("grex_gate excludes failing regulators per context; errors without qc"
   d7 <- file.path(tempdir(), "lmm_t7"); unlink(d7, recursive = TRUE)
   gl7 <- write_synth(d7, gene_ids, chr, z_arr, y_arr, contexts)
   qc7 <- readRDS(file.path(d7, "qc_crocotel_ctx01.rds"))
-  qc7["regA1", "p_full"] <- 0.9
+  qc7["regA1", "p_crocotel_expr_full"] <- 0.9
   saveRDS(qc7, file.path(d7, "qc_crocotel_ctx01.rds"))
   run_trans_lmm(matrix_dir = d7, gene_locations = gl7, output_dir = d7,
                 sigma_E_form = "cs", pv_threshold = 1, force_iid = TRUE,
@@ -290,7 +290,7 @@ test_that("a context whose regulators ALL fail the gate is warned about and skip
   gl14 <- write_synth(d14, gene_ids, chr, z_arr, y_arr, contexts)
   # fail EVERY gene's GReX quality in ctx02 -> zero usable regulators there
   qc2 <- readRDS(file.path(d14, "qc_crocotel_ctx02.rds"))
-  qc2[, "p_full"] <- 0.99
+  qc2[, "p_crocotel_expr_full"] <- 0.99
   saveRDS(qc2, file.path(d14, "qc_crocotel_ctx02.rds"))
 
   expect_warning(
@@ -428,9 +428,9 @@ test_that("grex_gate_mode: 'r2' gates on the R2 floor alone; 'pval' stays defaul
   # regA1: significant but useless R2; regA2: insignificant but good R2;
   # regA3: passes both. (ctx01 only; other contexts left all-passing.)
   qc <- readRDS(file.path(d21, "qc_crocotel_ctx01.rds"))
-  qc["regA1", c("p_full", "r2_full")] <- c(1e-6, 0.001)
-  qc["regA2", c("p_full", "r2_full")] <- c(0.99, 0.40)
-  qc["regA3", c("p_full", "r2_full")] <- c(1e-6, 0.50)
+  qc["regA1", c("p_crocotel_expr_full", "r2_crocotel_expr_full")] <- c(1e-6, 0.001)
+  qc["regA2", c("p_crocotel_expr_full", "r2_crocotel_expr_full")] <- c(0.99, 0.40)
+  qc["regA3", c("p_crocotel_expr_full", "r2_crocotel_expr_full")] <- c(1e-6, 0.50)
   saveRDS(qc, file.path(d21, "qc_crocotel_ctx01.rds"))
 
   run1 <- function(mode, r2min, out) {
