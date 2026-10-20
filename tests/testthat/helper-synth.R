@@ -71,9 +71,23 @@ write_synth <- function(dir, gene_ids, chr, z_arr, y_arr, contexts) {
 # The target run_trans_lmm scans is each gene's expression residualized on
 # its own GReX (the on-the-fly de-cis). Reproduce with the same helper so
 # the references consume the identical target.
+#
+# The scanners impute the GReX's sporadic NAs BEFORE residualizing:
+#   t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(Z, ...)))))
+# Without mirroring that here, this helper and the package diverge on exactly
+# the columns where Z has an NA -- residualize_grex()'s all-or-nothing rule
+# (colSums(is.na(Z)) == 0) leaves them RAW, while the package residualizes the
+# imputed column. That is invisible on NA-free fixtures and shows up only in
+# the missing-data tests.
+#
+# Orientation: the package imputes a (genes x individuals) matrix, so each
+# gene's NAs take that gene's mean across individuals. Here the per-gene
+# matrix is (individuals x contexts), so the same operation is the transpose
+# -- each CONTEXT's NAs take that context's mean across individuals.
 decis_arr <- function(y_l, z_l) {
   out <- lapply(names(y_l), function(g) {
-    R <- residualize_grex(y_l[[g]], z_l[[g]])
+    z <- t(crocotel:::.impute_row_mean(t(z_l[[g]])))
+    R <- residualize_grex(y_l[[g]], z)
     dimnames(R) <- dimnames(y_l[[g]])
     R
   })

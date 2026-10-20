@@ -134,9 +134,9 @@ test_that("run_trans_eqtl accepts target_grex_gate and it changes results", {
   expect_false(isTRUE(all.equal(m_on[["t-stat"]], m_off[["t-stat"]])))
 })
 
-test_that("target_response is crocotel-only: cbc always scans raw", {
-  # cbc is the GBAT-style comparator; de-cis'ing its target would give the
-  # comparator a crocotel-only step. The option is therefore inert for cbc.
+test_that("cbc residualizes its target on its own GReX, with the same gate", {
+  # 0.3.1: target_response applies to cbc too. "residualized" de-cis's the
+  # target against grex_cbc_<ctx>, and the target gate reads qc_cbc_<ctx>.
   d <- file.path(tempdir(), "tr_cbc"); unlink(d, recursive = TRUE)
   gl <- write_synth(d, gene_ids, chr, z_arr, y_arr, contexts)
   # write_synth only emits crocotel matrices; mirror them as cbc so the
@@ -162,19 +162,39 @@ test_that("target_response is crocotel-only: cbc always scans raw", {
     data.table::fread(file.path(o, sprintf("trans_cbc_%s.tsv", contexts[1])))
   }
 
-  # explicitly asking for residualized warns, and is ignored
-  expect_warning(res_req <- run("residualized"), "crocotel-only")
-  raw_req  <- run("raw")
+  # both values are legal for cbc now: neither warns
+  expect_no_warning(res_req <- run("residualized"))
+  expect_no_warning(raw_req <- run("raw"))
   default_ <- run(NULL)
 
   key <- function(x) paste(x$SNP, x$gene)
   data.table::setkeyv(res_req, c("SNP", "gene"))
   data.table::setkeyv(raw_req, c("SNP", "gene"))
   data.table::setkeyv(default_, c("SNP", "gene"))
-  # all three are the SAME scan: cbc never residualizes
+  # the default is residualized ...
+  expect_equal(default_[["t-stat"]], res_req[["t-stat"]])
+  # ... and residualizing the target changes the scan
   expect_setequal(key(res_req), key(raw_req))
-  expect_equal(res_req[["t-stat"]], raw_req[["t-stat"]])
-  expect_equal(default_[["t-stat"]], raw_req[["t-stat"]])
+  expect_false(isTRUE(all.equal(res_req[["t-stat"]], raw_req[["t-stat"]])))
+
+  # The target gate reads cbc's OWN qc: if no gene's cbc GReX is heritable,
+  # every target keeps its raw expression and residualized == raw exactly.
+  for (ctx in contexts) {
+    cb <- readRDS(file.path(d, paste0("qc_cbc_", ctx, ".rds")))
+    cb[, "p_cbc_expr_full"] <- 1
+    saveRDS(cb, file.path(d, paste0("qc_cbc_", ctx, ".rds")))
+  }
+  run_gatefail <- function(tr) {
+    o <- file.path(d, paste0("out_gatefail_", tr)); unlink(o, recursive = TRUE)
+    run_trans_eqtl(matrix_dir = d, gene_locations = gl, output_dir = o,
+                   method = "cbc", target_response = tr, grex_gate = FALSE,
+                   pv_threshold = 1, min_obs_per_ctx = 5L, verbose = FALSE)
+    x <- data.table::fread(file.path(o, sprintf("trans_cbc_%s.tsv", contexts[1])))
+    data.table::setkeyv(x, c("SNP", "gene"))
+    x
+  }
+  expect_equal(run_gatefail("residualized")[["t-stat"]],
+               run_gatefail("raw")[["t-stat"]])
 })
 
 test_that("crocotel keeps both target_response options", {
@@ -183,8 +203,7 @@ test_that("crocotel keeps both target_response options", {
   run <- function(tr) {
     o <- file.path(d, paste0("out_", tr)); unlink(o, recursive = TRUE)
     # not expect_silent(): MatrixEQTL prints its own progress regardless of
-    # verbose. What matters is that neither value warns -- both are legal for
-    # crocotel, unlike cbc.
+    # verbose. What matters is that neither value warns -- both are legal.
     expect_no_warning(run_trans_eqtl(matrix_dir = d, gene_locations = gl,
                                      output_dir = o, method = "crocotel",
                                      target_response = tr, pv_threshold = 1,
