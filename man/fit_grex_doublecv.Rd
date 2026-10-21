@@ -42,8 +42,11 @@ quantile-bin labels destroys the pairing.)}
 \item{method}{Character vector. One or both of \code{"crocotel"} and
 \code{"cbc"}. Default \code{c("crocotel", "cbc")} runs both methods in a
 single CV loop. Fields for unused methods are \code{NULL} in the output.
-With fewer than 3 contexts the crocotel decomposition is unidentifiable
-and the method is auto-disabled with a warning (CBC still runs).}
+With fewer than 3 USABLE contexts (clearing \code{min_valid_n} and
+non-constant, i.e. \code{sum(ctx_usable) < 3} -- not \code{ncol(E)}, which
+counts the NA-padded cohort-wide context set) the crocotel decomposition
+is unidentifiable and the method is auto-disabled with a warning (CBC
+still runs).}
 
 \item{K_outer}{Integer. Number of outer CV folds. Must match the number of
 unique values in \code{folds}. Default 10.}
@@ -101,11 +104,13 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
   residual is NOT returned: it is fully derivable from raw expression + GReX,
   so \code{run_trans_eqtl()} reconstructs it on the fly (via
   \code{residualize_grex()}) from the assembled raw \code{expr_<ctx>} + GReX.
-  A zero-SNP elastic-net fit contributes intercept-only (constant)
-  predictions for its test fold, which are kept; a column becomes
-  entirely \code{NA} only when the assembled predictor is constant
-  overall (no genetic signal, \code{ctx_gate = "no_signal"}) -- drop
-  such regulators before testing. If \code{Z_specific[, c]} is exactly
+  A zero-SNP elastic-net fit contributes exactly \code{0} for its test fold
+  (the GReX is \eqn{G\beta}; no intercept is added), so those individuals
+  carry no genetic information rather than the fold's mean expression. A
+  column becomes entirely \code{NA} when the assembled predictor is constant
+  -- which now includes the case of no SNPs selected in ANY fold (no genetic
+  signal, \code{ctx_gate = "no_signal"}) -- drop such regulators before
+  testing. See \code{support} for how many folds found any SNP. If \code{Z_specific[, c]} is exactly
   collinear with \code{Z_shared}, \code{anova()} returns \code{NA} for
   \code{p_crocotel_expr_shared_given_specific}/\code{p_crocotel_expr_specific_given_shared} (0-df comparison; no crash).
 \describe{
@@ -128,15 +133,27 @@ A named list. Fields for unused methods are \code{NULL}. The de-cis
     outer fold: \code{effects$shared[[k]]},
     \code{effects$specific[[ctx]][[k]]}, \code{effects$cbc[[ctx]][[k]]}.
     Each entry is a list \code{lambda} (chosen lambda.min),
-    \code{intercept}, \code{n_snps} (support size), and \code{coef} (a
-    data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
+    \code{intercept}, \code{n_train} (individuals the fit trained on, after
+    that component's own masking -- the specific fit additionally drops
+    individuals measured only in that context, so it is a strict subset of
+    the cbc fit's rows for the same context and fold), \code{n_snps}
+    (support size, counting NON-ZERO betas of either sign), and \code{coef}
+    (a data frame \code{snp}/\code{beta} of the NON-ZERO coefficients).
     \code{NULL} entries mark skipped fits. Together with \code{folds} this
     makes the GReX reconstructable and exposes the selected cis-SNP support
     for downstream conditioning.}
+  \item{support}{List of elastic-net support counts -- how many outer folds
+    selected at least one SNP. \code{support_crocotel_shared} is a scalar
+    (the shared component is fitted once per fold);
+    \code{support_crocotel_specific} and \code{support_cbc} are named integer
+    vectors over contexts. \code{NULL} for a method not in \code{method}.
+    Derived from \code{effects}, but carried separately because \code{effects}
+    is dropped from lightweight records -- a count of 0 is the direct
+    explanation for a context with no usable GReX.}
   \item{folds}{Integer vector (n_individuals), the outer-fold assignment as
     supplied. Needed to attribute each individual's prediction to the fold
     model that produced it: a fold whose elastic net selected no SNPs
-    contributes only its intercept, and without \code{folds} those
+    contributes exactly 0, and without \code{folds} those
     individuals cannot be identified.}
   \item{r2_crocotel_shcomp_shared}{Numeric scalar or \code{NULL}. Adjusted R2 of the
     shared GReX vs rowMeans(E).

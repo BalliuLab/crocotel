@@ -180,3 +180,20 @@ test_that("score-table reader: headerless and headered files agree; malformed fi
                                    verbose = FALSE)
   expect_setequal(kept, c("rs1", "rs3"))   # rs3 unscored -> kept
 })
+
+test_that(".crossmap_filter_tsv drops gene-mappability genes from the installed namespace", {
+  # Regression: the gene-level drop uses %chin% inside a data.table [i]. With
+  # data.table only ::-qualified (not imported), %chin% was unresolvable once
+  # the package ran from its INSTALLED namespace, so any apply_crossmap_post()
+  # call with gene_mappability_file errored. No test reached this path before.
+  f <- file.path(tempdir(), "chin_drop.tsv")
+  data.table::fwrite(data.table::data.table(
+    SNP = c("r1", "r2", "r1"), gene = c("t1", "t1", "t2"),
+    beta = 1, `t-stat` = 1, `p-value` = 0.01, FDR = NA_real_), f, sep = "\t")
+  excl <- data.table::data.table(reg = character(0), tgt = character(0))
+  crocotel:::.crossmap_filter_tsv(f, excl, drop_genes = c("r2", "t2"))
+  o <- data.table::fread(f)
+  expect_equal(nrow(o), 1L)
+  expect_equal(o$SNP, "r1")
+  expect_equal(o$gene, "t1")
+})

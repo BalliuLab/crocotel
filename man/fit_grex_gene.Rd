@@ -169,9 +169,18 @@ Invisibly returns \code{NULL} (or the record if
   \item{w}{\code{w_crocotel_shared} and \code{w_crocotel_specific}: the
     OLS weights defining \code{Z_grex_crocotel}. Without them the shipped
     predictor cannot be decomposed.}
+  \item{support}{Elastic-net support from \code{fit_grex_doublecv()}: how
+    many outer folds selected at least one SNP.
+    \code{support_crocotel_shared} is a scalar;
+    \code{support_crocotel_specific} and \code{support_cbc} are named
+    integer vectors over contexts. Carried on \code{"ok"} AND
+    \code{"no_model"} records --- a \code{no_model} gene DID run its fits,
+    so a count of 0 is the direct explanation for why no GReX resulted.
+    \code{NULL} only for \code{"no_input"}, where no fit was attempted.}
   \item{effects}{Elastic-net effects from \code{fit_grex_doublecv()} --
     per component and outer fold, the chosen \code{lambda},
-    \code{intercept}, support size \code{n_snps}, and the non-zero
+    \code{intercept}, \code{n_train} (rows the fit used, after that
+    component's masking), support size \code{n_snps}, and the non-zero
     \code{snp}/\code{beta} coefficients (see that function's docs).
     \code{NULL} for non-\code{"ok"} records.}
   \item{Z_grex_crocotel_shared, Z_grex_crocotel_specific}{The shared (n_individuals) and

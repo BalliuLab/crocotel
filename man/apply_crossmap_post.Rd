@@ -14,6 +14,8 @@ apply_crossmap_post(
   cross_map_min_strength = 0,
   direct_min_strength = 0,
   proximity_min_strength = 100,
+  gene_mappability_file = NULL,
+  gene_mappability_min = 0.8,
   verbose = TRUE
 )
 }
@@ -56,6 +58,19 @@ methods). Default \code{0} (all non-zero, as in GBAT); editable.}
 \item{proximity_min_strength}{Strength floor for the PROXIMITY / LD-halo
 filter, applied to gene methods AND the SNP method. Default \code{100};
 editable (robustness is reported across 100/200/500).}
+
+\item{gene_mappability_file}{Character path or \code{NULL}/\code{NA}
+(default \code{NULL} = off). Per-gene mappability scores, read by
+\code{\link{filter_mappable_genes}}. When given, every scanned gene
+(regulator or target) scoring below \code{gene_mappability_min} is dropped
+from the output and from the FDR family BEFORE the cross-map exclusion is
+computed, so no pair is decremented twice. Usable on its own with
+\code{cross_map_file = NA}. Errors if the file does not exist, or if a
+context is left with no regulators or no targets.}
+
+\item{gene_mappability_min}{Numeric in (0, 1]. Minimum mappability score a
+gene needs to be kept. Default \code{0.8}. Ignored when
+\code{gene_mappability_file} is off.}
 
 \item{verbose}{Logical. Default \code{TRUE}.}
 }
