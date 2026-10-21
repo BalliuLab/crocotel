@@ -134,11 +134,15 @@
   rownames(Zl) <- lead$gene
   # Lead-SNP position per gene, for the SNP->local-gene cross-map filter (which
   # uses the actual variant position, not the gene's). snp = the regulator id in
-  # the trans output (the gene); chr/pos = its lead cis-SNP.
+  # the trans output (the gene); chr/pos = its lead cis-SNP; lead_snp = that
+  # variant's ID, recorded so downstream diagnostics (e.g. cis quality of the
+  # lead SNP in simulations) use exactly the SNP this scan tested instead of
+  # re-selecting it with a second, divergent selector.
   pidx <- match(lead$snps, snpspos_gw$snp)
   lead_pos <- data.frame(snp = lead$gene,
                          chr = snpspos_gw$chr[pidx],
                          pos = snpspos_gw$pos[pidx],
+                         lead_snp = lead$snps,
                          stringsAsFactors = FALSE)
   list(Z = Zl, pos = lead_pos)
 }
@@ -262,7 +266,13 @@
 #' @return Invisibly the character vector of contexts processed. Writes, per
 #'   context, \code{trans_snp_<ctx>.tsv} (+ \code{trans_snp_lead_<ctx>.tsv} when
 #'   \code{both}) and the \code{n_tests_<hierarchy>_snp.rds}
-#'   (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s).
+#'   (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s), plus the
+#'   matching \code{n_tests_meta_snp.rds} (+ \code{n_tests_meta_snp_lead.rds}):
+#'   per context, \code{snpspos} (the tested regulators' positions) and
+#'   \code{tgt_ids}. For the lead series, \code{snpspos} has one row per
+#'   regulator gene -- \code{snp} (gene ID), \code{chr}/\code{pos} (its lead
+#'   cis-SNP's position) and \code{lead_snp} (that variant's ID: the min-p
+#'   cis-SNP for the gene in that context).
 #' @export
 run_trans_eqtl_snp <- function(matrix_dir,
                                gene_locations,

@@ -79,7 +79,13 @@ supported). See \code{run_trans_eqtl()}.}
 Invisibly the character vector of contexts processed. Writes, per
   context, \code{trans_snp_<ctx>.tsv} (+ \code{trans_snp_lead_<ctx>.tsv} when
   \code{both}) and the \code{n_tests_<hierarchy>_snp.rds}
-  (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s).
+  (+ \code{n_tests_<hierarchy>_snp_lead.rds}) family-count file(s), plus the
+  matching \code{n_tests_meta_snp.rds} (+ \code{n_tests_meta_snp_lead.rds}):
+  per context, \code{snpspos} (the tested regulators' positions) and
+  \code{tgt_ids}. For the lead series, \code{snpspos} has one row per
+  regulator gene -- \code{snp} (gene ID), \code{chr}/\code{pos} (its lead
+  cis-SNP's position) and \code{lead_snp} (that variant's ID: the min-p
+  cis-SNP for the gene in that context).
 }
 \description{
 Unified SNP-based comparator to crocotel's GReX methods. MatrixEQTL is used

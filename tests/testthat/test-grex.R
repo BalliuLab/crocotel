@@ -162,6 +162,30 @@ test_that("assemble + run_trans_eqtl + run_trans_eqtl_snp run end-to-end", {
                      variant_mappability_file = NA, verbose = FALSE)
   expect_true(file.exists(file.path(sd, "n_tests_target_snp.rds")))
   expect_gt(length(list.files(sd, pattern = "^trans_snp_.*\\.tsv$")), 0L)
+
+  # The metadata records each gene's lead cis-SNP ID, and it is the min-p
+  # (max |r|) cis-SNP for that gene in that context -- recomputed here
+  # independently of MatrixEQTL from the same genotypes and expression.
+  meta <- readRDS(file.path(sd, "n_tests_meta_snp.rds"))
+  gw   <- crocotel:::.load_genotypes_all(gx_plink)
+  G    <- gw$G; pos <- gw$snpspos
+  gl   <- gx_gl; gl$chr <- crocotel:::.norm_chr(gl$chr)
+  for (ctx in names(meta)) {
+    sp <- meta[[ctx]]$snpspos
+    expect_true(all(c("snp", "chr", "pos", "lead_snp") %in% names(sp)))
+    expect_true(all(sp$lead_snp %in% colnames(G)))
+    expect_equal(pos$pos[match(sp$lead_snp, pos$snp)], sp$pos)
+    E <- readRDS(file.path(mat_dir, paste0("expr_", ctx, ".rds")))
+    for (k in seq_len(nrow(sp))) {
+      g  <- sp$snp[k]; gi <- match(g, gl$gene_id)
+      cis <- pos$snp[crocotel:::.norm_chr(pos$chr) == gl$chr[gi] &
+                     pos$pos >= gl$start[gi] - 1e6 & pos$pos <= gl$end[gi] + 1e6]
+      y  <- E[g, ]; ok <- !is.na(y)
+      ids <- intersect(names(y)[ok], rownames(G))
+      r  <- abs(stats::cor(G[ids, cis, drop = FALSE], y[ids]))
+      expect_identical(sp$lead_snp[k], cis[which.max(r)])
+    }
+  }
 })
 
 test_that("fit_grex_batch: killed workers, junk returns, and the return_output trap", {
