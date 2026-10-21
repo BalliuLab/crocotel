@@ -25,16 +25,21 @@ export(write_eligible_sidecars)
 export(write_n_tests)
 export(write_simulated_expression)
 export(write_simulated_genotypes)
-importFrom(stats,ave)
-importFrom(stats,coef)
-importFrom(stats,cor)
-importFrom(stats,lm)
-importFrom(stats,lm.fit)
-importFrom(stats,quantile)
-importFrom(stats,rbinom)
-importFrom(stats,rnorm)
-importFrom(stats,runif)
-importFrom(stats,sd)
-importFrom(stats,var)
-importFrom(utils,read.table)
-importFrom(utils,write.table)
+importFrom(data.table,"%chin%")
+importFrom(stats,
+  ave,
+  coef,
+  cor,
+  lm,
+  lm.fit,
+  quantile,
+  rbinom,
+  rnorm,
+  runif,
+  sd,
+  var
+)
+importFrom(utils,
+  read.table,
+  write.table
+)

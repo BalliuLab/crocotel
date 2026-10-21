@@ -24,9 +24,9 @@ and \code{grex_list} are \code{NULL}, the function runs in
 gene universe is every gene found in \code{expr_dir} (optionally
 intersected with \code{gene_ids}), and the output is exactly what the
 SNP-based scanners (\code{run_trans_eqtl_snp()}) need -- the
-\code{expr_<ctx>.rds} matrices plus the \code{expressed_targets.rds}
-eligibility sidecar, produced by the same code path the GReX assembly
-uses.}
+\code{expr_<ctx>.rds} matrices plus the
+\code{expressed_targets_<ctx>.rds} eligibility sidecars, produced by the
+same code path the GReX assembly uses.}
 
 \item{output_dir}{Character. Directory where output files are written.
 Created if it does not exist.}
@@ -60,7 +60,7 @@ target and residualizes on the fly for the \code{"residualized"} target.}
 \item{min_obs_per_ctx}{Integer. Target-eligibility threshold: a gene is an
 admissible trans TARGET in a context only if it has at least this many
 observed expression values there. The decision is made here, once, and
-written to an \code{expressed_targets.rds} file (per-context eligible
+written to \code{expressed_targets_<ctx>.rds} files (per-context eligible
 gene sets + the threshold) that every scanner
 (\code{run_trans_eqtl()}, \code{run_trans_eqtl_snp()},
 \code{run_trans_lmm()}) obeys for both its scan and its FDR family.
@@ -80,10 +80,14 @@ Invisibly returns a named list:
     expression-only mode).}
   \item{output_dir}{The output directory path.}
 }
-Besides the per-context matrices, an \code{expressed_targets.rds} file
-is written to \code{output_dir}: the per-context eligible-target sets (see
-\code{min_obs_per_ctx}) that the trans scanners use for their scans and
-FDR families.
+Besides the per-context matrices, one \code{expressed_targets_<ctx>.rds}
+file per context is written to \code{output_dir}: the eligible-target set
+(see \code{min_obs_per_ctx}) that the trans scanners use for their scans
+and FDR families. A run covering every context additionally writes the
+combined \code{expressed_targets.rds}; a per-context run does not, so
+concurrent per-context jobs cannot overwrite one another's decision. Use
+\code{write_eligible_sidecars()} to (re)generate these from already
+assembled \code{expr_<ctx>.rds} without repeating the assembly.
 }
 \description{
 Reads all per-gene RDS files produced by \code{fit_grex_gene()} and writes

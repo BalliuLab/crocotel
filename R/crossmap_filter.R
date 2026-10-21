@@ -344,6 +344,17 @@ crossmap_excl_variant <- function(cm, snpspos, tgt_ids, gene_locations,
 #' @param cis_window     Integer. Regulator cis-window (bp): the SNP->local-gene
 #'   lookup for \code{regulator = "variant"} AND the interval anchor (gene body
 #'   +- \code{cis_window}) for the gene proximity filter. Default \code{1e6}.
+#' @param gene_mappability_file Character path or \code{NULL}/\code{NA}
+#'   (default \code{NULL} = off). Per-gene mappability scores, read by
+#'   \code{\link{filter_mappable_genes}}. When given, every scanned gene
+#'   (regulator or target) scoring below \code{gene_mappability_min} is dropped
+#'   from the output and from the FDR family BEFORE the cross-map exclusion is
+#'   computed, so no pair is decremented twice. Usable on its own with
+#'   \code{cross_map_file = NA}. Errors if the file does not exist, or if a
+#'   context is left with no regulators or no targets.
+#' @param gene_mappability_min Numeric in (0, 1]. Minimum mappability score a
+#'   gene needs to be kept. Default \code{0.8}. Ignored when
+#'   \code{gene_mappability_file} is off.
 #' @param verbose        Logical. Default \code{TRUE}.
 #'
 #' @return Invisibly the adjusted \code{n_tests} \code{data.table} (also

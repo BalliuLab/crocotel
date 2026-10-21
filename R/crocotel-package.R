@@ -4,6 +4,7 @@
 #' @keywords internal
 #' @importFrom stats ave coef cor lm lm.fit quantile rbinom rnorm runif sd var
 #' @importFrom utils read.table write.table
+#' @importFrom data.table %chin%
 "_PACKAGE"
 
 # Register this package as data.table-aware. The package calls data.table
@@ -26,7 +27,7 @@ utils::globalVariables(c(
   "g1", "g2", "gs", "gene", "gene_id", "chr", "start", "end", "context",
   "n_pairs", "reg", "tgt", "rchr", "tchr", "strength", "snps", "snp", "pos",
   "snp_chr", "partner", "sub", "lo", "hi", "pvalue",
-  "rgs", "pchr", "rlo", "rhi",
+  "rgs", "pchr", "rlo", "rhi", "SNP",
   "accept", "crit_threshold", "F3", "is_active", "is_eGene", "k", "m_tests",
   "max_accept_k", "n_sel_tissues", "n_tested", "n_tested_tissues",
   "q1", "q2", "simes_min_term", "simes_p", "simes_p_xC"

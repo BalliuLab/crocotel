@@ -49,8 +49,7 @@ it on the fly via \code{residualize_grex()} against THIS METHOD's own
 GReX (\code{grex_<method>_<ctx>}: the crocotel GReX for crocotel, the
 context-by-context GReX for cbc), identical to the fit-time residual.
 The same target de-cis gate (\code{target_grex_gate}) applies to both,
-judged on each method's own cis p-value (\code{qc_<method>_<ctx>}).
-Before 0.3.1, cbc was forced to \code{"raw"}.}
+judged on each method's own cis p-value (\code{qc_<method>_<ctx>}).}
 
 \item{pv_threshold}{Numeric. Only pairs with p-value below this are
 kept. Default \code{0.05} (matches \code{run_trans_eqtl_snp}); loose
@@ -67,21 +66,6 @@ FDR family sizes shrink to the gated set (honest power gain). Requires
 \code{qc_<method>_<ctx>.rds} from \code{assemble_grex_matrices()}; errors
 if \code{TRUE} and absent. For the separate gate on a gene's own GReX as a
 TARGET, see \code{target_grex_gate}.}
-
-\item{target_grex_gate}{Logical. Target de-cis gate, applied only when
-\code{target_response = "residualized"}. When \code{TRUE} (default), a
-gene's own GReX is regressed out of its expression only if that GReX is
-heritable in this context, judged by exactly the criterion
-\code{grex_gate} uses for regulators (same \code{grex_gate_pval},
-\code{grex_gate_q}, \code{grex_gate_r2_min}, \code{grex_gate_mode}).
-Genes that fail keep their RAW expression as the target. Rationale: a
-non-heritable GReX is noise, so regressing on it removes no real cis
-signal while injecting the predictor's error into the target. Independent
-of \code{grex_gate} -- gating regulators and gating the de-cis step are
-separate decisions -- but it reads the same \code{qc_<method>_<ctx>.rds}
-and errors if that file is absent. \code{FALSE} restores the historical
-behaviour (de-cis every gene). Note the two gates test different gene
-SETS, so their BH q-values differ; a gene can pass one and fail the other.}
 
 \item{grex_gate_pval}{Character. Which crocotel GReX p-value to gate on:
 \code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
@@ -103,6 +87,21 @@ with no significance test (the GBAT-paper criterion -- note that
 for some genes and \code{q < 1} silently drops them); \code{"both"}
 requires both criteria. One shared implementation serves
 \code{run_trans_eqtl()} and \code{run_trans_lmm()} identically.}
+
+\item{target_grex_gate}{Logical. Target de-cis gate, applied only when
+\code{target_response = "residualized"}. When \code{TRUE} (default), a
+gene's own GReX is regressed out of its expression only if that GReX is
+heritable in this context, judged by exactly the criterion
+\code{grex_gate} uses for regulators (same \code{grex_gate_pval},
+\code{grex_gate_q}, \code{grex_gate_r2_min}, \code{grex_gate_mode}).
+Genes that fail keep their RAW expression as the target. Rationale: a
+non-heritable GReX is noise, so regressing on it removes no real cis
+signal while injecting the predictor's error into the target. Independent
+of \code{grex_gate} -- gating regulators and gating the de-cis step are
+separate decisions -- but it reads the same \code{qc_<method>_<ctx>.rds}
+and errors if that file is absent. \code{FALSE} restores the historical
+behaviour (de-cis every gene). Note the two gates test different gene
+SETS, so their BH q-values differ; a gene can pass one and fail the other.}
 
 \item{min_obs_per_ctx}{Integer. Target-eligibility threshold: a gene is a
 TARGET in a context only with at least this many observed expression

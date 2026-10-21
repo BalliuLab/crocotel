@@ -149,7 +149,7 @@ test_that("assemble + run_trans_eqtl + run_trans_eqtl_snp run end-to-end", {
   run_trans_eqtl_snp(matrix_dir = mat_dir, gene_locations = gx_gl,
                      output_dir = sd, snp_method = "lead",
                      plink_prefix = gx_plink, pv_threshold = 1,
-                     verbose = FALSE)
+                     variant_mappability_file = NA, verbose = FALSE)
   expect_true(file.exists(file.path(sd, "n_tests_target_snp.rds")))
   expect_gt(length(list.files(sd, pattern = "^trans_snp_.*\\.tsv$")), 0L)
 })
@@ -410,7 +410,8 @@ test_that("expression-only assembly serves the SNP scanner without GReX", {
   sd <- file.path(gx_work, "trans_snp_expronly")
   run_trans_eqtl_snp(matrix_dir = mat_eo, gene_locations = gx_gl,
                      output_dir = sd, plink_prefix = gx_plink,
-                     pv_threshold = 1, verbose = FALSE)
+                     pv_threshold = 1, variant_mappability_file = NA,
+                     verbose = FALSE)
   nt <- readRDS(file.path(sd, "n_tests_target_snp.rds"))
   expect_true(all(c("gene", "context", "n_pairs") %in% names(nt)))
   # neither grex_dir nor grex_list nor expr_dir is an error

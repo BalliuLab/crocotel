@@ -53,13 +53,6 @@ predictive there (within-context BH on the assembled
 \code{assemble_grex_matrices()} (errors if absent). For the separate
 gate on a gene's own GReX as a TARGET, see \code{target_grex_gate}.}
 
-\item{target_grex_gate}{Logical. Target de-cis gate, same semantics and
-default as \code{run_trans_eqtl()}: when \code{TRUE} (default) and
-\code{target_response = "residualized"}, a gene's own GReX is regressed
-out of its expression only if that GReX is heritable in this context,
-judged by the same criterion \code{grex_gate} applies to regulators.
-Genes that fail keep their RAW expression as the target.}
-
 \item{grex_gate_pval}{Character. Which GReX p-value to gate on:
 \code{"full"} (default), \code{"shared"}, or \code{"specific"}.}
 
@@ -78,6 +71,13 @@ with no significance test (the GBAT-paper criterion -- note that
 for some genes and \code{q < 1} silently drops them); \code{"both"}
 requires both criteria. One shared implementation serves
 \code{run_trans_eqtl()} and \code{run_trans_lmm()} identically.}
+
+\item{target_grex_gate}{Logical. Target de-cis gate, same semantics and
+default as \code{run_trans_eqtl()}: when \code{TRUE} (default) and
+\code{target_response = "residualized"}, a gene's own GReX is regressed
+out of its expression only if that GReX is heritable in this context,
+judged by the same criterion \code{grex_gate} applies to regulators.
+Genes that fail keep their RAW expression as the target.}
 
 \item{min_obs_per_ctx}{Integer. Target-eligibility threshold, shared by
 all methods (default \code{30L}): a gene is a TARGET in a context only
