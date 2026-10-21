@@ -306,3 +306,188 @@
 # proximity filter find zero exclusions, both silently). Same rule as
 # load_genotypes' window match.
 .norm_chr <- function(x) sub("^chr", "", as.character(x), ignore.case = TRUE)
+
+
+# Per-context preparation shared by the GReX trans scanners (run_trans_eqtl,
+# run_trans_acat): load this method's GReX + observed expression, build the
+# target response (raw or de-cis'd on this method's own GReX, under the target
+# gate), restrict to eligible targets, gate + impute + variance-filter the
+# regulators, drop individuals with no observed target, and build the
+# MatrixEQTL-layout position tables. One definition, so every scanner tests
+# exactly the same (regulator, target, individual) sets.
+#
+# Returns list(Z, Y, snpspos, genepos) -- Z regulators x individuals (dense),
+# Y targets x individuals (dense) -- or NULL after a warning() when the
+# context has nothing to scan. gene_locations must already be chr-normalized.
+.prepare_trans_context <- function(matrix_dir, ctx, method, target_response,
+                                   gene_locations, grex_gate, grex_gate_pval,
+                                   grex_gate_q, grex_gate_r2_min,
+                                   grex_gate_mode, target_grex_gate,
+                                   min_obs_per_ctx, min_reg_obs, verbose) {
+  grex_file  <- file.path(matrix_dir,
+                           paste0("grex_",  method, "_", ctx, ".rds"))
+  expr_file  <- file.path(matrix_dir, paste0("expr_", ctx, ".rds"))
+
+  if (!file.exists(grex_file)) {
+    warning("Missing GReX matrix, skipping: ", grex_file)
+    return(NULL)
+  }
+  if (!file.exists(expr_file)) {
+    warning("Missing expression matrix, skipping: ", expr_file)
+    return(NULL)
+  }
+
+  Z   <- readRDS(grex_file)
+  raw <- readRDS(expr_file)[rownames(Z), colnames(Z), drop = FALSE]  # observed
+
+  # Target expression. "raw" uses observed expression directly. "residualized"
+  # de-cis's it against this method's GReX on the fly (residualize_grex, per
+  # gene-row -- transpose so its per-column reduction runs over genes),
+  # identical to the fit-time residual. NB: built *before* dropping all-NA
+  # regulator rows, since Y is needed for every gene (targets too).
+  #
+  # .gate_decis_grex() applies the TARGET gate: genes whose own GReX is not
+  # heritable here get an NA row, which residualize_grex() passes through as
+  # raw E. It returns a copy, so the Z used for regulators below is untouched.
+  #
+  # .impute_row_mean() runs BETWEEN the gate and residualize_grex(): without
+  # it, a gate-PASSING gene with even one incidental per-individual NA (e.g.
+  # a CV fold that selected zero SNPs for one individual) silently reverts
+  # to raw expression too, via residualize_grex()'s all-or-nothing-per-
+  # column rule -- the gate's pass verdict gets overridden by an NA that has
+  # nothing to do with gate quality. Gate-FAILING genes are unaffected: an
+  # entirely-NA row imputes to all-NaN (rowMeans of zero observations), and
+  # is.na(NaN) is TRUE, so residualize_grex() still correctly falls back to
+  # raw for them. See .impute_row_mean()'s own doc in trans_scan_shared.R.
+  Y <- if (target_response == "raw") {
+    raw
+  } else {
+    t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(
+      Z, matrix_dir, method, ctx, target_grex_gate,
+      grex_gate_pval, grex_gate_q, grex_gate_r2_min,
+      grex_gate_mode, verbose)))))
+  }
+
+  # Target eligibility (shared rule, decided at assembly): only genes with
+  # >= min_obs_per_ctx observed expression values in this context are
+  # admissible targets -- padded/unexpressed genes and too-small cells must
+  # NOT inflate the FDR family (M / n_tested). The sidecar written by
+  # assemble_grex_matrices() is the authority; .get_eligible_targets()
+  # recomputes the identical rule when no sidecar exists. Must run before
+  # genepos / n_tests are built.
+  elig     <- .get_eligible_targets(matrix_dir, ctx, Y, min_obs_per_ctx,
+                                    verbose)
+  keep_tgt <- rownames(Y) %in% elig
+  if (!any(keep_tgt)) {
+    warning(sprintf("No eligible targets for context '%s', skipping.", ctx))
+    return(NULL)
+  }
+  Y <- Y[keep_tgt, , drop = FALSE]
+
+  # ----------------------------------------------------------------
+  # 2a. Regulator eligibility (shared rule with run_trans_lmm):
+  #     .usable_regulators() = B12 GReX-quality gate (within-context BH
+  #     q < grex_gate_q on the assembled p-values, optional R2 floor)
+  #     + >= min_reg_obs observed GReX values + positive variance over
+  #     the observed values. Applied to Z (regulators) only. Y (targets)
+  #     was already built above from its own gated COPY of Z, so this
+  #     subsetting cannot reach back into the targets. Both gates see the
+  #     same full rownames(Z) here, so their BH multiplicity -- and hence
+  #     their verdicts -- coincide; that is not guaranteed in general.
+  # ----------------------------------------------------------------
+  keep_reg <- .usable_regulators(Z, matrix_dir, method, ctx,
+                                 grex_gate, grex_gate_pval, grex_gate_q,
+                                 grex_gate_r2_min, min_reg_obs,
+                                 grex_gate_mode, verbose)
+  if (!any(keep_reg)) {
+    warning(sprintf("No usable regulators for context '%s', skipping.",
+                    ctx))
+    return(NULL)
+  }
+  Z <- Z[keep_reg, , drop = FALSE]
+
+  # ----------------------------------------------------------------
+  # 2b. Row-mean impute remaining NAs (per gene; .impute_row_mean() in
+  #     trans_scan_shared.R -- the same shared call used on the target
+  #     side above), then drop zero-variance rows that would yield NaN
+  #     test statistics.
+  # ----------------------------------------------------------------
+  Z <- .impute_row_mean(Z)
+  # Complete-case response: drop individuals (columns) with NO observed
+  # target in this context -- they were only union-padded in by
+  # assemble_grex_matrices. MatrixEQTL runs unchanged on the smaller dense
+  # matrix; subset Z to the same individuals. Guard: GTEx-style missingness
+  # is whole-individual-per-context, so nothing should survive the column
+  # drop -- any leftover NA means sporadic per-gene missingness, which a
+  # column drop cannot fix and MatrixEQTL cannot tolerate.
+  keep_ind <- colSums(!is.na(Y)) > 0
+  if (!any(keep_ind)) {
+    warning(sprintf("No individuals with observed targets in '%s', skipping.",
+                    ctx))
+    return(NULL)
+  }
+  Y <- Y[, keep_ind, drop = FALSE]
+  Z <- Z[, keep_ind, drop = FALSE]
+  .assert_dense_response(Y, sprintf("Context '%s'", ctx))
+  if (verbose)
+    message(sprintf("  complete-case response: %d/%d individuals kept.",
+                    sum(keep_ind), length(keep_ind)))
+
+  # Engine backstop (NOT a family decision -- .usable_regulators already
+  # required positive variance over observed cells): re-check variance on
+  # the imputed, complete-case-subset matrix so MatrixEQTL never sees a
+  # constant row (NaN t-stats).
+  z_var    <- apply(Z, 1, var)
+  keep_var <- !is.na(z_var) & z_var > 0
+  Z        <- Z[keep_var, , drop = FALSE]
+
+  if (nrow(Z) == 0) {
+    warning(sprintf("All regulators have zero variance in '%s', skipping.",
+                    ctx))
+    return(NULL)
+  }
+
+  # ----------------------------------------------------------------
+  # 2c. Regulator / target position tables (MatrixEQTL's snpspos /
+  #     genepos layout; also the test universe for build_n_tests_trans).
+  # ----------------------------------------------------------------
+  reg_loc <- gene_locations[match(rownames(Z), gene_locations$gene_id), ]
+  tgt_loc <- gene_locations[match(rownames(Y), gene_locations$gene_id), ]
+
+  if (anyNA(reg_loc$chr) || anyNA(tgt_loc$chr))
+    stop(sprintf("Some genes in context '%s' lack a gene_locations entry.",
+                 ctx))
+
+  snpspos <- data.frame(snp = rownames(Z),
+                         chr = reg_loc$chr,
+                         pos = as.integer(reg_loc$start),
+                         stringsAsFactors = FALSE)
+
+  genepos <- data.frame(geneid = rownames(Y),
+                         chr = tgt_loc$chr,
+                         s1  = as.integer(tgt_loc$start),
+                         s2  = as.integer(tgt_loc$end),
+                         stringsAsFactors = FALSE)
+
+  list(Z = Z, Y = Y, snpspos = snpspos, genepos = genepos)
+}
+
+# gene_locations ingestion for the GReX trans scanners: a data frame or a
+# path to a headered TSV with gene_id, chr, start, end; chr coding is
+# normalized ("chr1" == "1") for the downstream cross-chromosome comparisons.
+.load_gene_locations <- function(gene_locations) {
+  if (is.character(gene_locations))
+    gene_locations <- read.table(gene_locations, header = TRUE,
+                                  stringsAsFactors = FALSE,
+                                  check.names = FALSE)
+
+  required_cols <- c("gene_id", "chr", "start", "end")
+  missing_cols  <- setdiff(required_cols, colnames(gene_locations))
+  if (length(missing_cols) > 0)
+    stop("gene_locations missing required column(s): ",
+         paste(missing_cols, collapse = ", "))
+
+  # Normalise chr coding ("chr1" == "1") for downstream comparisons
+  gene_locations$chr <- .norm_chr(gene_locations$chr)
+  gene_locations
+}
