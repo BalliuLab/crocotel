@@ -88,6 +88,17 @@ combined \code{expressed_targets.rds}; a per-context run does not, so
 concurrent per-context jobs cannot overwrite one another's decision. Use
 \code{write_eligible_sidecars()} to (re)generate these from already
 assembled \code{expr_<ctx>.rds} without repeating the assembly.
+
+The per-context \code{qc_crocotel_<ctx>.rds} matrix also carries
+\code{df_crocotel_expr_full}: the numerator degrees of freedom of the
+full-GReX F-test behind \code{p_crocotel_expr_full} -- 2 when both the
+shared and the specific component enter the full GReX, 1 when one of them
+selected no SNPs in any fold (its OLS weight is then 0 and the full GReX is
+single-component), \code{NA} when there is no full GReX. Derived from the
+saved weights \code{w_crocotel_shared} / \code{w_crocotel_specific}, so
+fits made before this column existed need no refit.
+\code{\link{run_trans_acat}()} uses it to put the crocotel and cbc
+p-values on a common chi-square scale.
 }
 \description{
 Reads all per-gene RDS files produced by \code{fit_grex_gene()} and writes

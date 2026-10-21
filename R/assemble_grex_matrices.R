@@ -8,7 +8,9 @@
 #   grex_crocotel_<ctx>.rds     - matrix (n_genes x n_individuals), or absent
 #   grex_cbc_<ctx>.rds          - matrix (n_genes x n_individuals), or absent
 #   qc_<method>_<ctx>.rds       - matrix (n_genes x metric): per-context GReX
-#                                 p-values + r2 for the B12 regulator gate
+#                                 p-values + r2 for the B12 regulator gate,
+#                                 plus (crocotel) the numerator df of the
+#                                 full-GReX F-test, for run_trans_acat weights
 #   expr_<ctx>.rds              - matrix (n_genes x n_individuals) of raw
 #                                 (observed) expression, from expr_dir
 #   expressed_targets_<ctx>.rds - target-eligibility sidecar, ONE PER CONTEXT:
@@ -101,6 +103,17 @@
 #' concurrent per-context jobs cannot overwrite one another's decision. Use
 #' \code{write_eligible_sidecars()} to (re)generate these from already
 #' assembled \code{expr_<ctx>.rds} without repeating the assembly.
+#'
+#' The per-context \code{qc_crocotel_<ctx>.rds} matrix also carries
+#' \code{df_crocotel_expr_full}: the numerator degrees of freedom of the
+#' full-GReX F-test behind \code{p_crocotel_expr_full} -- 2 when both the
+#' shared and the specific component enter the full GReX, 1 when one of them
+#' selected no SNPs in any fold (its OLS weight is then 0 and the full GReX is
+#' single-component), \code{NA} when there is no full GReX. Derived from the
+#' saved weights \code{w_crocotel_shared} / \code{w_crocotel_specific}, so
+#' fits made before this column existed need no refit.
+#' \code{\link{run_trans_acat}()} uses it to put the crocotel and cbc
+#' p-values on a common chi-square scale.
 #'
 #' @examples
 #' \dontrun{
@@ -327,7 +340,8 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
     make_qc_list(c("p_crocotel_expr_full",
                    "p_crocotel_expr_shared_given_specific",
                    "p_crocotel_expr_specific_given_shared",
-                   "r2_crocotel_expr_full")) else NULL
+                   "r2_crocotel_expr_full",
+                   "df_crocotel_expr_full")) else NULL
   qc_cbc      <- if (run_cbc)
     make_qc_list(c("p_cbc_expr_full", "r2_cbc_expr_full")) else NULL
 
@@ -338,6 +352,15 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
 
   # Hoisted out of the loop: defining it per gene allocated 42k closures.
   getv <- function(vec, ctx) if (is.null(vec)) NA_real_ else unname(vec[ctx])
+  # Numerator df of the full-GReX F-test = number of components that entered
+  # the full fit. fit_grex_doublecv() sets a component's OLS weight to exactly
+  # 0 when lm() aliased it away (a component that selected no SNPs in any fold
+  # is constant), and anova() then tests 1 df, not 2. NA if no full GReX.
+  full_df <- function(g, ctx) {
+    ws <- getv(g$w$w_crocotel_shared, ctx)
+    wp <- getv(g$w$w_crocotel_specific, ctx)
+    if (is.na(ws) || is.na(wp)) NA_real_ else (ws != 0) + (wp != 0)
+  }
 
   for (i in seq_len(n_genes)) {
 
@@ -420,7 +443,8 @@ assemble_grex_matrices <- function(grex_dir  = NULL,
           getv(g$pvals$p_crocotel_expr_full, ctx),
           getv(g$pvals$p_crocotel_expr_shared_given_specific, ctx),
           getv(g$pvals$p_crocotel_expr_specific_given_shared, ctx),
-          getv(g$r2$r2_crocotel_expr_full, ctx))
+          getv(g$r2$r2_crocotel_expr_full, ctx),
+          full_df(g, ctx))
     }
     if (run_cbc && !is.null(g$pvals)) {
       for (ctx in ctx_names)

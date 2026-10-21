@@ -130,6 +130,16 @@ test_that("assemble + run_trans_eqtl + run_trans_eqtl_snp run end-to-end", {
   for (ctx in sprintf("ctx%d", seq_len(gx_params$n_contexts)))
     for (stem in c("grex_crocotel_", "expr_", "qc_crocotel_"))
       expect_true(file.exists(file.path(mat_dir, paste0(stem, ctx, ".rds"))))
+  # df_crocotel_expr_full = number of components in each fitted full GReX
+  for (g in c(gx_regs, gx_tgts)) {
+    rec <- readRDS(file.path(grex_dir, paste0(g, ".rds")))
+    for (ctx in names(rec$w$w_crocotel_shared)) {
+      ws <- rec$w$w_crocotel_shared[[ctx]]; wp <- rec$w$w_crocotel_specific[[ctx]]
+      qc <- readRDS(file.path(mat_dir, paste0("qc_crocotel_", ctx, ".rds")))
+      want <- if (is.na(ws) || is.na(wp)) NA_real_ else (ws != 0) + (wp != 0)
+      expect_equal(unname(qc[g, "df_crocotel_expr_full"]), want)
+    }
+  }
   # target-eligibility sidecar: written at assembly, obeyed by all scanners
   sc <- readRDS(file.path(mat_dir, "expressed_targets.rds"))
   expect_identical(sc$min_obs, 30L)
