@@ -31,7 +31,7 @@ test_that("target gate is a no-op when disabled", {
   set_qc_failures(d, contexts, gene_ids[1:2])
   Z <- readRDS(file.path(d, paste0("grex_crocotel_", contexts[1], ".rds")))
   out <- gate_decis(Z, d, "crocotel", contexts[1], FALSE,
-                    "full", 0.05, 0, "pval", verbose = FALSE)
+                    0.05, 0, "pval", verbose = FALSE)
   expect_identical(out, Z)
 })
 
@@ -42,7 +42,7 @@ test_that("target gate blanks exactly the non-heritable genes' GReX rows", {
   set_qc_failures(d, contexts, failing)
   Z <- readRDS(file.path(d, paste0("grex_crocotel_", contexts[1], ".rds")))
   out <- gate_decis(Z, d, "crocotel", contexts[1], TRUE,
-                    "full", 0.05, 0, "pval", verbose = FALSE)
+                    0.05, 0, "pval", verbose = FALSE)
 
   expect_true(all(is.na(out[failing, ])))
   passing <- setdiff(gene_ids, failing)
@@ -62,7 +62,7 @@ test_that("gated targets carry RAW expression, ungated ones the residual", {
   raw <- readRDS(file.path(d, paste0("expr_", ctx, ".rds")))[
     rownames(Z), colnames(Z), drop = FALSE]
 
-  Zg <- gate_decis(Z, d, "crocotel", ctx, TRUE, "full", 0.05, 0, "pval",
+  Zg <- gate_decis(Z, d, "crocotel", ctx, TRUE, 0.05, 0, "pval",
                    verbose = FALSE)
   Y_gated   <- t(residualize_grex(t(raw), t(Zg)))
   Y_ungated <- t(residualize_grex(t(raw), t(Z)))
@@ -92,8 +92,8 @@ test_that("the two gates share one criterion", {
   Z   <- readRDS(file.path(d, paste0("grex_crocotel_", ctx, ".rds")))
 
   reg_pass <- crocotel:::.usable_regulators(
-    Z, d, "crocotel", ctx, TRUE, "full", 0.05, 0, 5L, "pval", verbose = FALSE)
-  tgt_pass <- !apply(is.na(gate_decis(Z, d, "crocotel", ctx, TRUE, "full",
+    Z, d, "crocotel", ctx, TRUE, 0.05, 0, 5L, "pval", verbose = FALSE)
+  tgt_pass <- !apply(is.na(gate_decis(Z, d, "crocotel", ctx, TRUE,
                                       0.05, 0, "pval", verbose = FALSE)),
                      1L, all)
 

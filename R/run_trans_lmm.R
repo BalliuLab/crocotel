@@ -90,8 +90,6 @@
 #'   out of its expression only if that GReX is heritable in this context,
 #'   judged by the same criterion \code{grex_gate} applies to regulators.
 #'   Genes that fail keep their RAW expression as the target.
-#' @param grex_gate_pval   Character. Which GReX p-value to gate on:
-#'   \code{"full"} (default), \code{"shared"}, or \code{"specific"}.
 #' @param grex_gate_q      Numeric. Within-context BH q-value cutoff for the
 #'   gate. Default \code{0.05}.
 #' @param grex_gate_r2_min Numeric. Optional additional floor on
@@ -151,7 +149,6 @@ run_trans_lmm <- function(matrix_dir,
                           contexts        = NULL,
                           target_response = c("residualized", "raw"),
                           grex_gate       = TRUE,
-                          grex_gate_pval  = c("full", "shared", "specific"),
                           grex_gate_q     = 0.05,
                           grex_gate_r2_min = 0,
                           grex_gate_mode  = c("pval", "r2", "both"),
@@ -172,7 +169,6 @@ run_trans_lmm <- function(matrix_dir,
                       target_response = target_response,
                       sigma_E_form = "het_cs",
                       grex_gate = grex_gate,
-                      grex_gate_pval = grex_gate_pval,
                       grex_gate_q = grex_gate_q,
                       grex_gate_r2_min = grex_gate_r2_min,
                       grex_gate_mode = grex_gate_mode,
@@ -195,7 +191,6 @@ run_trans_lmm <- function(matrix_dir,
                           target_response = c("residualized", "raw"),
                           sigma_E_form    = "het_cs",
                           grex_gate       = TRUE,
-                          grex_gate_pval  = c("full", "shared", "specific"),
                           grex_gate_q     = 0.05,
                           grex_gate_r2_min = 0,
                           grex_gate_mode  = c("pval", "r2", "both"),
@@ -210,7 +205,6 @@ run_trans_lmm <- function(matrix_dir,
   if (!requireNamespace("data.table", quietly = TRUE))
     stop("Package 'data.table' is required.")
 
-  grex_gate_pval  <- match.arg(grex_gate_pval)
   grex_gate_mode  <- match.arg(grex_gate_mode)
   target_response <- match.arg(target_response)
   hierarchy       <- match.arg(hierarchy)
@@ -281,7 +275,7 @@ run_trans_lmm <- function(matrix_dir,
     Yc[[ctx]] <- if (target_response == "raw") raw
                  else t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(
                    Z, matrix_dir, "crocotel", ctx, target_grex_gate,
-                   grex_gate_pval, grex_gate_q, grex_gate_r2_min,
+                   grex_gate_q, grex_gate_r2_min,
                    grex_gate_mode, verbose)))))
   }
 
@@ -326,7 +320,7 @@ run_trans_lmm <- function(matrix_dir,
   # as run_trans_eqtl.
   for (ci in seq_len(n_ctx)) {
     u <- .usable_regulators(Zc[[ci]], matrix_dir, "crocotel", contexts[ci],
-                            grex_gate, grex_gate_pval, grex_gate_q,
+                            grex_gate, grex_gate_q,
                             grex_gate_r2_min, min_reg_obs,
                             grex_gate_mode, verbose)
     if (!all(u)) Zc[[ci]][!u, ] <- NA_real_

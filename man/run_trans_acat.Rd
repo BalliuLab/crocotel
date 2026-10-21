@@ -13,7 +13,6 @@ run_trans_acat(
   weights = c("chisq", "equal"),
   pv_threshold = 0.05,
   grex_gate = TRUE,
-  grex_gate_pval = c("full", "shared", "specific"),
   grex_gate_q = 0.05,
   grex_gate_r2_min = 0,
   grex_gate_mode = c("pval", "r2", "both"),
@@ -53,9 +52,8 @@ p-value is below this are written. Default \code{0.05}. Lossless for
 hierarchical FDR at that level: with weights summing to one, the combined
 p-value can fall below \code{t} only if one of its inputs does.}
 
-\item{grex_gate, grex_gate_pval, grex_gate_q, grex_gate_r2_min, grex_gate_mode}{Regulator GReX-quality gate, applied per arm with that arm's own QC; as
-in \code{\link{run_trans_eqtl}}. \code{grex_gate_pval} affects only the
-crocotel arm's gate (cbc has a single p-value) and never the weights.}
+\item{grex_gate, grex_gate_q, grex_gate_r2_min, grex_gate_mode}{Regulator GReX-quality gate, applied per arm with that arm's own QC; as
+in \code{\link{run_trans_eqtl}}.}
 
 \item{target_grex_gate}{Logical. Target de-cis gate, per arm; as in
 \code{\link{run_trans_eqtl}}. Default \code{TRUE}.}

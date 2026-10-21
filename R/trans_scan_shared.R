@@ -133,23 +133,22 @@
 #
 # genes: character vector of gene IDs to test (rownames of Z, or the full gene
 # set when gating targets). Returns a named logical over `genes`.
-# qc_<method>_<ctx>.rds column names for a given gate setting, under the
+# qc_<method>_<ctx>.rds columns the GReX gate reads, under the
 # <quantity>_<method>_<response>_<predictor> scheme that
-# assemble_grex_matrices() writes. Defined once because two call sites need
-# it: the lookup below and .usable_regulators()'s progress message.
-# NB the "shared"/"specific" gate options map to the CONDITIONAL tests.
-.qc_gate_cols <- function(method, grex_gate_pval) {
+# assemble_grex_matrices() writes. The gate asks whether the predictor that is
+# actually tested -- the FULL GReX -- predicts the gene's own expression, so it
+# always reads the full-GReX p-value. (The conditional shared|specific and
+# specific|shared p-values stay in the QC files as diagnostics; they answer a
+# different question and are not a gate criterion.) Defined once because
+# several call sites need it.
+.qc_gate_cols <- function(method) {
   if (method == "cbc")
     return(list(p = "p_cbc_expr_full", r2 = "r2_cbc_expr_full"))
-  list(p = switch(grex_gate_pval,
-                  full     = "p_crocotel_expr_full",
-                  shared   = "p_crocotel_expr_shared_given_specific",
-                  specific = "p_crocotel_expr_specific_given_shared"),
-       r2 = "r2_crocotel_expr_full")
+  list(p = "p_crocotel_expr_full", r2 = "r2_crocotel_expr_full")
 }
 
 .grex_quality_pass <- function(genes, matrix_dir, method, ctx,
-                               grex_gate_pval, grex_gate_q,
+                               grex_gate_q,
                                grex_gate_r2_min, grex_gate_mode = "pval") {
   qc_file <- file.path(matrix_dir, paste0("qc_", method, "_", ctx, ".rds"))
   if (!file.exists(qc_file))
@@ -158,7 +157,7 @@
                         "to write the qc_%s_* files, or disable the gate."),
                  qc_file, method))
   qc   <- readRDS(qc_file)
-  cols <- .qc_gate_cols(method, grex_gate_pval)
+  cols <- .qc_gate_cols(method)
   pv   <- qc[genes, cols$p]
   r2   <- qc[genes, cols$r2]
   # BH is computed over the genes PASSED IN, so the multiplicity matches the
@@ -192,12 +191,12 @@
 # The returned matrix is used ONLY for the de-cis step. The caller's Z (the
 # regulator matrix) must not be affected, hence the copy.
 .gate_decis_grex <- function(Z, matrix_dir, method, ctx, target_grex_gate,
-                             grex_gate_pval, grex_gate_q,
+                             grex_gate_q,
                              grex_gate_r2_min, grex_gate_mode = "pval",
                              verbose = TRUE) {
   if (!isTRUE(target_grex_gate)) return(Z)
   pass <- .grex_quality_pass(rownames(Z), matrix_dir, method, ctx,
-                             grex_gate_pval, grex_gate_q,
+                             grex_gate_q,
                              grex_gate_r2_min, grex_gate_mode)
   if (verbose)
     message(sprintf(paste0(
@@ -251,7 +250,7 @@
 }
 
 .usable_regulators <- function(Z, matrix_dir, method, ctx,
-                               grex_gate, grex_gate_pval, grex_gate_q,
+                               grex_gate, grex_gate_q,
                                grex_gate_r2_min, min_reg_obs,
                                grex_gate_mode = "pval",
                                verbose = TRUE) {
@@ -260,10 +259,10 @@
     # Shared with the target de-cis gate (.ungatable_targets) so a gene cannot
     # get one verdict as a regulator and a different one as a target.
     gate_pass <- .grex_quality_pass(rownames(Z), matrix_dir, method, ctx,
-                                    grex_gate_pval, grex_gate_q,
+                                    grex_gate_q,
                                     grex_gate_r2_min, grex_gate_mode)
     if (verbose) {
-      pcol <- .qc_gate_cols(method, grex_gate_pval)$p
+      pcol <- .qc_gate_cols(method)$p
       message(sprintf(
         "  [%s] GReX gate (mode=%s%s%s): %d/%d regulators pass.",
         ctx, grex_gate_mode,
@@ -320,7 +319,7 @@
 # Y targets x individuals (dense) -- or NULL after a warning() when the
 # context has nothing to scan. gene_locations must already be chr-normalized.
 .prepare_trans_context <- function(matrix_dir, ctx, method, target_response,
-                                   gene_locations, grex_gate, grex_gate_pval,
+                                   gene_locations, grex_gate,
                                    grex_gate_q, grex_gate_r2_min,
                                    grex_gate_mode, target_grex_gate,
                                    min_obs_per_ctx, min_reg_obs, verbose) {
@@ -364,7 +363,7 @@
   } else {
     t(residualize_grex(t(raw), t(.impute_row_mean(.gate_decis_grex(
       Z, matrix_dir, method, ctx, target_grex_gate,
-      grex_gate_pval, grex_gate_q, grex_gate_r2_min,
+      grex_gate_q, grex_gate_r2_min,
       grex_gate_mode, verbose)))))
   }
 
@@ -396,7 +395,7 @@
   #     their verdicts -- coincide; that is not guaranteed in general.
   # ----------------------------------------------------------------
   keep_reg <- .usable_regulators(Z, matrix_dir, method, ctx,
-                                 grex_gate, grex_gate_pval, grex_gate_q,
+                                 grex_gate, grex_gate_q,
                                  grex_gate_r2_min, min_reg_obs,
                                  grex_gate_mode, verbose)
   if (!any(keep_reg)) {

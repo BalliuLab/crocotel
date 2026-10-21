@@ -82,7 +82,7 @@
 
 # Per-regulator score for one arm in one context. "chisq": the regulator's
 # FULL-GReX cross-validation p-value (the same qc_<method>_<ctx> column the
-# GReX gate reads at its default, whatever grex_gate_pval the gate uses)
+# GReX gate reads)
 # mapped back to the chi-square scale ON ITS OWN TEST'S df,
 # qchisq(p, df, lower.tail = FALSE) ~ df * F ~ (n - k - 1) R2 / (1 - R2):
 # df = 2 for crocotel (p_crocotel_expr_full is the exact F-test of
@@ -108,7 +108,7 @@
                         "assemble_grex_matrices()); use weights = \"equal\" ",
                         "to combine without it."), qc_file))
   qc   <- readRDS(qc_file)
-  cols <- .qc_gate_cols(method, "full")
+  cols <- .qc_gate_cols(method)
   miss <- setdiff(c(cols$p, cols$r2), colnames(qc))
   if (length(miss))
     stop(sprintf("%s lacks column(s) %s needed for weights = \"chisq\".",
@@ -254,10 +254,9 @@
 #'   p-value is below this are written. Default \code{0.05}. Lossless for
 #'   hierarchical FDR at that level: with weights summing to one, the combined
 #'   p-value can fall below \code{t} only if one of its inputs does.
-#' @param grex_gate,grex_gate_pval,grex_gate_q,grex_gate_r2_min,grex_gate_mode
+#' @param grex_gate,grex_gate_q,grex_gate_r2_min,grex_gate_mode
 #'   Regulator GReX-quality gate, applied per arm with that arm's own QC; as
-#'   in \code{\link{run_trans_eqtl}}. \code{grex_gate_pval} affects only the
-#'   crocotel arm's gate (cbc has a single p-value) and never the weights.
+#'   in \code{\link{run_trans_eqtl}}.
 #' @param target_grex_gate Logical. Target de-cis gate, per arm; as in
 #'   \code{\link{run_trans_eqtl}}. Default \code{TRUE}.
 #' @param min_obs_per_ctx  Integer. Target-eligibility threshold; as in
@@ -303,7 +302,6 @@ run_trans_acat <- function(matrix_dir,
                            weights          = c("chisq", "equal"),
                            pv_threshold     = 0.05,
                            grex_gate        = TRUE,
-                           grex_gate_pval   = c("full", "shared", "specific"),
                            grex_gate_q      = 0.05,
                            grex_gate_r2_min = 0,
                            grex_gate_mode   = c("pval", "r2", "both"),
@@ -316,7 +314,6 @@ run_trans_acat <- function(matrix_dir,
 
   target_response <- match.arg(target_response)
   weights         <- match.arg(weights)
-  grex_gate_pval  <- match.arg(grex_gate_pval)
   grex_gate_mode  <- match.arg(grex_gate_mode)
   hierarchy       <- match.arg(hierarchy)
   if (!is.numeric(pv_threshold) || length(pv_threshold) != 1L ||
@@ -364,7 +361,7 @@ run_trans_acat <- function(matrix_dir,
 
     arms <- lapply(c(crocotel = "crocotel", cbc = "cbc"), function(m)
       .prepare_trans_context(matrix_dir, ctx, m, target_response,
-                             gene_locations, grex_gate, grex_gate_pval,
+                             gene_locations, grex_gate,
                              grex_gate_q, grex_gate_r2_min, grex_gate_mode,
                              target_grex_gate, min_obs_per_ctx, min_reg_obs,
                              verbose))

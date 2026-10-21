@@ -13,7 +13,6 @@ run_trans_eqtl(
   target_response = c("residualized", "raw"),
   pv_threshold = 0.05,
   grex_gate = TRUE,
-  grex_gate_pval = c("full", "shared", "specific"),
   grex_gate_q = 0.05,
   grex_gate_r2_min = 0,
   grex_gate_mode = c("pval", "r2", "both"),
@@ -67,10 +66,6 @@ FDR family sizes shrink to the gated set (honest power gain). Requires
 if \code{TRUE} and absent. For the separate gate on a gene's own GReX as a
 TARGET, see \code{target_grex_gate}.}
 
-\item{grex_gate_pval}{Character. Which crocotel GReX p-value to gate on:
-\code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
-for \code{method="cbc"} (which gates on its single \code{p_cbc_expr_full}).}
-
 \item{grex_gate_q}{Numeric. Within-context BH q-value cutoff for the
 gate. Default \code{0.05}.}
 
@@ -92,7 +87,7 @@ requires both criteria. One shared implementation serves
 \code{target_response = "residualized"}. When \code{TRUE} (default), a
 gene's own GReX is regressed out of its expression only if that GReX is
 heritable in this context, judged by exactly the criterion
-\code{grex_gate} uses for regulators (same \code{grex_gate_pval},
+\code{grex_gate} uses for regulators (same full-GReX p-value,
 \code{grex_gate_q}, \code{grex_gate_r2_min}, \code{grex_gate_mode}).
 Genes that fail keep their RAW expression as the target. Rationale: a
 non-heritable GReX is noise, so regressing on it removes no real cis

@@ -67,7 +67,7 @@
 #'   \code{target_response = "residualized"}. When \code{TRUE} (default), a
 #'   gene's own GReX is regressed out of its expression only if that GReX is
 #'   heritable in this context, judged by exactly the criterion
-#'   \code{grex_gate} uses for regulators (same \code{grex_gate_pval},
+#'   \code{grex_gate} uses for regulators (same full-GReX p-value,
 #'   \code{grex_gate_q}, \code{grex_gate_r2_min}, \code{grex_gate_mode}).
 #'   Genes that fail keep their RAW expression as the target. Rationale: a
 #'   non-heritable GReX is noise, so regressing on it removes no real cis
@@ -77,9 +77,6 @@
 #'   and errors if that file is absent. \code{FALSE} restores the historical
 #'   behaviour (de-cis every gene). Note the two gates test different gene
 #'   SETS, so their BH q-values differ; a gene can pass one and fail the other.
-#' @param grex_gate_pval   Character. Which crocotel GReX p-value to gate on:
-#'   \code{"full"} (default), \code{"shared"}, or \code{"specific"}. Ignored
-#'   for \code{method="cbc"} (which gates on its single \code{p_cbc_expr_full}).
 #' @param grex_gate_q      Numeric. Within-context BH q-value cutoff for the
 #'   gate. Default \code{0.05}.
 #' @param grex_gate_r2_min Numeric. Optional adjusted-R2 floor applied on top
@@ -152,7 +149,6 @@ run_trans_eqtl <- function(matrix_dir,
                             target_response = c("residualized", "raw"),
                             pv_threshold    = 0.05,
                             grex_gate       = TRUE,
-                            grex_gate_pval  = c("full", "shared", "specific"),
                             grex_gate_q     = 0.05,
                             grex_gate_r2_min = 0,
                             grex_gate_mode  = c("pval", "r2", "both"),
@@ -169,7 +165,6 @@ run_trans_eqtl <- function(matrix_dir,
   # same target gate, read from qc_<method>_<ctx>, so crocotel and cbc differ
   # only in their cis predictor. (Through 0.3.0 cbc was forced to "raw",
   # mirroring legacy GBAT's regress_target_GReX = F.)
-  grex_gate_pval  <- match.arg(grex_gate_pval)
   grex_gate_mode  <- match.arg(grex_gate_mode)
   hierarchy       <- match.arg(hierarchy)
 
@@ -214,7 +209,7 @@ run_trans_eqtl <- function(matrix_dir,
                       ctx, method, target_response))
 
     prep <- .prepare_trans_context(matrix_dir, ctx, method, target_response,
-                                   gene_locations, grex_gate, grex_gate_pval,
+                                   gene_locations, grex_gate,
                                    grex_gate_q, grex_gate_r2_min,
                                    grex_gate_mode, target_grex_gate,
                                    min_obs_per_ctx, min_reg_obs, verbose)
