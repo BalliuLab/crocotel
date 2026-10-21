@@ -11,7 +11,6 @@ run_trans_lmm(
   contexts = NULL,
   target_response = c("residualized", "raw"),
   grex_gate = TRUE,
-  grex_gate_pval = c("full", "shared", "specific"),
   grex_gate_q = 0.05,
   grex_gate_r2_min = 0,
   grex_gate_mode = c("pval", "r2", "both"),
@@ -52,9 +51,6 @@ predictive there (within-context BH on the assembled
 \code{TRUE}; requires the \code{qc_crocotel_<ctx>.rds} files from
 \code{assemble_grex_matrices()} (errors if absent). For the separate
 gate on a gene's own GReX as a TARGET, see \code{target_grex_gate}.}
-
-\item{grex_gate_pval}{Character. Which GReX p-value to gate on:
-\code{"full"} (default), \code{"shared"}, or \code{"specific"}.}
 
 \item{grex_gate_q}{Numeric. Within-context BH q-value cutoff for the
 gate. Default \code{0.05}.}

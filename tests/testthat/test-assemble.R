@@ -210,3 +210,24 @@ test_that("a wrong expr_dir fails loudly, not as silent all-NA expression", {
                            method = "crocotel", verbose = FALSE),
     "only 1 / 3 genes")
 })
+
+test_that("qc_crocotel carries the full-GReX df derived from the saved weights", {
+  inds <- sprintf("i%02d", 1:10)
+  ed <- file.path(tempdir(), "asm_df", "expr"); od <- file.path(tempdir(), "asm_df", "mat")
+  unlink(dirname(ed), recursive = TRUE); dir.create(ed, recursive = TRUE)
+  .write_expr(ed, "g1", inds, seed = 51); .write_expr(ed, "g2", inds, seed = 52)
+  r1 <- .ok_rec("g1", inds, seed = 61)
+  # ctx1: both components enter (df 2); ctx2: specific dropped (weight 0,
+  # shared-only, df 1); ctx3: shared dropped (specific-only, df 1).
+  r1$w <- list(w_crocotel_shared   = c(ctx1 = 0.8, ctx2 = 1.1, ctx3 = 0),
+               w_crocotel_specific = c(ctx1 = 0.5, ctx2 = 0,   ctx3 = 0.9))
+  r2 <- .ok_rec("g2", inds, seed = 62)                  # no weights recorded
+  assemble_grex_matrices(grex_list = list(g1 = r1, g2 = r2), output_dir = od,
+                         expr_dir = ed, method = "crocotel", verbose = FALSE)
+  df_of <- function(cx, g)
+    readRDS(file.path(od, paste0("qc_crocotel_", cx, ".rds")))[g, "df_crocotel_expr_full"]
+  expect_equal(unname(df_of("ctx1", "g1")), 2)
+  expect_equal(unname(df_of("ctx2", "g1")), 1)
+  expect_equal(unname(df_of("ctx3", "g1")), 1)
+  expect_true(is.na(df_of("ctx1", "g2")))
+})
