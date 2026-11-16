@@ -50,7 +50,10 @@ many SNPs after MAF filtering. Useful for matching P across genes.}
   hardcalls, fractional 0..2 for imputed)
   (with mean-imputed missing values). Columns are named by marker ID, so
   downstream artifacts (e.g. the elastic-net effects' SNP support) carry
-  real variant names. Attributes:
+  real variant names; ROWS are named by sample ID, in \strong{fam-file
+  order}, which is generally not the order of the \code{sample_ids} you
+  passed in. Align on those names -- never positionally -- before pairing
+  G with an expression matrix. Attributes:
   \describe{
     \item{maf}{Numeric vector of per-SNP MAFs.}
     \item{maf_range}{Numeric vector c(maf_min, maf_max).}

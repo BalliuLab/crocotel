@@ -4,3 +4,12 @@
 ^LICENSE\.md$
 ^\.git$
 (^|/)\.DS_Store$
+# Cluster job logs and build leftovers. A stray log in a clone used to be
+# BUILT INTO the tarball (v0.3.0 shipped crocotel_check.o14756161): Grid
+# Engine's "-cwd" wrote them into the source tree and nothing excluded them.
+# check_pkg.sh now logs to scratch, and these patterns are the backstop.
+(^|/)slurm-[0-9]+\.out$
+(^|/)[^/]*\.[oe][0-9]+$
+(^|/)[^/]*\.p[oe][0-9]+$
+^.*\.Rcheck$
+^crocotel_.*\.tar\.gz$

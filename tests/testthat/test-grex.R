@@ -327,6 +327,44 @@ test_that("doublecv guards: bad folds stop; <3 contexts warns and drops crocotel
   expect_false(is.null(fit2$Z_cbc))
 })
 
+test_that("doublecv pairs E and G on individual IDs, not on position", {
+  E5 <- readRDS(file.path(gx_expr, paste0(gx_regs[1], ".rds")))
+  Gm <- load_genotypes(gx_plink, chrom = gx_gl$chr[1],
+                       start_pos = gx_gl$start[1] - 1e6,
+                       end_pos = gx_gl$end[1] + 1e6, maf_min = 0)
+  # load_genotypes names rows, consistently with the sample_ids attribute
+  expect_identical(rownames(Gm), attr(Gm, "sample_ids"))
+
+  E5 <- E5[rownames(Gm), , drop = FALSE]
+  fl  <- rep(1:3, length.out = nrow(Gm))
+  arg <- list(folds = fl, K_outer = 3, K_inner = 3, method = "cbc")
+  set.seed(42)
+  ref <- do.call(fit_grex_doublecv, c(list(E = E5, G = Gm), arg))
+
+  # (a) G in a different individual order is reordered back onto E, so the fit
+  #     reproduces the aligned one exactly instead of silently scrambling.
+  perm <- sample.int(nrow(Gm))
+  Gp   <- Gm[perm, , drop = FALSE]          # `[` drops sample_ids; rownames stay
+  set.seed(42)
+  expect_message(
+    got <- do.call(fit_grex_doublecv, c(list(E = E5, G = Gp), arg)),
+    "reordered G's rows")
+  expect_equal(got$Z_cbc, ref$Z_cbc)
+
+  # (b) different individuals altogether: an error, never positional pairing
+  Gd <- Gm; rownames(Gd) <- paste0("other", seq_len(nrow(Gd)))
+  expect_error(
+    do.call(fit_grex_doublecv, c(list(E = E5, G = Gd), arg)),
+    "cover different individuals")
+
+  # (c) an unnamed G beside a named E: warn that the pairing is unverifiable
+  Gn <- Gm; dimnames(Gn) <- list(NULL, colnames(Gm))
+  attr(Gn, "sample_ids") <- NULL
+  expect_warning(
+    do.call(fit_grex_doublecv, c(list(E = E5, G = Gn), arg)),
+    "POSITIONALLY")
+})
+
 test_that("expression without individual rownames stops actionably", {
   e_dir <- file.path(gx_work, "norownames"); dir.create(e_dir, showWarnings = FALSE)
   E_bad <- matrix(rnorm(200 * 5), 200, 5,

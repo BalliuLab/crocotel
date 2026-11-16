@@ -35,10 +35,18 @@
 #' before calling this function and pass the result in.
 #'
 #' @param E       Numeric matrix (n_individuals x n_contexts). Observed
-#'   expression, already residualised for covariates if needed.
+#'   expression, already residualised for covariates if needed. Name its rows
+#'   with the individual IDs: E's row order is the reference that \code{G} and
+#'   \code{folds} are taken to follow.
 #' @param G       Numeric matrix (n_individuals x n_snps). Raw 0/1/2
 #'   cis-genotype dosages. Columns are standardised internally before the
-#'   elastic net fit.
+#'   elastic net fit. Rows SHOULD be named with the individual IDs (as
+#'   \code{load_genotypes()} names them): when both \code{E} and \code{G} carry
+#'   row names they must cover the same individuals, and \code{G} is reordered
+#'   onto E's order if it differs. Mismatched sets are an error; an unnamed
+#'   \code{G} alongside a named \code{E} is a warning and falls back to
+#'   POSITIONAL pairing, which is silently wrong whenever the two orders differ
+#'   -- \code{load_genotypes()} returns fam-file order, so they usually do.
 #' @param folds   Integer vector (n_individuals). Outer fold assignment,
 #'   values in 1..K_outer. Generate STRATIFIED folds with the sorted-block
 #'   idiom the callers use (random within blocks of the expression-sorted
@@ -275,6 +283,51 @@ fit_grex_doublecv <- function(E,
     stop("G must be a numeric matrix (n_individuals x n_snps).")
   if (nrow(E) != nrow(G))
     stop("E and G must have the same number of rows (individuals).")
+
+  # Individual-ID check. The nrow test above is a SHAPE check only: E and G with
+  # the same row count but a different row ORDER pair each individual's
+  # expression with another individual's genotypes, and nothing downstream
+  # notices -- the fit runs, the GReX looks ordinary, and every result is
+  # garbage. This is a live failure mode because load_genotypes() returns rows
+  # in fam-file order, which is generally NOT the caller's order (fit_grex_gene()
+  # aligns E to it before calling here; a direct caller may not). G's IDs come
+  # from rownames(G), falling back to the sample_ids attribute so objects built
+  # before rownames were set still validate. E's order is the reference, since
+  # the documented folds idiom derives `folds` from E (order(rowMeans(E))), so
+  # reordering G onto E keeps E, G and folds mutually consistent.
+  g_ids <- rownames(G)
+  if (is.null(g_ids)) g_ids <- attr(G, "sample_ids")
+  e_ids <- rownames(E)
+  if (!is.null(e_ids) && !is.null(g_ids)) {
+    if (length(g_ids) != nrow(G))
+      stop("G carries ", length(g_ids), " individual ID(s) but has ", nrow(G),
+           " row(s); the IDs cannot be trusted to label its rows.")
+    if (anyDuplicated(e_ids) || anyDuplicated(g_ids))
+      stop("Duplicated individual IDs (E: ", anyDuplicated(e_ids), ", G: ",
+           anyDuplicated(g_ids), " = first duplicate position, 0 = none); ",
+           "individuals cannot be matched unambiguously.")
+    if (!setequal(e_ids, g_ids))
+      stop("E and G cover different individuals: ",
+           length(setdiff(e_ids, g_ids)), " only in E, ",
+           length(setdiff(g_ids, e_ids)), " only in G. Subset both to the ",
+           "shared individuals before fitting.")
+    if (!identical(e_ids, g_ids)) {
+      ord  <- match(e_ids, g_ids)
+      keep <- attributes(G)[setdiff(names(attributes(G)), c("dim", "dimnames"))]
+      G    <- G[ord, , drop = FALSE]
+      for (a in names(keep)) attr(G, a) <- keep[[a]]
+      attr(G, "sample_ids") <- e_ids            # was in the pre-reorder order
+      message("fit_grex_doublecv: reordered G's rows onto E's individual order (",
+              sum(ord != seq_along(ord)), " of ", nrow(G), " positions differed).")
+    }
+  } else if (!is.null(e_ids)) {
+    warning("G carries no individual IDs (no rownames, no sample_ids ",
+            "attribute) while E does, so E and G are paired POSITIONALLY and ",
+            "the pairing cannot be verified. If they are not already in the ",
+            "same individual order, every GReX will be wrong. Set ",
+            "rownames(G) to the individual IDs.")
+  }
+
   if (length(folds) != nrow(G))
     stop("folds must have length equal to nrow(G).")
   if (anyNA(folds) || !all(folds %in% seq_len(K_outer)))
