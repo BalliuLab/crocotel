@@ -46,7 +46,10 @@
 #'   hardcalls, fractional 0..2 for imputed)
 #'   (with mean-imputed missing values). Columns are named by marker ID, so
 #'   downstream artifacts (e.g. the elastic-net effects' SNP support) carry
-#'   real variant names. Attributes:
+#'   real variant names; ROWS are named by sample ID, in \strong{fam-file
+#'   order}, which is generally not the order of the \code{sample_ids} you
+#'   passed in. Align on those names -- never positionally -- before pairing
+#'   G with an expression matrix. Attributes:
 #'   \describe{
 #'     \item{maf}{Numeric vector of per-SNP MAFs.}
 #'     \item{maf_range}{Numeric vector c(maf_min, maf_max).}
@@ -214,11 +217,19 @@ load_genotypes <- function(plink_prefix,
   # ------------------------------------------------------------------
   G <- G_raw
 
-  # Marker IDs go ON the matrix, not only in an attribute: every consumer
-  # (and anything they save, e.g. the elastic-net effects' SNP support)
-  # then carries real, resolvable variant names instead of positional
-  # fallbacks. The snp_ids attribute is kept for back-compatibility.
+  # Marker AND sample IDs go ON the matrix, not only in attributes: every
+  # consumer (and anything they save, e.g. the elastic-net effects' SNP
+  # support) then carries real, resolvable names instead of positional
+  # fallbacks. Rows come back in FAM-FILE order -- which is generally NOT the
+  # order of the caller's sample_ids, since step 5 selects with
+  # which(fam$sample.ID %in% sample_ids) -- so a consumer that pairs G with
+  # expression positionally silently matches each individual's genotypes to
+  # another individual's expression. rownames make that detectable:
+  # fit_grex_doublecv() checks them. .load_genotypes_all() names both
+  # dimensions the same way. The snp_ids/sample_ids attributes are kept for
+  # back-compatibility.
   colnames(G) <- map$marker.ID[snp_idx]
+  rownames(G) <- fam$sample.ID[ind_idx]
 
   attr(G, "maf")        <- mafs
   attr(G, "maf_range")  <- c(maf_min, maf_max)

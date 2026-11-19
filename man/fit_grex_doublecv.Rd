@@ -23,11 +23,19 @@ fit_grex_doublecv(
 }
 \arguments{
 \item{E}{Numeric matrix (n_individuals x n_contexts). Observed
-expression, already residualised for covariates if needed.}
+expression, already residualised for covariates if needed. Name its rows
+with the individual IDs: E's row order is the reference that \code{G} and
+\code{folds} are taken to follow.}
 
 \item{G}{Numeric matrix (n_individuals x n_snps). Raw 0/1/2
 cis-genotype dosages. Columns are standardised internally before the
-elastic net fit.}
+elastic net fit. Rows SHOULD be named with the individual IDs (as
+\code{load_genotypes()} names them): when both \code{E} and \code{G} carry
+row names they must cover the same individuals, and \code{G} is reordered
+onto E's order if it differs. Mismatched sets are an error; an unnamed
+\code{G} alongside a named \code{E} is a warning and falls back to
+POSITIONAL pairing, which is silently wrong whenever the two orders differ
+-- \code{load_genotypes()} returns fam-file order, so they usually do.}
 
 \item{folds}{Integer vector (n_individuals). Outer fold assignment,
 values in 1..K_outer. Generate STRATIFIED folds with the sorted-block
